@@ -1,0 +1,5 @@
+{
+  "name": "TD Games Invoice Generator",
+  "description": "A high-performance, premium invoice generation tool designed for TD Games, featuring real-time preview and multiple export formats (PDF, XLSX, DOCX, PNG) based on the studio's professional style guide.",
+  "requestFramePermissions": []
+}
