@@ -60,6 +60,11 @@ export interface InvoiceData {
   bankingInfo: BankingInfo;
   items: ServiceItem[];
   createdAt?: any;
+  payment_method?: 'TM' | 'CK' | 'TM/CK' | 'KHAC';
+  einvoice_status?: 'none' | 'draft' | 'failed';
+  einvoice_reference_code?: string;
+  einvoice_tracking_code?: string;
+  einvoice_pdf_url?: string;
 }
 
 export interface AccountUser {

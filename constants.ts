@@ -1,4 +1,5 @@
 
+import { InvoiceData } from './types';
 
 export const DEFAULT_INVOICE: InvoiceData = {
   invoiceNumber: `INV-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-001`,

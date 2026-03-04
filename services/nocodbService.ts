@@ -119,6 +119,12 @@ export const saveInvoiceToCloud = async (data: InvoiceData): Promise<SaveRespons
         // Flat client fields for easy querying in dashboard
         clientName: rest.clientInfo.name,
         createdAt: now(),
+        // eInvoice fields
+        einvoice_status: rest.einvoice_status || 'none',
+        einvoice_reference_code: rest.einvoice_reference_code || '',
+        einvoice_tracking_code: rest.einvoice_tracking_code || '',
+        einvoice_pdf_url: rest.einvoice_pdf_url || '',
+        payment_method: rest.payment_method || '',
     };
     const created = await apiPost(INVOICES_TABLE_ID, record);
     return { success: true, id: String(created.Id) };
@@ -132,6 +138,11 @@ const parseInvoice = (row: any): InvoiceData => ({
     bankingInfo: typeof row.bankingInfo === 'string' ? JSON.parse(row.bankingInfo || '{}') : row.bankingInfo,
     items: typeof row.items === 'string' ? JSON.parse(row.items || '[]') : row.items,
     paidDate: row.paidDate || undefined,
+    einvoice_status: row.einvoice_status || 'none',
+    einvoice_reference_code: row.einvoice_reference_code || '',
+    einvoice_tracking_code: row.einvoice_tracking_code || '',
+    einvoice_pdf_url: row.einvoice_pdf_url || '',
+    payment_method: row.payment_method || '',
 });
 
 export const fetchInvoicesFromCloud = async (): Promise<InvoiceData[]> => {
@@ -181,6 +192,18 @@ export const updateInvoiceStatusInCloud = async (
 
 export const deleteInvoiceFromCloud = async (id: string): Promise<void> => {
     await apiDelete(INVOICES_TABLE_ID, id);
+};
+
+export const updateEInvoiceInCloud = async (
+    id: string,
+    data: {
+        einvoice_status: string;
+        einvoice_reference_code?: string;
+        einvoice_tracking_code?: string;
+        einvoice_pdf_url?: string;
+    }
+) => {
+    await apiPatch(INVOICES_TABLE_ID, id, data);
 };
 
 // ────────────────────────────────────────────────────────────────

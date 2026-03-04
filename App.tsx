@@ -7,10 +7,12 @@ import { Button } from './components/Button';
 import { Input, TextArea, Select } from './components/FormElements';
 import { InvoicePreview } from './components/InvoicePreview';
 import { exportToPDF, exportToPNG, exportToExcel, exportToWord } from './services/exportService';
+import { createAndPollDraft } from './services/sePayService';
 import {
   saveInvoiceToCloud,
   fetchInvoicesFromCloud,
   updateInvoiceStatusInCloud,
+  updateEInvoiceInCloud,
   deleteInvoiceFromCloud,
   getNextInvoiceNumber,
   saveBankToCloud,
@@ -145,6 +147,14 @@ const App: React.FC = () => {
   const [newStudio, setNewStudio] = useState<StudioInfo>({ name: '', address: '', email: '', taxCode: '' });
   const [clientSuggestions, setClientSuggestions] = useState<ClientRecord[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // eInvoice state
+  const [showEInvoiceModal, setShowEInvoiceModal] = useState(false);
+  const [eInvoiceProgress, setEInvoiceProgress] = useState<string | null>(null);
+  const [eInvoiceResult, setEInvoiceResult] = useState<{ pdf_url: string; reference_code: string } | null>(null);
+  const [eInvoiceError, setEInvoiceError] = useState<string | null>(null);
+  const [showEInvoicePrompt, setShowEInvoicePrompt] = useState(false);
+  const [eInvoiceTargetInvoice, setEInvoiceTargetInvoice] = useState<InvoiceData | null>(null);
 
   // Save-after-export popup
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
@@ -432,13 +442,20 @@ const App: React.FC = () => {
   const handleConfirmSave = async () => {
     if (!pendingInvoiceToSave) return;
     try {
-      await saveInvoiceToCloud(pendingInvoiceToSave);
+      const result = await saveInvoiceToCloud(pendingInvoiceToSave);
       notify('Đã lưu hoá đơn lên Cloud!', 'success');
+      // Update invoice with saved ID so eInvoice can reference it
+      const savedInvoice = { ...pendingInvoiceToSave, id: result.id };
+      setInvoice(prev => ({ ...prev, id: result.id }));
       if (activeTab === 'history') loadHistory();
-      // Sau khi lưu xong → tự tính số invoice kế tiếp cho lần tạo mới
       getNextInvoiceNumber().then(nextNum => {
         setInvoice(prev => ({ ...prev, invoiceNumber: nextNum }));
       });
+      // After saving → prompt user to create eInvoice (if not already created)
+      if (!pendingInvoiceToSave.einvoice_status || pendingInvoiceToSave.einvoice_status === 'none' || pendingInvoiceToSave.einvoice_status === 'failed') {
+        setEInvoiceTargetInvoice(savedInvoice);
+        setShowEInvoicePrompt(true);
+      }
     } catch (e: any) {
       notify('Lỗi lưu hoá đơn: ' + e.message, 'error');
     } finally {
@@ -534,6 +551,53 @@ const App: React.FC = () => {
     }
   };
 
+  // ── eInvoice Handler ────────────────────────────────────────
+  const handleCreateEInvoice = async (targetInv?: InvoiceData) => {
+    const inv = targetInv || invoice;
+    setShowEInvoicePrompt(false);
+    setShowEInvoiceModal(true);
+    setEInvoiceProgress('Đang khởi tạo...');
+    setEInvoiceResult(null);
+    setEInvoiceError(null);
+    try {
+      const result = await createAndPollDraft(inv, (msg) => setEInvoiceProgress(msg));
+      setEInvoiceResult(result);
+      setEInvoiceProgress(null);
+      // Update local invoice state
+      setInvoice(prev => ({
+        ...prev,
+        einvoice_status: 'draft',
+        einvoice_reference_code: result.reference_code,
+        einvoice_pdf_url: result.pdf_url,
+      }));
+      // Persist eInvoice status to NocoDB if invoice has an ID
+      if (inv.id) {
+        try {
+          await updateEInvoiceInCloud(inv.id, {
+            einvoice_status: 'draft',
+            einvoice_reference_code: result.reference_code,
+            einvoice_pdf_url: result.pdf_url,
+          });
+          // Refresh history to reflect update
+          loadHistory();
+        } catch {
+          // silent — local state already updated
+        }
+      }
+      notify('Đã tạo hóa đơn điện tử nháp thành công!', 'success');
+    } catch (err: any) {
+      setEInvoiceError(err.message || 'Lỗi không xác định');
+      setEInvoiceProgress(null);
+      setInvoice(prev => ({ ...prev, einvoice_status: 'failed' }));
+      // Persist failure to NocoDB
+      if (inv.id) {
+        try { await updateEInvoiceInCloud(inv.id, { einvoice_status: 'failed' }); } catch { }
+      }
+    } finally {
+      setEInvoiceTargetInvoice(null);
+    }
+  };
+
   if (!currentUser) {
     return <LoginScreen onLogin={setCurrentUser} />;
   }
@@ -578,16 +642,16 @@ const App: React.FC = () => {
             <div className={`hidden md:flex flex-col items-end leading-none`}>
               <span className={`text-[11px] font-black uppercase tracking-widest ${invoice.theme === 'dark' ? 'text-white' : 'text-black'}`}>{currentUser.username}</span>
               <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-md mt-0.5 ${currentUser.role === 'admin'
-                  ? 'bg-primary/20 text-primary'
-                  : 'bg-blue-500/20 text-blue-400'
+                ? 'bg-primary/20 text-primary'
+                : 'bg-blue-500/20 text-blue-400'
                 }`}>{currentUser.role}</span>
             </div>
             <button
               onClick={handleLogout}
               title="Đăng xuất"
               className={`p-2 rounded-xl transition-all hover:scale-110 ${invoice.theme === 'dark'
-                  ? 'text-neutral-medium hover:text-status-error hover:bg-status-error/10'
-                  : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
+                ? 'text-neutral-medium hover:text-status-error hover:bg-status-error/10'
+                : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
                 }`}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -637,6 +701,9 @@ const App: React.FC = () => {
                         {inv.status}
                       </span>
                       {inv.paidDate && <p className="text-[9px] text-status-success/70 font-bold mt-1">Paid: {inv.paidDate}</p>}
+                      {/* eInvoice badge */}
+                      {inv.einvoice_status === 'draft' && <span className="inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-400">eInvoice ✓</span>}
+                      {inv.einvoice_status === 'failed' && <span className="inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-black uppercase bg-red-500/20 text-red-400">eInvoice ✗</span>}
                     </div>
                     <p className="text-[10px] text-neutral-medium font-bold uppercase">{inv.issueDate}</p>
                   </div>
@@ -649,6 +716,15 @@ const App: React.FC = () => {
                       <button onClick={() => loadFromHistory(inv)} title="Load to Editor" className="p-2 hover:text-primary transition-colors">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
+                      {(!inv.einvoice_status || inv.einvoice_status === 'none' || inv.einvoice_status === 'failed') ? (
+                        <button onClick={() => handleCreateEInvoice(inv)} title="Xuất HĐ Điện Tử" className="p-2 hover:text-emerald-400 transition-colors text-emerald-500/40">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        </button>
+                      ) : inv.einvoice_pdf_url ? (
+                        <a href={inv.einvoice_pdf_url} target="_blank" rel="noopener noreferrer" title="Mở PDF HĐ Điện Tử" className="p-2 text-emerald-400 hover:text-emerald-300 transition-colors">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        </a>
+                      ) : null}
                       <button onClick={() => toggleStatus(inv.id!, inv.status)} title="Mark Paid/Pending" className="p-2 hover:text-primary transition-colors">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
@@ -763,6 +839,23 @@ const App: React.FC = () => {
                   <Button onClick={handleSaveToCloud} disabled={isLoading} variant="ghost" className="w-full !py-4 border border-primary/20 hover:bg-primary/5">
                     {isLoading ? 'Syncing...' : 'Save Invoice'}
                   </Button>
+                  <button
+                    onClick={handleCreateEInvoice}
+                    disabled={!!eInvoiceProgress}
+                    className="w-full py-4 rounded-2xl text-sm font-black uppercase tracking-widest border-2 border-dashed border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/60 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    📄 {eInvoiceProgress ? 'Processing...' : 'Create eInvoice'}
+                  </button>
+                  {invoice.einvoice_status === 'draft' && invoice.einvoice_pdf_url && (
+                    <a
+                      href={invoice.einvoice_pdf_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-3 rounded-2xl text-xs font-black uppercase tracking-widest bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-all flex items-center justify-center gap-2"
+                    >
+                      ✅ View Draft PDF
+                    </a>
+                  )}
                 </div>
               </section>
 
@@ -1279,6 +1372,29 @@ const App: React.FC = () => {
                         </div>
                       </div>
 
+                      {/* Payment Method */}
+                      <div className="col-span-2 mt-2">
+                        <div className={`rounded-2xl border p-5 ${invoice.theme === 'dark' ? 'border-white/5 bg-black/20' : 'border-gray-100 bg-gray-50'}`}>
+                          <label className={`text-[11px] font-black uppercase tracking-widest block mb-3 ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Phương thức thanh toán</label>
+                          <div className="flex gap-2">
+                            {(['CK', 'TM', 'TM/CK', 'KHAC'] as const).map(method => (
+                              <button
+                                key={method}
+                                onClick={() => updateInvoice('payment_method', method)}
+                                className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${invoice.payment_method === method
+                                  ? 'bg-primary text-black shadow-btn-glow'
+                                  : invoice.theme === 'dark'
+                                    ? 'border border-white/10 text-white/40 hover:text-white hover:border-white/30'
+                                    : 'border border-gray-200 text-gray-400 hover:text-black hover:border-gray-400'
+                                  }`}
+                              >
+                                {method === 'CK' ? '💳 CK' : method === 'TM' ? '💵 TM' : method === 'TM/CK' ? '🔄 TM/CK' : '📋 Khác'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Summary bar — shown only when discount or tax active */}
                       {(invoice.discountValue > 0 || invoice.taxRate > 0) && (() => {
                         const sub = invoice.items.reduce((a, i) => a + i.quantity * i.unitPrice, 0);
@@ -1374,6 +1490,94 @@ const App: React.FC = () => {
                 Có, lưu ngay!
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* eInvoice Prompt — shown after saving an invoice */}
+      {showEInvoicePrompt && eInvoiceTargetInvoice && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
+          <div className={`w-full max-w-md p-8 rounded-[28px] border shadow-2xl animate-fadeInUp ${invoice.theme === 'dark' ? 'bg-[#1A1A1A] border-primary/20' : 'bg-white border-gray-200'}`}>
+            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-6">
+              <span className="text-3xl">📄</span>
+            </div>
+            <h3 className={`text-xl font-black uppercase tracking-tighter text-center mb-2 ${invoice.theme === 'dark' ? 'text-white' : 'text-black'}`}>Create eInvoice?</h3>
+            <p className={`text-sm text-center mb-8 ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>
+              Invoice <span className="font-black text-primary">{eInvoiceTargetInvoice.invoiceNumber}</span> has been saved. Would you like to create an eInvoice now?
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => { setShowEInvoicePrompt(false); setEInvoiceTargetInvoice(null); }}
+                className={`py-4 rounded-2xl text-sm font-black uppercase tracking-widest border transition-all hover:scale-[1.02] ${invoice.theme === 'dark' ? 'border-white/10 text-white/60 hover:text-white hover:border-white/30' : 'border-gray-200 text-gray-500 hover:text-black hover:border-gray-400'}`}>
+                Later
+              </button>
+              <button
+                onClick={() => handleCreateEInvoice(eInvoiceTargetInvoice)}
+                className="py-4 rounded-2xl text-sm font-black uppercase tracking-widest bg-emerald-500 text-white transition-all hover:scale-[1.02] hover:bg-emerald-600 shadow-lg">
+                Create Now!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* eInvoice Modal */}
+      {showEInvoiceModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
+          <div className={`w-full max-w-md p-8 rounded-[28px] border shadow-2xl animate-fadeInUp ${invoice.theme === 'dark' ? 'bg-[#1A1A1A] border-primary/20' : 'bg-white border-gray-200'}`}>
+            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-6">
+              <span className="text-3xl">📄</span>
+            </div>
+            <h3 className={`text-xl font-black uppercase tracking-tighter text-center mb-2 ${invoice.theme === 'dark' ? 'text-white' : 'text-black'}`}>
+              {eInvoiceResult ? 'Success!' : eInvoiceError ? 'Error Occurred' : 'Creating eInvoice...'}
+            </h3>
+
+            {/* Progress */}
+            {eInvoiceProgress && (
+              <div className="text-center mb-6">
+                <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4" />
+                <p className={`text-sm ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>{eInvoiceProgress}</p>
+              </div>
+            )}
+
+            {/* Success */}
+            {eInvoiceResult && (
+              <div className="text-center mb-6 space-y-3">
+                <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl">✓</div>
+                <p className={`text-sm ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>
+                  Reference: <span className="font-black text-primary">{eInvoiceResult.reference_code}</span>
+                </p>
+                <a
+                  href={eInvoiceResult.pdf_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block px-6 py-3 rounded-2xl bg-emerald-500 text-white font-black text-sm uppercase tracking-widest hover:bg-emerald-600 transition-all"
+                >
+                  Open Draft PDF
+                </a>
+                <p className={`text-[11px] mt-2 ${invoice.theme === 'dark' ? 'text-neutral-medium/60' : 'text-gray-400'}`}>
+                  Go to <strong>SePay Portal</strong> to sign and publish officially
+                </p>
+              </div>
+            )}
+
+            {/* Error */}
+            {eInvoiceError && (
+              <div className="text-center mb-6">
+                <div className="w-12 h-12 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center mx-auto text-2xl mb-3">✗</div>
+                <p className="text-sm text-red-400 font-bold">{eInvoiceError}</p>
+              </div>
+            )}
+
+            {/* Close button */}
+            {(eInvoiceResult || eInvoiceError) && (
+              <button
+                onClick={() => { setShowEInvoiceModal(false); setEInvoiceResult(null); setEInvoiceError(null); }}
+                className={`w-full py-4 rounded-2xl text-sm font-black uppercase tracking-widest border transition-all hover:scale-[1.02] mt-2 ${invoice.theme === 'dark' ? 'border-white/10 text-white/60 hover:text-white' : 'border-gray-200 text-gray-500 hover:text-black'}`}
+              >
+                Close
+              </button>
+            )}
           </div>
         </div>
       )}
