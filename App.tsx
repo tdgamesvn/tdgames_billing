@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { DEFAULT_INVOICE } from './constants';
-import { InvoiceData, ServiceItem, BankingInfo, ClientRecord, StudioInfo, StudioRecord } from './types';
+import { InvoiceData, ServiceItem, BankingInfo, ClientRecord, StudioInfo, StudioRecord, AccountUser } from './types';
+import { LoginScreen } from './components/LoginScreen';
 import { Button } from './components/Button';
 import { Input, TextArea, Select } from './components/FormElements';
 import { InvoicePreview } from './components/InvoicePreview';
@@ -114,8 +115,20 @@ const FilterBar: React.FC<FilterBarProps> = ({
 };
 
 const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<AccountUser | null>(null);
   const [invoice, setInvoice] = useState<InvoiceData>(DEFAULT_INVOICE);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview' | 'history' | 'dashboard'>('edit');
+
+  // Role-based accessible tabs
+  const accessibleTabs: Array<'edit' | 'preview' | 'history' | 'dashboard'> =
+    currentUser?.role === 'admin'
+      ? ['edit', 'preview', 'history', 'dashboard']
+      : ['edit', 'preview'];
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setActiveTab('edit');
+  };
   const [history, setHistory] = useState<InvoiceData[]>([]);
   const [banks, setBanks] = useState<(BankingInfo & { id: string; isDefault: boolean })[]>([]);
   const [clients, setClients] = useState<ClientRecord[]>([]);
@@ -521,6 +534,10 @@ const App: React.FC = () => {
     }
   };
 
+  if (!currentUser) {
+    return <LoginScreen onLogin={setCurrentUser} />;
+  }
+
   return (
     <div className="min-h-screen flex flex-col transition-colors duration-500" style={{ backgroundColor: invoice.theme === 'dark' ? '#0F0F0F' : '#F5F5F5' }}>
       {/* Toast Notification */}
@@ -543,16 +560,41 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className={`flex gap-1 p-1 rounded-full border ${invoice.theme === 'dark' ? 'bg-surface border-white/5' : 'bg-gray-100 border-gray-200'}`}>
-          {(['edit', 'preview', 'history', 'dashboard'] as const).map((tab) => (
+        <div className="flex items-center gap-3">
+          <div className={`flex gap-1 p-1 rounded-full border ${invoice.theme === 'dark' ? 'bg-surface border-white/5' : 'bg-gray-100 border-gray-200'}`}>
+            {accessibleTabs.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab as any)}
+                className={`px-4 md:px-6 py-2 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-primary text-black shadow-btn-glow' : invoice.theme === 'dark' ? 'text-neutral-medium hover:text-white' : 'text-gray-500 hover:text-black'}`}
+              >
+                {tab === 'dashboard' ? '📊' : ''}{tab}
+              </button>
+            ))}
+          </div>
+
+          {/* User info + Logout */}
+          <div className="flex items-center gap-2 ml-2">
+            <div className={`hidden md:flex flex-col items-end leading-none`}>
+              <span className={`text-[11px] font-black uppercase tracking-widest ${invoice.theme === 'dark' ? 'text-white' : 'text-black'}`}>{currentUser.username}</span>
+              <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-md mt-0.5 ${currentUser.role === 'admin'
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-blue-500/20 text-blue-400'
+                }`}>{currentUser.role}</span>
+            </div>
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab as any)}
-              className={`px-4 md:px-6 py-2 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-primary text-black shadow-btn-glow' : invoice.theme === 'dark' ? 'text-neutral-medium hover:text-white' : 'text-gray-500 hover:text-black'}`}
+              onClick={handleLogout}
+              title="Đăng xuất"
+              className={`p-2 rounded-xl transition-all hover:scale-110 ${invoice.theme === 'dark'
+                  ? 'text-neutral-medium hover:text-status-error hover:bg-status-error/10'
+                  : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
+                }`}
             >
-              {tab === 'dashboard' ? '📊' : ''}{tab}
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
             </button>
-          ))}
+          </div>
         </div>
       </nav>
 

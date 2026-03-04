@@ -1,4 +1,4 @@
-import { InvoiceData, BankingInfo, ClientInfo, ClientRecord, StudioInfo, StudioRecord } from '../types';
+import { InvoiceData, BankingInfo, ClientInfo, ClientRecord, StudioInfo, StudioRecord, AccountUser } from '../types';
 
 // NocoDB Configuration (Vite env vars with fallback hardcoded for dev)
 const NOCODB_BASE_URL = import.meta.env.VITE_NOCODB_BASE_URL;
@@ -8,6 +8,7 @@ const BANKS_TABLE_ID = import.meta.env.VITE_NOCODB_BANKS_TABLE_ID;
 const INVOICES_TABLE_ID = import.meta.env.VITE_NOCODB_INVOICES_TABLE_ID;
 const CLIENTS_TABLE_ID = import.meta.env.VITE_NOCODB_CLIENTS_TABLE_ID;
 const STUDIOS_TABLE_ID = import.meta.env.VITE_NOCODB_STUDIOS_TABLE_ID;
+const ACCOUNTS_TABLE_ID = import.meta.env.VITE_NOCODB_ACCOUNTS_TABLE_ID;
 
 
 const now = () => new Date().toISOString();
@@ -271,4 +272,29 @@ export const setDefaultStudioInCloud = async (
 
 export const deleteStudioFromCloud = async (id: string) => {
     await apiDelete(STUDIOS_TABLE_ID, id);
+};
+
+// ────────────────────────────────────────────────────────────────
+// ACCOUNT / AUTH METHODS
+// ────────────────────────────────────────────────────────────────
+
+export const loginWithCredentials = async (username: string, password: string): Promise<AccountUser> => {
+    const res = await apiGet(ACCOUNTS_TABLE_ID, {
+        where: `(username,eq,${username})`,
+        limit: '1',
+    });
+    const list: any[] = res.list || [];
+    if (list.length === 0) {
+        throw new Error('Tài khoản không tồn tại.');
+    }
+    const account = list[0];
+    if (account.password !== password) {
+        throw new Error('Mật khẩu không đúng.');
+    }
+    const role = account.role === 'admin' ? 'admin' : 'member';
+    return {
+        id: String(account.Id),
+        username: account.username,
+        role,
+    };
 };

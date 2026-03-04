@@ -61,3 +61,9 @@ export interface InvoiceData {
   items: ServiceItem[];
   createdAt?: any;
 }
+
+export interface AccountUser {
+  id: string;
+  username: string;
+  role: 'admin' | 'member';
+}
