@@ -10,6 +10,8 @@ import {
   saveInvoiceToCloud,
   fetchInvoicesFromCloud,
   updateInvoiceStatusInCloud,
+  deleteInvoiceFromCloud,
+  getNextInvoiceNumber,
   saveBankToCloud,
   fetchBanksFromCloud,
   deleteBankFromCloud,
@@ -26,6 +28,90 @@ import {
   SaveResponse
 } from './services/nocodbService';
 
+
+// ── Shared Filter Bar ────────────────────────────────────────────
+const selectStyle = "w-full bg-surface/80 text-neutral-light border border-primary/20 rounded-xl px-4 h-[52px] font-montserrat focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all appearance-none cursor-pointer";
+const inputStyle = "w-full bg-surface/80 text-neutral-light border border-primary/20 rounded-xl px-4 h-[52px] font-montserrat focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all";
+const labelStyle = "text-neutral-light text-sm font-semibold mb-2 block";
+const chevron = (
+  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-primary">
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+  </div>
+);
+
+interface FilterBarProps {
+  studios: string[];
+  clients: string[];
+  filterStudio: string; setFilterStudio: (v: string) => void;
+  filterClient: string; setFilterClient: (v: string) => void;
+  filterDateFrom: string; setFilterDateFrom: (v: string) => void;
+  filterDateTo: string; setFilterDateTo: (v: string) => void;
+  filteredCount: number;
+  totalCount: number;
+}
+
+const FilterBar: React.FC<FilterBarProps> = ({
+  studios, clients,
+  filterStudio, setFilterStudio,
+  filterClient, setFilterClient,
+  filterDateFrom, setFilterDateFrom,
+  filterDateTo, setFilterDateTo,
+  filteredCount, totalCount
+}) => {
+  const hasFilter = filterStudio || filterClient || filterDateFrom || filterDateTo;
+  const clearAll = () => { setFilterStudio(''); setFilterClient(''); setFilterDateFrom(''); setFilterDateTo(''); };
+  return (
+    <div className="p-6 rounded-[24px] border bg-surface border-primary/10">
+      <div className="flex flex-wrap gap-5 items-end">
+        {/* Studio */}
+        <div className="flex flex-col flex-1 min-w-[180px]">
+          <label className={labelStyle}>Studio</label>
+          <div className="relative">
+            <select value={filterStudio} onChange={e => setFilterStudio(e.target.value)} className={selectStyle}>
+              <option value="">Tất cả Studio</option>
+              {studios.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            {chevron}
+          </div>
+        </div>
+        {/* Khách hàng */}
+        <div className="flex flex-col flex-1 min-w-[180px]">
+          <label className={labelStyle}>Khách hàng</label>
+          <div className="relative">
+            <select value={filterClient} onChange={e => setFilterClient(e.target.value)} className={selectStyle}>
+              <option value="">Tất cả khách hàng</option>
+              {clients.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {chevron}
+          </div>
+        </div>
+        {/* Từ ngày */}
+        <div className="flex flex-col min-w-[160px]">
+          <label className={labelStyle}>Từ ngày</label>
+          <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className={inputStyle} />
+        </div>
+        {/* Đến ngày */}
+        <div className="flex flex-col min-w-[160px]">
+          <label className={labelStyle}>Đến ngày</label>
+          <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className={inputStyle} />
+        </div>
+        {/* Actions */}
+        <div className="flex items-center gap-4 self-end mb-[2px]">
+          {hasFilter && (
+            <button onClick={clearAll}
+              className="h-[52px] px-5 rounded-xl text-[11px] font-black uppercase tracking-widest text-status-error border border-status-error/30 hover:bg-status-error/10 transition-all">
+              ✕ Xoá filter
+            </button>
+          )}
+          <div className="h-[52px] px-5 rounded-xl border border-primary/10 bg-primary/5 flex flex-col items-center justify-center">
+            <span className="text-[18px] font-black text-primary leading-none">{filteredCount}</span>
+            <span className="text-[9px] font-black uppercase tracking-widest text-neutral-medium leading-none">/ {totalCount} hoá đơn</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const App: React.FC = () => {
   const [invoice, setInvoice] = useState<InvoiceData>(DEFAULT_INVOICE);
@@ -46,6 +132,16 @@ const App: React.FC = () => {
   const [newStudio, setNewStudio] = useState<StudioInfo>({ name: '', address: '', email: '', taxCode: '' });
   const [clientSuggestions, setClientSuggestions] = useState<ClientRecord[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Save-after-export popup
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [pendingInvoiceToSave, setPendingInvoiceToSave] = useState<InvoiceData | null>(null);
+
+  // Filters for History & Dashboard
+  const [filterStudio, setFilterStudio] = useState('');
+  const [filterClient, setFilterClient] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
 
   const [newBank, setNewBank] = useState<BankingInfo>({
     alias: '',
@@ -72,6 +168,13 @@ const App: React.FC = () => {
     });
     if (activeTab === 'history' || activeTab === 'dashboard') loadHistory();
   }, [activeTab]);
+
+  // Tự động set invoice number kế tiếp khi app load
+  useEffect(() => {
+    getNextInvoiceNumber().then(nextNum => {
+      setInvoice(prev => ({ ...prev, invoiceNumber: nextNum }));
+    });
+  }, []);
 
   useEffect(() => {
     if (lastMessage) {
@@ -302,6 +405,50 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteInvoice = async (id: string) => {
+    if (!confirm('Bạn có chắc muốn xoá hoá đơn này không?')) return;
+    try {
+      await deleteInvoiceFromCloud(id);
+      setHistory(prev => prev.filter(inv => inv.id !== id));
+      notify('Đã xoá hoá đơn.', 'success');
+    } catch (e: any) {
+      notify('Lỗi xoá hoá đơn: ' + e.message, 'error');
+    }
+  };
+
+  const handleConfirmSave = async () => {
+    if (!pendingInvoiceToSave) return;
+    try {
+      await saveInvoiceToCloud(pendingInvoiceToSave);
+      notify('Đã lưu hoá đơn lên Cloud!', 'success');
+      if (activeTab === 'history') loadHistory();
+      // Sau khi lưu xong → tự tính số invoice kế tiếp cho lần tạo mới
+      getNextInvoiceNumber().then(nextNum => {
+        setInvoice(prev => ({ ...prev, invoiceNumber: nextNum }));
+      });
+    } catch (e: any) {
+      notify('Lỗi lưu hoá đơn: ' + e.message, 'error');
+    } finally {
+      setShowSaveConfirm(false);
+      setPendingInvoiceToSave(null);
+    }
+  };
+
+  const handleDismissSave = () => {
+    setShowSaveConfirm(false);
+    setPendingInvoiceToSave(null);
+  };
+
+  // Filtered history used by both History and Dashboard tabs
+  const filteredHistory = history.filter(inv => {
+    if (filterStudio && inv.studioInfo?.name !== filterStudio) return false;
+    if (filterClient && inv.clientInfo?.name !== filterClient) return false;
+    const issueDate = inv.issueDate || '';
+    if (filterDateFrom && issueDate < filterDateFrom) return false;
+    if (filterDateTo && issueDate > filterDateTo) return false;
+    return true;
+  });
+
   const loadFromHistory = (item: InvoiceData) => {
     setInvoice(item);
     setActiveTab('edit');
@@ -349,9 +496,6 @@ const App: React.FC = () => {
     const fileName = `Invoice_${invoice.invoiceNumber}`;
     setIsExporting(format);
     try {
-      // Auto-save invoice to cloud on export
-      saveInvoiceToCloud(invoice).catch(e => console.warn('Auto-save failed:', e.message));
-
       if (format === 'pdf' || format === 'png' || format === 'word') {
         if (activeTab !== 'preview') {
           setActiveTab('preview');
@@ -363,6 +507,11 @@ const App: React.FC = () => {
         case 'png': await exportToPNG('invoice-capture', fileName, invoice.theme); break;
         case 'excel': exportToExcel(invoice, fileName); break;
         case 'word': exportToWord('invoice-capture', fileName); break;
+      }
+      // After PDF export, ask user if they want to save
+      if (format === 'pdf') {
+        setPendingInvoiceToSave(invoice);
+        setShowSaveConfirm(true);
       }
     } catch (error) {
       console.error("Export failed:", error);
@@ -418,16 +567,27 @@ const App: React.FC = () => {
               <Button onClick={loadHistory} variant="ghost" size="sm" disabled={isLoading}>{isLoading ? 'Loading...' : 'Refresh'}</Button>
             </div>
 
+            {/* Filter Bar */}
+            <FilterBar
+              studios={[...new Set(history.map(i => i.studioInfo?.name).filter(Boolean) as string[])]}
+              clients={[...new Set(history.map(i => i.clientInfo?.name).filter(Boolean) as string[])]}
+              filterStudio={filterStudio} setFilterStudio={setFilterStudio}
+              filterClient={filterClient} setFilterClient={setFilterClient}
+              filterDateFrom={filterDateFrom} setFilterDateFrom={setFilterDateFrom}
+              filterDateTo={filterDateTo} setFilterDateTo={setFilterDateTo}
+              filteredCount={filteredHistory.length} totalCount={history.length}
+            />
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {history.length === 0 && !isLoading && (
+              {filteredHistory.length === 0 && !isLoading && (
                 <div className="col-span-full py-20 text-center flex flex-col items-center">
                   <div className="w-20 h-20 rounded-full bg-primary/5 flex items-center justify-center mb-6">
                     <svg className="w-10 h-10 text-primary/20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   </div>
-                  <p className="opacity-50 font-black uppercase tracking-widest text-xs">No invoices found in your history</p>
+                  <p className="opacity-50 font-black uppercase tracking-widest text-xs">No invoices found</p>
                 </div>
               )}
-              {history.map((inv) => (
+              {filteredHistory.map((inv) => (
                 <div key={inv.id} className={`p-6 rounded-[24px] border transition-all hover:scale-[1.02] ${invoice.theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'} relative overflow-hidden group`}>
                   <div className="flex justify-between items-start mb-4">
                     <div>
@@ -439,12 +599,20 @@ const App: React.FC = () => {
                     <p className="text-[10px] text-neutral-medium font-bold uppercase">{inv.issueDate}</p>
                   </div>
                   <h3 className={`text-xl font-black mb-1 ${invoice.theme === 'dark' ? 'text-white' : 'text-black'}`}>{inv.invoiceNumber}</h3>
-                  <p className={`text-sm mb-4 font-medium truncate ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>{inv.clientInfo?.name || 'Untitled Client'}</p>
+                  <p className={`text-sm mb-1 font-medium truncate ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>{inv.clientInfo?.name || 'Untitled Client'}</p>
+                  {inv.studioInfo?.name && <p className={`text-[10px] mb-3 truncate ${invoice.theme === 'dark' ? 'text-neutral-medium/60' : 'text-gray-400'}`}>🏢 {inv.studioInfo.name}</p>}
                   <div className="flex justify-between items-center pt-4 border-t border-primary/10">
                     <p className="text-primary font-black">{formatCurrencySimple(inv.items.reduce((a, b) => a + (b.quantity * b.unitPrice), 0), inv.currency)}</p>
                     <div className="flex gap-2">
-                      <button onClick={() => loadFromHistory(inv)} title="Load to Editor" className="p-2 hover:text-primary transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
-                      <button onClick={() => toggleStatus(inv.id!, inv.status)} title="Mark Paid/Pending" className="p-2 hover:text-primary transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+                      <button onClick={() => loadFromHistory(inv)} title="Load to Editor" className="p-2 hover:text-primary transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      </button>
+                      <button onClick={() => toggleStatus(inv.id!, inv.status)} title="Mark Paid/Pending" className="p-2 hover:text-primary transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      </button>
+                      <button onClick={() => handleDeleteInvoice(inv.id!)} title="Xoá hoá đơn" className="p-2 hover:text-status-error transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -458,9 +626,9 @@ const App: React.FC = () => {
               const disc = inv.discountType === 'percentage' ? sub * (inv.discountValue / 100) : inv.discountValue;
               return Math.max(0, sub - disc) * (1 + inv.taxRate / 100);
             };
-            const pending = history.filter(i => i.status !== 'paid');
+            const pending = filteredHistory.filter(i => i.status !== 'paid');
             const revenueMap: Record<string, number> = {};
-            history.filter(i => i.status === 'paid').forEach(inv => {
+            filteredHistory.filter(i => i.status === 'paid').forEach(inv => {
               const name = inv.clientInfo?.name || 'Unknown';
               revenueMap[name] = (revenueMap[name] || 0) + calcTotal(inv);
             });
@@ -475,11 +643,23 @@ const App: React.FC = () => {
                   </div>
                   <Button onClick={loadHistory} variant="ghost" size="sm" disabled={isLoading}>{isLoading ? 'Loading...' : 'Refresh'}</Button>
                 </div>
+
+                {/* Dashboard Filter Bar */}
+                <FilterBar
+                  studios={[...new Set(history.map(i => i.studioInfo?.name).filter(Boolean) as string[])]}
+                  clients={[...new Set(history.map(i => i.clientInfo?.name).filter(Boolean) as string[])]}
+                  filterStudio={filterStudio} setFilterStudio={setFilterStudio}
+                  filterClient={filterClient} setFilterClient={setFilterClient}
+                  filterDateFrom={filterDateFrom} setFilterDateFrom={setFilterDateFrom}
+                  filterDateTo={filterDateTo} setFilterDateTo={setFilterDateTo}
+                  filteredCount={filteredHistory.length} totalCount={history.length}
+                />
+
                 {/* KPI Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {[{ label: 'Tổng doanh thu (đã thu)', value: formatCurrencySimple(totalRevenue, 'USD'), color: 'text-status-success' },
                   { label: 'Chưa thanh toán', value: `${pending.length} hoá đơn`, color: 'text-status-warning' },
-                  { label: 'Tổng hoá đơn', value: `${history.length}`, color: 'text-primary' }]
+                  { label: 'Tổng hoá đơn (đã lọc)', value: `${filteredHistory.length}`, color: 'text-primary' }]
                     .map(k => (
                       <div key={k.label} className={`p-6 rounded-[20px] border ${invoice.theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'}`}>
                         <p className={`text-[10px] font-black uppercase tracking-widest mb-3 ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>{k.label}</p>
@@ -1126,6 +1306,35 @@ const App: React.FC = () => {
       <footer className="py-12 border-t text-center opacity-30 text-[9px] font-black uppercase tracking-[0.5em]">
         TD Consulting • Enterprise Billing Engine • v2.1
       </footer>
+
+      {/* Save Invoice Confirmation Modal */}
+      {showSaveConfirm && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
+          <div className={`w-full max-w-md p-8 rounded-[28px] border shadow-2xl animate-fadeInUp ${invoice.theme === 'dark' ? 'bg-[#1A1A1A] border-primary/20' : 'bg-white border-gray-200'}`}>
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
+              <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+            </div>
+            <h3 className={`text-xl font-black uppercase tracking-tighter text-center mb-2 ${invoice.theme === 'dark' ? 'text-white' : 'text-black'}`}>Lưu hoá đơn?</h3>
+            <p className={`text-sm text-center mb-8 ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>
+              Bạn có muốn lưu trữ hoá đơn <span className="font-black text-primary">{pendingInvoiceToSave?.invoiceNumber}</span> vào database không?
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={handleDismissSave}
+                className={`py-4 rounded-2xl text-sm font-black uppercase tracking-widest border transition-all hover:scale-[1.02] ${invoice.theme === 'dark' ? 'border-white/10 text-white/60 hover:text-white hover:border-white/30' : 'border-gray-200 text-gray-500 hover:text-black hover:border-gray-400'}`}>
+                Không
+              </button>
+              <button
+                onClick={handleConfirmSave}
+                className="py-4 rounded-2xl text-sm font-black uppercase tracking-widest bg-primary text-black transition-all hover:scale-[1.02] hover:bg-primary/90 shadow-btn-glow">
+                Có, lưu ngay!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

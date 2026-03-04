@@ -138,6 +138,35 @@ export const fetchInvoicesFromCloud = async (): Promise<InvoiceData[]> => {
     return (res.list || []).map(parseInvoice);
 };
 
+/**
+ * Tính số hoá đơn tiếp theo dựa trên danh sách đã lưu.
+ * Format: INV-YYYYMM-NNN  (e.g. INV-202603-007)
+ * Logic: tìm số thứ tự lớn nhất trong NĂM hiện tại (không reset theo tháng).
+ * Sang năm mới thì reset về 001.
+ */
+export const getNextInvoiceNumber = async (): Promise<string> => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+    const yearPrefix = `INV-${year}`;         // dùng để filter toàn bộ invoices trong năm
+    const issuePrefix = `INV-${year}${monthStr}`; // prefix thực tế cho invoice number mới
+    try {
+        const res = await apiGet(INVOICES_TABLE_ID, { sort: '-createdAt', limit: '500' });
+        const allNumbers: number[] = (res.list || [])
+            .map((row: any) => row.invoiceNumber as string)
+            .filter((n: string) => typeof n === 'string' && n.startsWith(yearPrefix))
+            .map((n: string) => {
+                const parts = n.split('-');
+                return parseInt(parts[parts.length - 1], 10) || 0;
+            });
+        const maxSeq = allNumbers.length > 0 ? Math.max(...allNumbers) : 0;
+        return `${issuePrefix}-${String(maxSeq + 1).padStart(3, '0')}`;
+    } catch {
+        return `${issuePrefix}-001`;
+    }
+};
+
+
 export const updateInvoiceStatusInCloud = async (
     id: string,
     status: InvoiceData['status'],
@@ -147,6 +176,10 @@ export const updateInvoiceStatusInCloud = async (
     if (status === 'paid' && paidDate) payload.paidDate = paidDate;
     if (status === 'pending') payload.paidDate = null;
     await apiPatch(INVOICES_TABLE_ID, id, payload);
+};
+
+export const deleteInvoiceFromCloud = async (id: string): Promise<void> => {
+    await apiDelete(INVOICES_TABLE_ID, id);
 };
 
 // ────────────────────────────────────────────────────────────────

@@ -124,7 +124,7 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({ data }) => {
             </thead>
             <tbody className={`divide-y ${isDark ? 'divide-[#FF9500]/10' : 'divide-[#FF9500]/5'}`}>
               {data.items.map((item, index) => (
-                <tr key={item.id} className={isDark ? '' : 'bg-white'}>
+                <tr key={item.id} className={isDark ? '' : 'bg-white'} style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                   <td className={`py-5 pl-8 text-[13px] font-bold tabular-nums ${isDark ? 'text-[#FF9500]/60' : 'text-[#4A5568]'}`}>
                     {String(index + 1).padStart(2, '0')}
                   </td>
@@ -142,6 +142,7 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({ data }) => {
                   </td>
                 </tr>
               ))}
+
             </tbody>
           </table>
         </div>
