@@ -18,6 +18,7 @@ export interface BankingInfo {
 }
 
 export interface ClientInfo {
+  clientType?: 'individual' | 'company';
   name: string;
   address: string;
   contactPerson: string;

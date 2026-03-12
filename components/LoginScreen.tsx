@@ -21,7 +21,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         setIsLoading(true);
         setError('');
         try {
-            const { loginWithCredentials } = await import('../services/nocodbService');
+            const { loginWithCredentials } = await import('../services/supabaseService');
             const user = await loginWithCredentials(username, password);
             onLogin(user);
         } catch (e: any) {

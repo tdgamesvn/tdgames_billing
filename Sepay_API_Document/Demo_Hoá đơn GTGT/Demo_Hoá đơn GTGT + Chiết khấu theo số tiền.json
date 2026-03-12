@@ -1,0 +1,31 @@
+{
+  "template_code": "1",
+  "invoice_series": "C26TSE",
+  "issued_date": "2026-01-26 00:00:00",
+  "currency": "VND",
+  "buyer": {
+    "type": "personal",
+    "name": "Buyer Name Demo",
+    "legal_name": "CÔNG TY CỔ PHẦN ABC",
+    "tax_code": "0317887567",
+    "address": "Số 88 Đường Ánh Sao, Phường Bình An, Quận 9, TP Hồ Chí Minh, Việt Nam",
+    "email": "buyeremaildemo@gmail.com"
+  },
+  "items": [
+    {
+      "line_number": 1,
+      "line_type": 1,
+      "item_name": "Sản phẩm A",
+      "item_code": "SP001",
+      "unit": "cái",
+      "quantity": 1,
+      "unit_price": 4500000,
+      "tax_rate": 10,
+      "discount_amount": 100000
+    }
+  ],
+  "payment_method": "KHAC",
+  "provider_account_id": "0aea3134-da40-11f0-aef4-52c7e9b4f41b",
+  "notes": "Ghi chú hóa đơn",
+  "is_draft": true
+}

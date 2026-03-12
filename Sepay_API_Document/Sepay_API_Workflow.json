@@ -1,0 +1,419 @@
+{
+  "name": "My workflow 28",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c8c7b523-64af-49b4-ab14-e9a5f64eedca",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "data.content",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1104,
+        256
+      ],
+      "id": "36b70392-855c-465b-87f8-69bc008667c6",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "url": "https://einvoice-api-sandbox.sepay.vn/v1/invoices",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "page",
+              "value": "1"
+            },
+            {
+              "name": "per_page",
+              "value": "10"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.data.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        416,
+        288
+      ],
+      "id": "77a2e3fa-4935-476c-b154-dbc4d05fd709",
+      "name": "Danh sách hoá đơn"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://einvoice-api-sandbox.sepay.vn/v1/invoices/create",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Tạo Token xác thực').item.json.data.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"template_code\": \"1\",\n  \"invoice_series\": \"C26TSE\",\n  \"issued_date\": \"2026-01-26 00:00:00\",\n  \"currency\": \"VND\",\n  \"provider_account_id\": \"{{ $json.data.items[0].id }}\",\n  \"payment_method\": \"TM\",\n  \"is_draft\": true,\n  \"buyer\": {\n    \"type\": \"personal\",\n    \"name\": \"Công ty TNHH ABC\",\n    \"legal_name\": \"CÔNG TY CỔ PHẦN ABC\",\n    \"tax_code\": \"0123456789\",\n    \"address\": \"123 Đường ABC, Quận 1, TP.HCM\",\n    \"email\": \"contact@abc.com\",\n    \"phone\": \"0901234567\"\n  },\n  \"items\": [\n    {\n      \"line_number\": 1,\n      \"line_type\": 1,\n      \"item_code\": \"SP001\",\n      \"item_name\": \"Sản phẩm A\",\n      \"unit\": \"cái\",\n      \"quantity\": 10,\n      \"unit_price\": 100000,\n      \"tax_rate\": 10,\n      \"discount_tax\": 10,\n      \"discount_amount\": 100000,\n      \"before_discount_and_tax_amount\": 4500000\n    }\n  ],\n  \"notes\": \"Ghi chú nội bộ\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        624,
+        0
+      ],
+      "id": "1f4c08f7-5487-4c2a-91d9-05edda25c02e",
+      "name": "Tạo hoá đơn điện tử"
+    },
+    {
+      "parameters": {
+        "url": "=https://einvoice-api-sandbox.sepay.vn/v1/invoices/{{ $json.data.tracking_code }}/download ",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "pdf"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Tạo Token xác thực').item.json.data.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        880,
+        256
+      ],
+      "id": "36687907-e8d0-4bb6-96a8-7f5213ab71cb",
+      "name": "Tải hoá đơn"
+    },
+    {
+      "parameters": {
+        "url": "=https://einvoice-api-sandbox.sepay.vn/v1/invoices/create/check/{{ $json.data.tracking_code }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Tạo Token xác thực').item.json.data.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        880,
+        -256
+      ],
+      "id": "4f32873d-bf65-47aa-a571-d83d2f1729c7",
+      "name": "Theo dõi trạng thái xuất hóa đơn"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://einvoice-api-sandbox.sepay.vn/v1/token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        208,
+        0
+      ],
+      "id": "e99f8cc3-6772-4f38-b6fd-d15e2bb4a89a",
+      "name": "Tạo Token xác thực",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "JSLnCJTVN3qKMjJp",
+          "name": "Sepay_Sanbox"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://einvoice-api-sandbox.sepay.vn/v1/provider-accounts",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "page",
+              "value": "1"
+            },
+            {
+              "name": "per_page",
+              "value": "20"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.data.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        432,
+        0
+      ],
+      "id": "c2e2d115-7adb-48d6-8360-59e9ddc0b91a",
+      "name": "Danh sách tài khoản nhà cung cấp"
+    },
+    {
+      "parameters": {
+        "url": "=https://einvoice-api-sandbox.sepay.vn/v1/provider-accounts/{{ $json.data.items[0].id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Tạo Token xác thực').item.json.data.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        416,
+        -272
+      ],
+      "id": "7fa67da9-43a9-46bf-831f-15bfdd278d4e",
+      "name": "Chi tiết tài khoản nhà cung cấp"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://einvoice-api-sandbox.sepay.vn/v1/invoices/issue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Tạo Token xác thực').item.json.data.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "reference_code",
+              "value": "={{ $json.data.invoice.reference_code }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1104,
+        -256
+      ],
+      "id": "42f1caa8-b33b-4c84-8e6f-f59983d3e00a",
+      "name": "Phát hành hóa đơn điện tử (nháp)"
+    },
+    {
+      "parameters": {
+        "url": "https://einvoice-api-sandbox.sepay.vn/v1/usage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.data.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        416,
+        512
+      ],
+      "id": "f5c6bfd7-f5f8-43b9-9bf3-182c2c1cfdc7",
+      "name": "Kiểm tra hạn ngạch"
+    },
+    {
+      "parameters": {
+        "url": "=https://einvoice-api-sandbox.sepay.vn/v1/invoices/{{ $json.data.tracking_code }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Tạo Token xác thực').item.json.data.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        880,
+        0
+      ],
+      "id": "e33cdbc4-e0fa-4410-96c2-a30f361b0dba",
+      "name": "Chi tiết hóa đơn"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Tạo Token xác thực",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tạo hoá đơn điện tử": {
+      "main": [
+        [
+          {
+            "node": "Theo dõi trạng thái xuất hóa đơn",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Tải hoá đơn",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Chi tiết hóa đơn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tải hoá đơn": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tạo Token xác thực": {
+      "main": [
+        [
+          {
+            "node": "Danh sách tài khoản nhà cung cấp",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Danh sách hoá đơn",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Kiểm tra hạn ngạch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Danh sách tài khoản nhà cung cấp": {
+      "main": [
+        [
+          {
+            "node": "Tạo hoá đơn điện tử",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Chi tiết tài khoản nhà cung cấp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Theo dõi trạng thái xuất hóa đơn": {
+      "main": [
+        [
+          {
+            "node": "Phát hành hóa đơn điện tử (nháp)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phát hành hóa đơn điện tử (nháp)": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "96561c26-d49d-4503-8cdf-46a369306a47",
+  "meta": {
+    "instanceId": "558d88703fb65b2d0e44613bc35916258b0f0bf983c5d4730c00c424b77ca36a"
+  },
+  "id": "0Jfmk8Ha5lHLqtZj",
+  "tags": []
+}

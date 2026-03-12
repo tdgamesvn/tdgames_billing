@@ -1,0 +1,387 @@
+import { supabase } from './supabaseClient';
+import { InvoiceData, BankingInfo, ClientInfo, ClientRecord, StudioInfo, StudioRecord, AccountUser } from '../types';
+
+export interface SaveResponse {
+    success: boolean;
+    id: string;
+    error?: string;
+}
+
+// ────────────────────────────────────────────────────────────────
+// CLIENT METHODS
+// ────────────────────────────────────────────────────────────────
+
+export const fetchClientsFromCloud = async (): Promise<ClientRecord[]> => {
+    const { data, error } = await supabase
+        .from('invoice_clients')
+        .select('*')
+        .order('name');
+    if (error) throw new Error(`Fetch clients failed: ${error.message}`);
+    return (data || []).map((c: any) => ({
+        id: c.id,
+        clientType: c.client_type || 'company',
+        name: c.name || '',
+        contactPerson: c.contact_person || '',
+        email: c.email || '',
+        address: c.address || '',
+        taxCode: c.tax_code || '',
+    }));
+};
+
+export const saveClientToCloud = async (client: ClientInfo): Promise<ClientRecord> => {
+    const { data, error } = await supabase
+        .from('invoice_clients')
+        .insert({
+            client_type: client.clientType || 'company',
+            name: client.name,
+            contact_person: client.contactPerson,
+            email: client.email,
+            address: client.address,
+            tax_code: client.taxCode || '',
+        })
+        .select()
+        .single();
+    if (error) throw new Error(`Save client failed: ${error.message}`);
+    return { ...client, id: data.id };
+};
+
+export const updateClientInCloud = async (id: string, client: ClientInfo): Promise<void> => {
+    const { error } = await supabase
+        .from('invoice_clients')
+        .update({
+            client_type: client.clientType || 'company',
+            name: client.name,
+            contact_person: client.contactPerson,
+            email: client.email,
+            address: client.address,
+            tax_code: client.taxCode || '',
+        })
+        .eq('id', id);
+    if (error) throw new Error(`Update client failed: ${error.message}`);
+};
+
+// ────────────────────────────────────────────────────────────────
+// INVOICE METHODS
+// ────────────────────────────────────────────────────────────────
+
+export const saveInvoiceToCloud = async (data: InvoiceData): Promise<SaveResponse> => {
+    const record = {
+        invoice_number: data.invoiceNumber,
+        issue_date: data.issueDate || null,
+        due_date: data.dueDate || null,
+        currency: data.currency,
+        tax_rate: data.taxRate,
+        discount_type: data.discountType,
+        discount_value: data.discountValue,
+        theme: data.theme,
+        status: data.status,
+        paid_date: data.paidDate || null,
+        payment_method: data.payment_method || 'TM/CK',
+        client_info: data.clientInfo,
+        studio_info: data.studioInfo,
+        banking_info: data.bankingInfo,
+        items: data.items,
+        client_name: data.clientInfo.name || '',
+        einvoice_status: data.einvoice_status && data.einvoice_status !== 'none' ? data.einvoice_status : '',
+        einvoice_reference_code: data.einvoice_reference_code || '',
+        einvoice_tracking_code: data.einvoice_tracking_code || '',
+        einvoice_pdf_url: data.einvoice_pdf_url || '',
+    };
+
+    const { data: created, error } = await supabase
+        .from('invoice_invoices')
+        .insert(record)
+        .select()
+        .single();
+    if (error) throw new Error(`Save invoice failed: ${error.message}`);
+    return { success: true, id: created.id };
+};
+
+const parseInvoice = (row: any): InvoiceData => ({
+    id: row.id,
+    invoiceNumber: row.invoice_number,
+    issueDate: row.issue_date || '',
+    dueDate: row.due_date || '',
+    currency: row.currency || 'USD',
+    taxRate: row.tax_rate ?? 0,
+    discountType: row.discount_type || 'percentage',
+    discountValue: row.discount_value ?? 0,
+    theme: row.theme || 'dark',
+    status: row.status || 'pending',
+    paidDate: row.paid_date || undefined,
+    payment_method: row.payment_method || '',
+    clientInfo: row.client_info || { name: '', address: '', contactPerson: '', email: '' },
+    studioInfo: row.studio_info || { name: '', address: '', email: '', taxCode: '' },
+    bankingInfo: row.banking_info || { accountName: '', accountNumber: '', bankName: '', branchName: '', bankAddress: '', citadCode: '', swiftCode: '' },
+    items: row.items || [],
+    einvoice_status: row.einvoice_status || '',
+    einvoice_reference_code: row.einvoice_reference_code || '',
+    einvoice_tracking_code: row.einvoice_tracking_code || '',
+    einvoice_pdf_url: row.einvoice_pdf_url || '',
+    createdAt: row.created_at,
+});
+
+export const fetchInvoicesFromCloud = async (): Promise<InvoiceData[]> => {
+    const { data, error } = await supabase
+        .from('invoice_invoices')
+        .select('*')
+        .order('created_at', { ascending: false });
+    if (error) throw new Error(`Fetch invoices failed: ${error.message}`);
+    return (data || []).map(parseInvoice);
+};
+
+/**
+ * Tính số hoá đơn tiếp theo.
+ * Format: INV-YYYYMM-NNN  (e.g. INV-202603-007)
+ */
+export const getNextInvoiceNumber = async (): Promise<string> => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+    const yearPrefix = `INV-${year}`;
+    const issuePrefix = `INV-${year}${monthStr}`;
+    try {
+        const { data } = await supabase
+            .from('invoice_invoices')
+            .select('invoice_number')
+            .like('invoice_number', `${yearPrefix}%`)
+            .order('created_at', { ascending: false })
+            .limit(500);
+        const allNumbers: number[] = (data || [])
+            .map((row: any) => row.invoice_number as string)
+            .filter((n: string) => typeof n === 'string' && n.startsWith(yearPrefix))
+            .map((n: string) => {
+                const parts = n.split('-');
+                return parseInt(parts[parts.length - 1], 10) || 0;
+            });
+        const maxSeq = allNumbers.length > 0 ? Math.max(...allNumbers) : 0;
+        return `${issuePrefix}-${String(maxSeq + 1).padStart(3, '0')}`;
+    } catch {
+        return `${issuePrefix}-001`;
+    }
+};
+
+export const updateInvoiceStatusInCloud = async (
+    id: string,
+    status: InvoiceData['status'],
+    paidDate?: string
+) => {
+    const payload: Record<string, unknown> = { status };
+    if (status === 'paid' && paidDate) payload.paid_date = paidDate;
+    if (status === 'pending') payload.paid_date = null;
+    const { error } = await supabase
+        .from('invoice_invoices')
+        .update(payload)
+        .eq('id', id);
+    if (error) throw new Error(`Update status failed: ${error.message}`);
+};
+
+export const deleteInvoiceFromCloud = async (id: string): Promise<void> => {
+    const { error } = await supabase
+        .from('invoice_invoices')
+        .delete()
+        .eq('id', id);
+    if (error) throw new Error(`Delete invoice failed: ${error.message}`);
+};
+
+export const updateEInvoiceInCloud = async (
+    id: string,
+    data: {
+        einvoice_status: string;
+        einvoice_reference_code?: string;
+        einvoice_tracking_code?: string;
+        einvoice_pdf_url?: string;
+    }
+) => {
+    const { error } = await supabase
+        .from('invoice_invoices')
+        .update({
+            einvoice_status: data.einvoice_status,
+            einvoice_reference_code: data.einvoice_reference_code || '',
+            einvoice_tracking_code: data.einvoice_tracking_code || '',
+            einvoice_pdf_url: data.einvoice_pdf_url || '',
+        })
+        .eq('id', id);
+    if (error) throw new Error(`Update eInvoice failed: ${error.message}`);
+};
+
+// ────────────────────────────────────────────────────────────────
+// BANK METHODS
+// ────────────────────────────────────────────────────────────────
+
+export const saveBankToCloud = async (bank: BankingInfo): Promise<SaveResponse> => {
+    const { data, error } = await supabase
+        .from('invoice_banks')
+        .insert({
+            alias: bank.alias || '',
+            account_name: bank.accountName,
+            account_number: bank.accountNumber,
+            bank_name: bank.bankName,
+            branch_name: bank.branchName,
+            bank_address: bank.bankAddress,
+            citad_code: bank.citadCode,
+            swift_code: bank.swiftCode,
+            is_default: false,
+        })
+        .select()
+        .single();
+    if (error) throw new Error(`Save bank failed: ${error.message}`);
+    return { success: true, id: data.id };
+};
+
+export const fetchBanksFromCloud = async (): Promise<(BankingInfo & { id: string; isDefault: boolean })[]> => {
+    const { data, error } = await supabase
+        .from('invoice_banks')
+        .select('*')
+        .order('created_at');
+    if (error) throw new Error(`Fetch banks failed: ${error.message}`);
+    return (data || []).map((b: any) => ({
+        id: b.id,
+        alias: b.alias || '',
+        accountName: b.account_name || '',
+        accountNumber: b.account_number || '',
+        bankName: b.bank_name || '',
+        branchName: b.branch_name || '',
+        bankAddress: b.bank_address || '',
+        citadCode: b.citad_code || '',
+        swiftCode: b.swift_code || '',
+        isDefault: b.is_default === true,
+    }));
+};
+
+export const updateBankInCloud = async (id: string, bank: BankingInfo): Promise<void> => {
+    const { error } = await supabase
+        .from('invoice_banks')
+        .update({
+            alias: bank.alias || '',
+            account_name: bank.accountName,
+            account_number: bank.accountNumber,
+            bank_name: bank.bankName,
+            branch_name: bank.branchName,
+            bank_address: bank.bankAddress,
+            citad_code: bank.citadCode,
+            swift_code: bank.swiftCode,
+        })
+        .eq('id', id);
+    if (error) throw new Error(`Update bank failed: ${error.message}`);
+};
+
+export const setDefaultBankInCloud = async (
+    targetId: string,
+    allBanks: (BankingInfo & { id: string; isDefault: boolean })[]
+): Promise<void> => {
+    // Clear all defaults first
+    const clearOps = allBanks
+        .filter(b => b.isDefault && b.id !== targetId)
+        .map(b => supabase.from('invoice_banks').update({ is_default: false }).eq('id', b.id));
+    await Promise.all(clearOps);
+
+    // Set the target as default
+    const { error } = await supabase
+        .from('invoice_banks')
+        .update({ is_default: true })
+        .eq('id', targetId);
+    if (error) throw new Error(`Set default bank failed: ${error.message}`);
+};
+
+export const deleteBankFromCloud = async (id: string) => {
+    const { error } = await supabase
+        .from('invoice_banks')
+        .delete()
+        .eq('id', id);
+    if (error) throw new Error(`Delete bank failed: ${error.message}`);
+};
+
+// ────────────────────────────────────────────────────────────────
+// STUDIO METHODS
+// ────────────────────────────────────────────────────────────────
+
+export const fetchStudiosFromCloud = async (): Promise<StudioRecord[]> => {
+    const { data, error } = await supabase
+        .from('invoice_studios')
+        .select('*')
+        .order('name');
+    if (error) throw new Error(`Fetch studios failed: ${error.message}`);
+    return (data || []).map((s: any) => ({
+        id: s.id,
+        name: s.name || '',
+        address: s.address || '',
+        email: s.email || '',
+        taxCode: s.tax_code || '',
+        isDefault: s.is_default === true,
+    }));
+};
+
+export const saveStudioToCloud = async (studio: StudioInfo): Promise<StudioRecord> => {
+    const { data, error } = await supabase
+        .from('invoice_studios')
+        .insert({
+            name: studio.name,
+            address: studio.address,
+            email: studio.email,
+            tax_code: studio.taxCode,
+            is_default: false,
+        })
+        .select()
+        .single();
+    if (error) throw new Error(`Save studio failed: ${error.message}`);
+    return { ...studio, id: data.id, isDefault: false };
+};
+
+export const updateStudioInCloud = async (id: string, studio: StudioInfo): Promise<void> => {
+    const { error } = await supabase
+        .from('invoice_studios')
+        .update({
+            name: studio.name,
+            address: studio.address,
+            email: studio.email,
+            tax_code: studio.taxCode,
+        })
+        .eq('id', id);
+    if (error) throw new Error(`Update studio failed: ${error.message}`);
+};
+
+export const setDefaultStudioInCloud = async (
+    targetId: string,
+    _allStudios?: StudioRecord[]
+): Promise<void> => {
+    // Fetch fresh data
+    const { data: freshStudios } = await supabase
+        .from('invoice_studios')
+        .select('id, is_default');
+    const clearOps = (freshStudios || [])
+        .filter((s: any) => s.is_default && s.id !== targetId)
+        .map((s: any) => supabase.from('invoice_studios').update({ is_default: false }).eq('id', s.id));
+    await Promise.all(clearOps);
+
+    const { error } = await supabase
+        .from('invoice_studios')
+        .update({ is_default: true })
+        .eq('id', targetId);
+    if (error) throw new Error(`Set default studio failed: ${error.message}`);
+};
+
+export const deleteStudioFromCloud = async (id: string) => {
+    const { error } = await supabase
+        .from('invoice_studios')
+        .delete()
+        .eq('id', id);
+    if (error) throw new Error(`Delete studio failed: ${error.message}`);
+};
+
+// ────────────────────────────────────────────────────────────────
+// ACCOUNT / AUTH METHODS
+// ────────────────────────────────────────────────────────────────
+
+export const loginWithCredentials = async (username: string, password: string): Promise<AccountUser> => {
+    const { data, error } = await supabase
+        .rpc('invoice_verify_login', { p_username: username, p_password: password });
+    if (error) throw new Error('Đăng nhập thất bại.');
+    if (!data || data.length === 0) throw new Error('Tài khoản hoặc mật khẩu không đúng.');
+    const account = data[0];
+    return {
+        id: account.id,
+        username: account.username,
+        role: account.role === 'admin' ? 'admin' : 'member',
+    };
+};

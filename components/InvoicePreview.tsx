@@ -101,9 +101,17 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({ data }) => {
           <div className="flex-1">
             <h3 className="text-2xl font-black mb-2">{data.clientInfo.name || '---'}</h3>
             <p className={`${themeStyles.muted} text-[13px] leading-relaxed max-w-[380px] font-bold`}>{data.clientInfo.address || '---'}</p>
+            {(data.clientInfo.clientType || 'company') === 'company' && data.clientInfo.taxCode && (
+              <p className={`${themeStyles.muted} text-[12px] font-bold mt-1`}>MST: <span className={isDark ? 'text-white' : 'text-[#1A202C]'}>{data.clientInfo.taxCode}</span></p>
+            )}
           </div>
           <div className="text-right space-y-2">
-            <p className="text-[13px] font-black"><span className={`${themeStyles.muted} uppercase text-[10px] mr-2`}>Contact:</span> {data.clientInfo.contactPerson || '---'}</p>
+            <p className="text-[13px] font-black">
+              <span className={`${themeStyles.muted} uppercase text-[10px] mr-2`}>
+                {(data.clientInfo.clientType || 'company') === 'individual' ? 'Phone:' : 'Contact:'}
+              </span>
+              {data.clientInfo.contactPerson || '---'}
+            </p>
             <p className="text-[13px] font-black"><span className={`${themeStyles.muted} uppercase text-[10px] mr-2`}>Email:</span> {data.clientInfo.email || '---'}</p>
           </div>
         </div>

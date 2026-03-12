@@ -11,6 +11,7 @@ export const DEFAULT_INVOICE: InvoiceData = {
   discountValue: 0,
   theme: 'dark',
   status: 'pending',
+  payment_method: 'TM/CK',
   studioInfo: {
     name: 'TD CONSULTING COMPANY LIMITED',
     address: 'Xom Ngoai, Dong Anh Commune, Hanoi City, Vietnam',

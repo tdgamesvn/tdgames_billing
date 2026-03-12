@@ -17,33 +17,74 @@ async function callProxy(action: string, payload: Record<string, unknown> = {}) 
     });
 
     const data = await res.json();
-    if (!res.ok || data.error) {
-        throw new Error(data.error || data.message || `Proxy error (${res.status})`);
+    if (!res.ok) {
+        throw new Error(typeof data.error === 'string' ? data.error : (data.message || `Proxy error (${res.status})`));
+    }
+    // If data.error is a boolean true, it's a debug response from the proxy — don't throw here,
+    // let createDraftEInvoice handle it to extract the details
+    if (typeof data.error === 'string') {
+        throw new Error(data.error);
     }
     return data;
 }
 
+// ── Tax rate mapping ────────────────────────────────────────────
+// SePay API accepts: -2 (exempt), -1 (not declared), 0, 5, 8, 10
+function mapTaxRate(rate: number | undefined): number {
+    if (rate === undefined || rate === null) return -2; // default: exempt
+    // Direct match for valid SePay rates
+    if ([-2, -1, 0, 5, 8, 10].includes(rate)) return rate;
+    // Closest match for other values
+    if (rate <= 0) return 0;
+    if (rate <= 5) return 5;
+    if (rate <= 8) return 8;
+    return 10;
+}
+
 // ── Data mapping ────────────────────────────────────────────────
+// Maps our InvoiceData to SePay API payload format
+// Ref: POST v1/invoices/create
+// Edge Function proxy injects: provider_account_id, template_code, invoice_series, is_draft
 
 function mapInvoiceToSePay(invoice: InvoiceData) {
-    // Determine buyer type
-    const hasTaxCode = !!invoice.clientInfo.taxCode?.trim();
+    // Parse clientInfo/items if they come as JSON strings (e.g., from NocoDB history)
+    let client = invoice.clientInfo || { name: '', address: '', contactPerson: '', email: '' };
+    if (typeof client === 'string') {
+        try { client = JSON.parse(client); } catch { client = { name: '', address: '', contactPerson: '', email: '' }; }
+    }
+    
+    let items = invoice.items || [];
+    if (typeof items === 'string') {
+        try { items = JSON.parse(items); } catch { items = []; }
+    }
 
-    // Build invoice items
-    const sePayItems = invoice.items.map((item, idx) => ({
+    // Pre-flight validation
+    if (!client.name?.trim()) {
+        throw new Error('Client name is required. Please fill in Client Details before creating an eInvoice.');
+    }
+    if (!items.length) {
+        throw new Error('At least one invoice item is required. Please add items before creating an eInvoice.');
+    }
+
+    // Determine buyer type
+    const hasTaxCode = !!(client.taxCode?.trim());
+    const isIndividual = client.clientType === 'individual';
+
+    // Build invoice items per SePay API spec
+    const sePayItems = items.map((item, idx) => ({
         line_number: idx + 1,
-        line_type: 1, // normal product/service line
+        line_type: 1, // 1=normal product/service
+        item_code: `SV${String(idx + 1).padStart(3, '0')}`, // Required for line_type 1|2
         item_name: item.description,
-        unit_name: 'Dịch vụ',
+        unit: 'Service',
         quantity: item.quantity,
         unit_price: item.unitPrice,
-        item_total_amount_without_tax: item.quantity * item.unitPrice,
-        tax_rate: invoice.taxRate,
+        tax_rate: mapTaxRate(invoice.taxRate),
     }));
 
     // Handle discount (total level → add line_type: 3)
     if (invoice.discountValue > 0) {
-        const subtotal = invoice.items.reduce(
+        const subtotal = items.reduce(
             (sum, i) => sum + i.quantity * i.unitPrice,
             0
         );
@@ -54,35 +95,35 @@ function mapInvoiceToSePay(invoice: InvoiceData) {
             discountAmount = invoice.discountValue;
         }
 
+        // Per SePay demo: discount line only needs item_name, tax_rate, before_discount_and_tax_amount
         sePayItems.push({
             line_number: sePayItems.length + 1,
-            line_type: 3, // commercial discount line
-            item_name: `Chiết khấu ${invoice.discountType === 'percentage' ? invoice.discountValue + '%' : ''}`,
-            unit_name: '',
-            quantity: 1,
-            unit_price: discountAmount,
-            item_total_amount_without_tax: discountAmount,
-            tax_rate: invoice.taxRate,
-        });
+            line_type: 3, // 3=commercial discount line
+            item_name: `Discount ${invoice.discountType === 'percentage' ? invoice.discountValue + '%' : ''}`.trim(),
+            tax_rate: mapTaxRate(invoice.taxRate),
+            before_discount_and_tax_amount: discountAmount,
+        } as any);
     }
 
-    // Format date
+    // Format date: YYYY-MM-DD HH:mm:ss
     const issuedDate = invoice.issueDate
         ? `${invoice.issueDate} 00:00:00`
         : new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     return {
         buyer: {
-            type: hasTaxCode ? 'company' : 'personal',
-            name: invoice.clientInfo.name,
-            tax_code: invoice.clientInfo.taxCode || '',
-            address: invoice.clientInfo.address,
-            email: invoice.clientInfo.email || '',
+            type: isIndividual ? 'personal' : (hasTaxCode ? 'company' : 'personal'),
+            name: client.name,
+            tax_code: client.taxCode || '',
+            address: client.address || '',
+            email: client.email || '',
+            phone: isIndividual ? (client.contactPerson || '') : '',
         },
         items: sePayItems,
-        currency: invoice.currency,
+        currency: invoice.currency || 'USD',
         issued_date: issuedDate,
         payment_method: invoice.payment_method || 'CK',
+        notes: (invoice as any).notes || '',
     };
 }
 
@@ -93,13 +134,16 @@ export interface CreateDraftResult {
 }
 
 export interface CheckStatusResult {
-    status: string;
-    message?: string;
+    success: boolean;
     data?: {
+        reference_code?: string;
+        status?: string;
+        message?: string;
         invoice?: {
             reference_code?: string;
             pdf_url?: string;
             invoice_number?: string;
+            status?: string;
         };
     };
 }
@@ -111,11 +155,21 @@ export interface CheckStatusResult {
 export async function createDraftEInvoice(invoice: InvoiceData): Promise<CreateDraftResult> {
     const sePayPayload = mapInvoiceToSePay(invoice);
     const result = await callProxy('create-draft', sePayPayload);
-    // SePay returns tracking_code in data
+    
+    // Check if proxy returned a debug error object (SePay returned 400)
+    if (result?.error === true && result?.sepay_response) {
+        console.error('[eInvoice Debug]', JSON.stringify(result, null, 2));
+        const sePayError = result.sepay_response?.error || {};
+        const sePayMsg = sePayError.message || result.sepay_response?.message || 'Unknown error';
+        const details = sePayError.details ? '\n\nValidation errors:\n' + JSON.stringify(sePayError.details, null, 2) : '';
+        throw new Error(`SePay: ${sePayMsg}${details}\n\nConfig: ${JSON.stringify(result.config)}\n\nPayload sent: ${JSON.stringify(result.sent_payload, null, 2)}`);
+    }
+    
+    // SePay returns { success: true, data: { tracking_code, tracking_url, message } }
     const trackingCode =
-        result?.data?.tracking_code || result?.tracking_code || result?.data?.code;
+        result?.data?.tracking_code || result?.tracking_code;
     if (!trackingCode) {
-        throw new Error('Không nhận được tracking_code từ SePay');
+        throw new Error('No tracking_code received from SePay');
     }
     return { tracking_code: trackingCode };
 }
@@ -138,12 +192,13 @@ export async function createAndPollDraft(
     onProgress?: (msg: string) => void
 ): Promise<{
     reference_code: string;
+    tracking_code: string;
     pdf_url: string;
     invoice_number?: string;
 }> {
-    onProgress?.('Đang gửi hóa đơn lên SePay...');
+    onProgress?.('Sending invoice to SePay...');
     const { tracking_code } = await createDraftEInvoice(invoice);
-    onProgress?.(`Đã gửi. Tracking: ${tracking_code}`);
+    onProgress?.(`Sent. Tracking: ${tracking_code}`);
 
     // Poll max 30 times, 2s interval
     const MAX_POLLS = 30;
@@ -151,25 +206,27 @@ export async function createAndPollDraft(
 
     for (let i = 0; i < MAX_POLLS; i++) {
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
-        onProgress?.(`Đang kiểm tra kết quả... (${i + 1}/${MAX_POLLS})`);
+        onProgress?.(`Checking result... (${i + 1}/${MAX_POLLS})`);
 
         const result = await checkEInvoiceStatus(tracking_code);
-        const status = (result?.status || result?.data?.invoice?.reference_code ? 'Success' : '').toLowerCase();
+        const status = (result?.data?.status || '').toLowerCase();
 
-        if (status === 'success' || result?.data?.invoice?.reference_code) {
+        if (status === 'success') {
+            console.log('[eInvoice] Poll success result:', JSON.stringify(result, null, 2));
             const inv = result.data?.invoice;
             return {
-                reference_code: inv?.reference_code || '',
+                reference_code: inv?.reference_code || result.data?.reference_code || '',
+                tracking_code,
                 pdf_url: inv?.pdf_url || '',
                 invoice_number: inv?.invoice_number,
             };
         }
 
         // Check for failure
-        if (status === 'failed' || status === 'error') {
-            throw new Error(result.message || 'SePay trả về lỗi khi tạo hóa đơn');
+        if (status === 'failed') {
+            throw new Error(result.data?.message || 'SePay returned an error creating the invoice');
         }
     }
 
-    throw new Error('Timeout: SePay không phản hồi sau 60 giây. Vui lòng thử lại.');
+    throw new Error('Timeout: SePay did not respond within 60 seconds. Please try again.');
 }
