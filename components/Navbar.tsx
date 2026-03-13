@@ -60,7 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({ theme, currentUser, activeTab, a
             onClick={() => onTabChange(tab)}
             className={`px-4 md:px-6 py-2 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-primary text-black shadow-btn-glow' : theme === 'dark' ? 'text-neutral-medium hover:text-white' : 'text-gray-500 hover:text-black'}`}
           >
-             {tab === 'dashboard' ? '📊 ' : tab === 'activity' ? '📋 ' : tab === 'recurring' ? '🔄 ' : ''}{tab}
+             {tab}
           </button>
         ))}
       </div>

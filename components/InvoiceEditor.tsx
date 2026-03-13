@@ -79,7 +79,7 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
         <h2 className="text-xl font-black uppercase tracking-tighter text-primary mb-6">Actions</h2>
         <div className="space-y-4">
           <Button onClick={() => onExport('pdf')} disabled={isExporting !== null} variant="primary" className="w-full text-sm py-4 shadow-btn-glow">
-            {isExporting === 'pdf' ? 'Đang chuẩn bị...' : 'EXPORT PDF'}
+            {isExporting === 'pdf' ? 'Preparing...' : 'EXPORT PDF'}
           </Button>
           <Button onClick={onSaveToCloud} disabled={isLoading} variant="ghost" className="w-full !py-4 border border-primary/20 hover:bg-primary/5">
             {isLoading ? 'Syncing...' : 'Save Invoice'}
@@ -89,12 +89,12 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
             disabled={!!eInvoiceProgress}
             className="w-full py-4 rounded-2xl text-sm font-black uppercase tracking-widest border-2 border-dashed border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/60 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            📄 {eInvoiceProgress ? 'Processing...' : 'Create eInvoice'}
+            {eInvoiceProgress ? 'Processing...' : 'Create eInvoice'}
           </button>
           {invoice.einvoice_status === 'draft' && invoice.einvoice_pdf_url && (
             <a href={invoice.einvoice_pdf_url} target="_blank" rel="noopener noreferrer"
               className="w-full py-3 rounded-2xl text-xs font-black uppercase tracking-widest bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-all flex items-center justify-center gap-2">
-              ✅ View Draft PDF
+              View Draft PDF
             </a>
           )}
         </div>
@@ -146,7 +146,7 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
         <section className={`p-8 rounded-[24px] border animate-fadeInUp ${invoice.theme === 'dark' ? 'bg-surface border-primary/20' : 'bg-white border-gray-100 shadow-lg'}`}>
           <h2 className="text-xl font-black uppercase tracking-tighter text-primary mb-6">Manage Banks</h2>
           <div className="space-y-4 mb-8 bg-black/40 p-5 rounded-[20px] border border-white/5">
-            <Input label="Tên nhận biết (Ví dụ: MB Cá Nhân)" value={newBank.alias} onChange={(e) => setNewBank({ ...newBank, alias: e.target.value })} placeholder="Gợi nhớ..." />
+            <Input label="Alias (e.g. MB Personal)" value={newBank.alias} onChange={(e) => setNewBank({ ...newBank, alias: e.target.value })} placeholder="Alias..." />
             <Input label="Beneficiary Name" value={newBank.accountName} onChange={(e) => setNewBank({ ...newBank, accountName: e.target.value })} />
             <Input label="Account Number" value={newBank.accountNumber} onChange={(e) => setNewBank({ ...newBank, accountNumber: e.target.value })} />
             <Input label="Bank Name" value={newBank.bankName} onChange={(e) => setNewBank({ ...newBank, bankName: e.target.value })} />
@@ -165,8 +165,8 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
               <div key={b.id} className={`rounded-xl border transition-all relative overflow-hidden ${editingBankId === b.id ? (invoice.theme === 'dark' ? 'bg-primary/5 border-primary/50' : 'bg-orange-50 border-primary/40') : invoice.theme === 'dark' ? 'bg-black/20 border-white/5 hover:border-primary/30' : 'bg-gray-50 border-gray-200 hover:border-primary/40'}`}>
                 {editingBankId === b.id && editingBankData ? (
                   <div className="p-4 space-y-3">
-                    <p className="text-[9px] font-black uppercase text-primary/60 mb-2 tracking-widest">✏️ Đang chỉnh sửa</p>
-                    <input placeholder="Tên nhận biết" value={editingBankData.alias || ''} onChange={e => setEditingBankData({ ...editingBankData, alias: e.target.value })}
+                    <p className="text-[9px] font-black uppercase text-primary/60 mb-2 tracking-widest">Editing</p>
+                    <input placeholder="Alias" value={editingBankData.alias || ''} onChange={e => setEditingBankData({ ...editingBankData, alias: e.target.value })}
                       className={`w-full text-xs font-bold px-3 py-2 rounded-lg border outline-none bg-transparent focus:border-primary transition-colors ${invoice.theme === 'dark' ? 'border-white/10 text-white' : 'border-gray-300 text-black'}`} />
                     <input placeholder="Beneficiary Name" value={editingBankData.accountName} onChange={e => setEditingBankData({ ...editingBankData, accountName: e.target.value })}
                       className={`w-full text-xs font-bold px-3 py-2 rounded-lg border outline-none bg-transparent focus:border-primary transition-colors ${invoice.theme === 'dark' ? 'border-white/10 text-white' : 'border-gray-300 text-black'}`} />
@@ -185,11 +185,11 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
                     <div className="flex gap-2 pt-1">
                       <button onClick={onUpdateBank} disabled={isLoading}
                         className="flex-1 py-2 rounded-lg bg-primary text-black text-[10px] font-black uppercase tracking-widest hover:bg-primary/80 transition-colors">
-                        {isLoading ? '...' : 'Lưu'}
+                        {isLoading ? '...' : 'Save'}
                       </button>
                       <button onClick={onCancelEditBank}
                         className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-colors ${invoice.theme === 'dark' ? 'border-white/10 text-white/60 hover:text-white' : 'border-gray-300 text-gray-500 hover:text-black'}`}>
-                        Hủy
+                        Cancel
                       </button>
                     </div>
                   </div>
@@ -197,7 +197,7 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
                   <div className="flex items-center p-4 gap-3">
                     <div className="overflow-hidden flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="text-[7px] font-black uppercase text-primary/60">☁️ CLOUD • NocoDB</p>
+                        <p className="text-[7px] font-black uppercase text-primary/60">CLOUD</p>
                         {b.isDefault && (<span className="text-[7px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-primary text-black leading-none">DEFAULT</span>)}
                       </div>
                       <p className="text-xs font-black text-primary truncate uppercase">{b.alias || b.accountName}</p>
@@ -205,17 +205,17 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
                       <p className="text-[10px] opacity-40 tabular-nums">{b.accountNumber} • {b.bankName}</p>
                     </div>
                     <div className="flex gap-1 shrink-0">
-                      <button onClick={() => onSetDefaultBank(b.id)} title={b.isDefault ? 'Đang là mặc định' : 'Đặt làm mặc định'}
+                      <button onClick={() => onSetDefaultBank(b.id)} title={b.isDefault ? 'Default' : 'Set as default'}
                         className={`p-2 rounded-lg transition-all ${b.isDefault ? 'text-primary bg-primary/10' : invoice.theme === 'dark' ? 'text-white/30 hover:text-primary hover:bg-primary/10' : 'text-gray-300 hover:text-primary hover:bg-primary/10'}`}>
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill={b.isDefault ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                         </svg>
                       </button>
-                      <button onClick={() => onEditBank(b)} title="Chỉnh sửa"
+                      <button onClick={() => onEditBank(b)} title="Edit"
                         className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                       </button>
-                      <button onClick={() => onDeleteBank(b.id)} title="Xóa"
+                      <button onClick={() => onDeleteBank(b.id)} title="Delete"
                         className="p-2 text-status-error hover:bg-status-error/10 rounded-lg transition-colors">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                       </button>
@@ -231,7 +231,7 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
       {/* Studio Manager Panel */}
       <section className={`p-8 rounded-[24px] border ${invoice.theme === 'dark' ? 'bg-surface border-primary/20' : 'bg-white border-gray-100'}`}>
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-black uppercase tracking-tighter text-primary">🏢 Studios</h2>
+          <h2 className="text-xl font-black uppercase tracking-tighter text-primary">Studios</h2>
           <button onClick={() => setShowStudioManager(!showStudioManager)}
             className={`p-2 rounded-lg transition-all ${showStudioManager ? 'bg-primary text-black' : 'text-primary hover:bg-primary/10'}`}>
             <svg className={`w-5 h-5 transform transition-transform ${showStudioManager ? 'rotate-45' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
@@ -240,37 +240,37 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
         {showStudioManager && (
           <div>
             <div className="space-y-3 mb-6 bg-black/30 p-4 rounded-[16px] border border-white/5">
-              <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>➕ Thêm công ty mới</p>
-              <input placeholder="Tên công ty *" value={newStudio.name} onChange={e => setNewStudio({ ...newStudio, name: e.target.value })}
+              <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Add New Studio</p>
+              <input placeholder="Company Name *" value={newStudio.name} onChange={e => setNewStudio({ ...newStudio, name: e.target.value })}
                 className={`w-full text-xs font-bold px-3 py-2 rounded-lg border outline-none bg-transparent focus:border-primary transition-colors ${invoice.theme === 'dark' ? 'border-white/10 text-white' : 'border-gray-300 text-black'}`} />
               <input placeholder="Email" value={newStudio.email} onChange={e => setNewStudio({ ...newStudio, email: e.target.value })}
                 className={`w-full text-xs font-bold px-3 py-2 rounded-lg border outline-none bg-transparent focus:border-primary transition-colors ${invoice.theme === 'dark' ? 'border-white/10 text-white' : 'border-gray-300 text-black'}`} />
-              <input placeholder="Mã số thuế" value={newStudio.taxCode} onChange={e => setNewStudio({ ...newStudio, taxCode: e.target.value })}
+              <input placeholder="Tax Code" value={newStudio.taxCode} onChange={e => setNewStudio({ ...newStudio, taxCode: e.target.value })}
                 className={`w-full text-xs font-bold px-3 py-2 rounded-lg border outline-none bg-transparent focus:border-primary transition-colors ${invoice.theme === 'dark' ? 'border-white/10 text-white' : 'border-gray-300 text-black'}`} />
-              <textarea placeholder="Địa chỉ" value={newStudio.address} onChange={e => setNewStudio({ ...newStudio, address: e.target.value })} rows={2}
+              <textarea placeholder="Address" value={newStudio.address} onChange={e => setNewStudio({ ...newStudio, address: e.target.value })} rows={2}
                 className={`w-full text-xs font-bold px-3 py-2 rounded-lg border outline-none bg-transparent focus:border-primary transition-colors resize-none ${invoice.theme === 'dark' ? 'border-white/10 text-white' : 'border-gray-300 text-black'}`} />
               <Button onClick={onAddStudio} variant="primary" size="sm" className="w-full" disabled={isLoading}>
-                {isLoading ? 'Đang lưu...' : 'Lưu Studio'}
+                {isLoading ? 'Saving...' : 'Save Studio'}
               </Button>
             </div>
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-              {studios.length === 0 && <p className="text-center py-6 opacity-30 text-[10px] font-black uppercase tracking-widest">Chưa có studio nào</p>}
+              {studios.length === 0 && <p className="text-center py-6 opacity-30 text-[10px] font-black uppercase tracking-widest">No studios yet</p>}
               {studios.map(s => (
                 <div key={s.id} className={`rounded-xl border transition-all relative overflow-hidden ${editingStudioId === s.id ? (invoice.theme === 'dark' ? 'bg-primary/5 border-primary/50' : 'bg-orange-50 border-primary/40') : invoice.theme === 'dark' ? 'bg-black/20 border-white/5 hover:border-primary/30' : 'bg-gray-50 border-gray-200 hover:border-primary/40'}`}>
                   {editingStudioId === s.id && editingStudioData ? (
                     <div className="p-4 space-y-2">
-                      <p className="text-[9px] font-black uppercase text-primary/60 mb-2 tracking-widest">✏️ Đang chỉnh sửa</p>
-                      <input placeholder="Tên công ty" value={editingStudioData.name} onChange={e => setEditingStudioData({ ...editingStudioData, name: e.target.value })}
+                      <p className="text-[9px] font-black uppercase text-primary/60 mb-2 tracking-widest">Editing</p>
+                      <input placeholder="Company Name" value={editingStudioData.name} onChange={e => setEditingStudioData({ ...editingStudioData, name: e.target.value })}
                         className={`w-full text-xs font-bold px-3 py-2 rounded-lg border outline-none bg-transparent focus:border-primary transition-colors ${invoice.theme === 'dark' ? 'border-white/10 text-white' : 'border-gray-300 text-black'}`} />
                       <input placeholder="Email" value={editingStudioData.email} onChange={e => setEditingStudioData({ ...editingStudioData, email: e.target.value })}
                         className={`w-full text-xs font-bold px-3 py-2 rounded-lg border outline-none bg-transparent focus:border-primary transition-colors ${invoice.theme === 'dark' ? 'border-white/10 text-white' : 'border-gray-300 text-black'}`} />
-                      <input placeholder="Mã số thuế" value={editingStudioData.taxCode} onChange={e => setEditingStudioData({ ...editingStudioData, taxCode: e.target.value })}
+                      <input placeholder="Tax Code" value={editingStudioData.taxCode} onChange={e => setEditingStudioData({ ...editingStudioData, taxCode: e.target.value })}
                         className={`w-full text-xs font-bold px-3 py-2 rounded-lg border outline-none bg-transparent focus:border-primary transition-colors ${invoice.theme === 'dark' ? 'border-white/10 text-white' : 'border-gray-300 text-black'}`} />
-                      <textarea placeholder="Địa chỉ" value={editingStudioData.address} onChange={e => setEditingStudioData({ ...editingStudioData, address: e.target.value })} rows={2}
+                      <textarea placeholder="Address" value={editingStudioData.address} onChange={e => setEditingStudioData({ ...editingStudioData, address: e.target.value })} rows={2}
                         className={`w-full text-xs font-bold px-3 py-2 rounded-lg border outline-none bg-transparent focus:border-primary transition-colors resize-none ${invoice.theme === 'dark' ? 'border-white/10 text-white' : 'border-gray-300 text-black'}`} />
                       <div className="flex gap-2">
-                        <button onClick={onUpdateStudio} disabled={isLoading} className="flex-1 py-2 rounded-lg bg-primary text-black text-[10px] font-black uppercase">{isLoading ? '...' : 'Lưu'}</button>
-                        <button onClick={() => { setEditingStudioId(null); setEditingStudioData(null); }} className="flex-1 py-2 rounded-lg border border-white/10 text-[10px] font-black uppercase opacity-60 hover:opacity-100">Huỷ</button>
+                        <button onClick={onUpdateStudio} disabled={isLoading} className="flex-1 py-2 rounded-lg bg-primary text-black text-[10px] font-black uppercase">{isLoading ? '...' : 'Save'}</button>
+                        <button onClick={() => { setEditingStudioId(null); setEditingStudioData(null); }} className="flex-1 py-2 rounded-lg border border-white/10 text-[10px] font-black uppercase opacity-60 hover:opacity-100">Cancel</button>
                       </div>
                     </div>
                   ) : (
@@ -280,10 +280,10 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
                           <p className="text-sm font-black truncate">{s.name}</p>
                           {s.isDefault && <span className="text-[9px] font-black bg-primary/20 text-primary px-2 py-0.5 rounded uppercase tracking-widest">Default</span>}
                         </div>
-                        <p className={`text-[11px] truncate ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>{s.email} {s.taxCode ? `· MST: ${s.taxCode}` : ''}</p>
+                        <p className={`text-[11px] truncate ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>{s.email} {s.taxCode ? `· Tax: ${s.taxCode}` : ''}</p>
                       </div>
                       <div className="flex items-center gap-1 ml-2">
-                        <button onClick={() => onSetDefaultStudio(s.id)} title="Đặt mặc định" className={`p-1.5 rounded-lg transition-colors ${s.isDefault ? 'text-yellow-400' : 'text-neutral-medium hover:text-yellow-400'}`}>
+                        <button onClick={() => onSetDefaultStudio(s.id)} title="Set default" className={`p-1.5 rounded-lg transition-colors ${s.isDefault ? 'text-yellow-400' : 'text-neutral-medium hover:text-yellow-400'}`}>
                           {s.isDefault ? '⭐' : '☆'}
                         </button>
                         <button onClick={() => onEditStudio(s)} className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors">
@@ -316,7 +316,7 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
               </h2>
               <button onClick={onSaveClient}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase text-primary border border-primary/30 hover:bg-primary/10 transition-all">
-                💾 Save Client
+                Save Client
               </button>
             </div>
 
@@ -325,11 +325,11 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
               <div className={`inline-flex p-1 rounded-xl border ${invoice.theme === 'dark' ? 'bg-black/40 border-white/10' : 'bg-gray-100 border-gray-200'}`}>
                 <button type="button" onClick={() => updateInvoice('clientInfo.clientType', 'individual')}
                   className={`px-5 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${(invoice.clientInfo.clientType || 'company') === 'individual' ? 'bg-primary text-black shadow-btn-glow' : invoice.theme === 'dark' ? 'text-neutral-medium hover:text-white' : 'text-gray-500 hover:text-black'}`}>
-                  👤 Individual
+                  Individual
                 </button>
                 <button type="button" onClick={() => updateInvoice('clientInfo.clientType', 'company')}
                   className={`px-5 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${(invoice.clientInfo.clientType || 'company') === 'company' ? 'bg-primary text-black shadow-btn-glow' : invoice.theme === 'dark' ? 'text-neutral-medium hover:text-white' : 'text-gray-500 hover:text-black'}`}>
-                  🏢 Company
+                  Company
                 </button>
               </div>
             </div>
@@ -381,7 +381,7 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
                           <p className="text-sm font-black">{c.name}</p>
                           {(c.email || c.taxCode) && (
                             <p className={`text-[11px] ${invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>
-                              {c.email}{c.taxCode ? ` · MST: ${c.taxCode}` : ''}
+                              {c.email}{c.taxCode ? ` · Tax: ${c.taxCode}` : ''}
                             </p>
                           )}
                         </div>
@@ -522,7 +522,7 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
                           ? 'bg-primary text-black shadow-btn-glow'
                           : invoice.theme === 'dark' ? 'border border-white/10 text-white/40 hover:text-white hover:border-white/30' : 'border border-gray-200 text-gray-400 hover:text-black hover:border-gray-400'
                           }`}>
-                        {method === 'CK' ? '💳 Bank Transfer' : method === 'TM' ? '💵 Cash' : method === 'TM/CK' ? '🔄 Cash/Bank' : '📋 Other'}
+                        {method === 'CK' ? 'Bank Transfer' : method === 'TM' ? 'Cash' : method === 'TM/CK' ? 'Cash/Bank' : 'Other'}
                       </button>
                     ))}
                   </div>
