@@ -150,11 +150,11 @@ export function useInvoiceState() {
 
           // Show toast based on event type
           const eventLabels: Record<string, string> = {
-            INSERT: '📥 Hoá đơn mới được tạo',
-            UPDATE: '✏️ Hoá đơn đã được cập nhật',
-            DELETE: '🗑️ Hoá đơn đã bị xoá',
+            INSERT: '📥 New invoice created',
+            UPDATE: '✏️ Invoice updated',
+            DELETE: '🗑️ Invoice deleted',
           };
-          const msg = eventLabels[payload.eventType] || 'Dữ liệu đã thay đổi';
+          const msg = eventLabels[payload.eventType] || 'Data changed';
           setLastMessage({ text: msg, type: 'success' });
         }
       )
@@ -254,13 +254,13 @@ export function useInvoiceState() {
   // ── Client Handlers ──
   const handleSaveClient = async () => {
     const ci = invoice.clientInfo;
-    if (!ci.name) return notify('Vui lòng nhập tên khách hàng trước.', 'error');
+    if (!ci.name) return notify('Please enter a client name.', 'error');
     try {
       const existing = clients.find(c => c.name.toLowerCase() === ci.name.toLowerCase());
-      if (existing) { await updateClientInCloud(existing.id, ci); notify('Đã cập nhật thông tin khách hàng!', 'success'); }
-      else { await saveClientToCloud(ci); notify('Đã lưu khách hàng mới!', 'success'); }
+      if (existing) { await updateClientInCloud(existing.id, ci); notify('Client info updated!', 'success'); }
+      else { await saveClientToCloud(ci); notify('New client saved!', 'success'); }
       await loadClients();
-    } catch (e: any) { notify('Lỗi lưu khách hàng: ' + e.message, 'error'); }
+    } catch (e: any) { notify('Error saving client: ' + e.message, 'error'); }
   };
 
   const handleSelectClient = (id: string) => {
@@ -272,10 +272,10 @@ export function useInvoiceState() {
 
   // ── Studio Handlers ──
   const handleAddStudio = async () => {
-    if (!newStudio.name) return notify('Vui lòng nhập tên công ty.', 'error');
+    if (!newStudio.name) return notify('Please enter a company name.', 'error');
     setIsLoading(true);
-    try { await saveStudioToCloud(newStudio); setNewStudio({ name: '', address: '', email: '', taxCode: '' }); await loadStudios(); notify('Đã lưu Studio!', 'success'); }
-    catch (e: any) { notify('Lỗi: ' + e.message, 'error'); }
+    try { await saveStudioToCloud(newStudio); setNewStudio({ name: '', address: '', email: '', taxCode: '' }); await loadStudios(); notify('Studio saved!', 'success'); }
+    catch (e: any) { notify('Error: ' + e.message, 'error'); }
     finally { setIsLoading(false); }
   };
 
@@ -285,15 +285,15 @@ export function useInvoiceState() {
       const updated = await loadStudios();
       const def = updated.find(s => s.id === id);
       if (def) { const { id: _id, isDefault: _d, ...info } = def; updateInvoice('studioInfo', info); }
-      notify('Đã đặt Studio mặc định!', 'success');
-    } catch (e: any) { notify('Lỗi: ' + e.message, 'error'); }
+      notify('Default studio set!', 'success');
+    } catch (e: any) { notify('Error: ' + e.message, 'error'); }
   };
 
   const handleDeleteStudio = async (id: string) => {
-    if (!confirm('Xoá Studio này?')) return;
+    if (!confirm('Delete this studio?')) return;
     setIsLoading(true);
-    try { await deleteStudioFromCloud(id); await loadStudios(); notify('Đã xoá Studio.', 'success'); }
-    catch (e: any) { notify('Lỗi: ' + e.message, 'error'); }
+    try { await deleteStudioFromCloud(id); await loadStudios(); notify('Studio deleted.', 'success'); }
+    catch (e: any) { notify('Error: ' + e.message, 'error'); }
     finally { setIsLoading(false); }
   };
 
@@ -306,27 +306,27 @@ export function useInvoiceState() {
   const handleUpdateStudio = async () => {
     if (!editingStudioId || !editingStudioData) return;
     setIsLoading(true);
-    try { await updateStudioInCloud(editingStudioId, editingStudioData); setEditingStudioId(null); setEditingStudioData(null); await loadStudios(); notify('Đã cập nhật Studio!', 'success'); }
-    catch (e: any) { notify('Lỗi: ' + e.message, 'error'); }
+    try { await updateStudioInCloud(editingStudioId, editingStudioData); setEditingStudioId(null); setEditingStudioData(null); await loadStudios(); notify('Studio updated!', 'success'); }
+    catch (e: any) { notify('Error: ' + e.message, 'error'); }
     finally { setIsLoading(false); }
   };
 
   // ── Bank Handlers ──
   const handleAddBank = async () => {
-    if (!newBank.accountName || !newBank.accountNumber || !newBank.alias) return alert("Vui lòng nhập Tên nhận biết, Tên người thụ hưởng và Số tài khoản.");
+    if (!newBank.accountName || !newBank.accountNumber || !newBank.alias) return alert("Please enter Alias, Account Name and Account Number.");
     setIsLoading(true);
     try {
-      await saveBankToCloud(newBank); notify("Đã lưu tài khoản!", "success");
+      await saveBankToCloud(newBank); notify("Account saved!", "success");
       setNewBank({ alias: '', accountName: '', accountNumber: '', bankName: '', branchName: '', bankAddress: '', citadCode: '', swiftCode: '' });
       await loadBanks();
-    } catch (error: any) { notify("Lỗi lưu tài khoản: " + error.message, "error"); }
+    } catch (error: any) { notify("Error saving account: " + error.message, "error"); }
     finally { setIsLoading(false); }
   };
 
   const handleDeleteBank = async (id: string) => {
-    if (!confirm("Xóa tài khoản ngân hàng này?")) return;
-    try { await deleteBankFromCloud(id); await loadBanks(); notify("Đã xóa tài khoản."); }
-    catch (error) { notify("Không thể xóa.", "error"); }
+    if (!confirm("Delete this bank account?")) return;
+    try { await deleteBankFromCloud(id); await loadBanks(); notify("Account deleted.", "success"); }
+    catch (error) { notify("Cannot delete.", "error"); }
   };
 
   const handleSetDefaultBank = async (id: string) => {
@@ -335,8 +335,8 @@ export function useInvoiceState() {
       const updated = await fetchBanksFromCloud(); setBanks(updated);
       const defaultBank = updated.find(b => b.id === id);
       if (defaultBank) { const { id: _id, isDefault: _def, ...bankInfo } = defaultBank; updateInvoice('bankingInfo', bankInfo); }
-      notify("Đã đặt tài khoản mặc định!", "success");
-    } catch (error: any) { notify("Lỗi đặt mặc định: " + error.message, "error"); }
+      notify("Default account set!", "success");
+    } catch (error: any) { notify("Error setting default: " + error.message, "error"); }
   };
 
   const handleEditBank = (bank: BankingInfo & { id: string; isDefault: boolean }) => {
@@ -350,8 +350,8 @@ export function useInvoiceState() {
   const handleUpdateBank = async () => {
     if (!editingBankId || !editingBankData) return;
     setIsLoading(true);
-    try { await updateBankInCloud(editingBankId, editingBankData); notify("Đã cập nhật tài khoản!", "success"); setEditingBankId(null); setEditingBankData(null); await loadBanks(); }
-    catch (error: any) { notify("Lỗi cập nhật: " + error.message, "error"); }
+    try { await updateBankInCloud(editingBankId, editingBankData); notify("Account updated!", "success"); setEditingBankId(null); setEditingBankData(null); await loadBanks(); }
+    catch (error: any) { notify("Update error: " + error.message, "error"); }
     finally { setIsLoading(false); }
   };
 
@@ -365,8 +365,8 @@ export function useInvoiceState() {
   // ── Invoice CRUD ──
   const handleSaveToCloud = async () => {
     setIsLoading(true);
-    try { await saveInvoiceToCloud(invoice); notify("Hóa đơn đã được đồng bộ lên Cloud!", "success"); if (activeTab === 'history') loadHistory(); }
-    catch (error: any) { notify("Lỗi lưu hóa đơn: " + error.message, "error"); }
+    try { await saveInvoiceToCloud(invoice); notify("Invoice synced to Cloud!", "success"); if (activeTab === 'history') loadHistory(); }
+    catch (error: any) { notify("Error saving invoice: " + error.message, "error"); }
     finally { setIsLoading(false); }
   };
 
@@ -395,8 +395,8 @@ export function useInvoiceState() {
       try {
         await updateInvoiceStatusInCloud(id, 'pending');
         setHistory(prev => prev.map(inv => inv.id === id ? { ...inv, status: 'pending', paidDate: undefined, amount_received: undefined, transfer_fee: undefined } : inv));
-        notify('Chuyển về Pending.', 'success');
-      } catch { notify('Lỗi cập nhật trạng thái.', 'error'); }
+        notify('Switched to Pending.', 'success');
+      } catch { notify('Error updating status.', 'error'); }
       return;
     }
     // Mark as paid — show payment modal
@@ -419,8 +419,8 @@ export function useInvoiceState() {
     try {
       await updateInvoiceStatusInCloud(id, 'paid', paidDate, amountReceived, transferFee);
       setHistory(prev => prev.map(inv => inv.id === id ? { ...inv, status: 'paid' as const, paidDate, amount_received: amountReceived, transfer_fee: transferFee } : inv));
-      notify('Đã xác nhận thanh toán!', 'success');
-    } catch { notify('Lỗi cập nhật trạng thái.', 'error'); }
+      notify('Payment confirmed!', 'success');
+    } catch { notify('Error updating status.', 'error'); }
     setPaymentModal(null);
   };
 
@@ -438,9 +438,9 @@ export function useInvoiceState() {
     try {
       await deleteInvoiceFromCloud(deleteConfirm.id);
       setHistory(prev => prev.filter(inv => inv.id !== deleteConfirm.id));
-      notify('Đã xoá hoá đơn.', 'success');
+      notify('Invoice deleted.', 'success');
     } catch (e: any) {
-      notify('Lỗi xoá hoá đơn: ' + e.message, 'error');
+      notify('Error deleting invoice: ' + e.message, 'error');
     } finally {
       setDeleteConfirm(null);
     }
@@ -473,7 +473,7 @@ export function useInvoiceState() {
     });
     setActiveTab('edit');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    notify('Đã clone invoice — chỉnh sửa rồi lưu nhé!', 'success');
+    notify('Invoice cloned — edit and save!', 'success');
   };
 
   const handleConfirmSave = async () => {
@@ -511,7 +511,7 @@ export function useInvoiceState() {
         case 'word': exportToWord('invoice-capture', fileName); break;
       }
       if (format === 'pdf') { setPendingInvoiceToSave(invoice); setShowSaveConfirm(true); }
-    } catch (error) { console.error("Export failed:", error); notify("Lỗi khi xuất file. Vui lòng thử lại.", "error"); }
+    } catch (error) { console.error("Export failed:", error); notify("Error exporting file. Please try again.", "error"); }
     finally { setIsExporting(null); }
   };
 
@@ -541,7 +541,7 @@ export function useInvoiceState() {
 
   const executeCreateEInvoice = async (inv: InvoiceData, rate?: number) => {
     setShowEInvoiceModal(true);
-    setEInvoiceProgress('Đang khởi tạo...');
+    setEInvoiceProgress('Initializing...');
     setEInvoiceResult(null);
     setEInvoiceError(null);
     try {
@@ -552,9 +552,9 @@ export function useInvoiceState() {
       if (inv.id) {
         try { await updateEInvoiceInCloud(inv.id, { einvoice_status: 'draft', einvoice_reference_code: result.reference_code, einvoice_tracking_code: result.tracking_code, einvoice_pdf_url: result.pdf_url }); loadHistory(); } catch { }
       }
-      notify('Đã tạo hóa đơn điện tử nháp thành công!', 'success');
+      notify('eInvoice draft created successfully!', 'success');
     } catch (err: any) {
-      setEInvoiceError(err.message || 'Lỗi không xác định');
+      setEInvoiceError(err.message || 'Unknown error');
       setEInvoiceProgress(null);
       setInvoice(prev => ({ ...prev, einvoice_status: 'failed' }));
       if (inv.id) { try { await updateEInvoiceInCloud(inv.id, { einvoice_status: 'failed' }); } catch { } }
@@ -570,8 +570,8 @@ export function useInvoiceState() {
     try {
       await updateEInvoiceInCloud(invId, { einvoice_status: '', einvoice_reference_code: '', einvoice_tracking_code: '', einvoice_pdf_url: '' });
       loadHistory();
-      notify('Đã reset trạng thái eInvoice', 'success');
-    } catch (err) { console.error('[Reset] FAILED:', err); notify('Lỗi khi reset eInvoice', 'error'); }
+      notify('eInvoice status reset', 'success');
+    } catch (err) { console.error('[Reset] FAILED:', err); notify('Error resetting eInvoice', 'error'); }
   };
 
   const handleDownloadEInvoice = (inv: InvoiceData) => {
@@ -601,7 +601,7 @@ export function useInvoiceState() {
       const drafts = history.filter(inv => inv.einvoice_status === 'draft' && inv.einvoice_reference_code);
       if (drafts.length === 0) {
         setIsSyncingEInvoices(false);
-        notify('Không có hoá đơn nháp cần sync', 'warning');
+        notify('No draft invoices to sync', 'warning');
         return;
       }
 
@@ -637,10 +637,10 @@ export function useInvoiceState() {
       setIsSyncingEInvoices(false);
       loadHistory();
       const parts = [];
-      if (updated > 0) parts.push(`${updated} đã ký`);
-      if (deleted > 0) parts.push(`${deleted} đã xoá`);
-      if (errors > 0) parts.push(`${errors} lỗi`);
-      notify(parts.length > 0 ? `Sync: ${parts.join(', ')}` : `${drafts.length} hoá đơn nháp — chưa có thay đổi`, parts.length > 0 ? 'success' : 'warning');
+      if (updated > 0) parts.push(`${updated} signed`);
+      if (deleted > 0) parts.push(`${deleted} removed`);
+      if (errors > 0) parts.push(`${errors} errors`);
+      notify(parts.length > 0 ? `Sync: ${parts.join(', ')}` : `${drafts.length} draft invoices — no changes`, parts.length > 0 ? 'success' : 'warning');
     };
     doSync();
   // eslint-disable-next-line react-hooks/exhaustive-deps

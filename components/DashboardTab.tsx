@@ -74,7 +74,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-4xl font-black text-primary uppercase tracking-tighter">📊 Dashboard</h2>
-          <p className={`text-sm mt-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>Tổng quan doanh thu & công nợ</p>
+          <p className={`text-sm mt-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>Revenue & receivables overview</p>
         </div>
         <Button onClick={onRefresh} variant="ghost" size="sm" disabled={isLoading}>{isLoading ? 'Loading...' : 'Refresh'}</Button>
       </div>
@@ -107,24 +107,24 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               </div>
               {/* Revenue */}
               <div className={`p-5 rounded-[20px] border ${theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'}`}>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Thực nhận</p>
+                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Net Received</p>
                 <p className="text-xl font-black text-status-success">{formatCurrencySimple(revTotal, curr)}</p>
               </div>
               {/* Transfer Fees */}
               <div className={`p-5 rounded-[20px] border ${theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'}`}>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Phí CK</p>
+                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Transfer Fees</p>
                 <p className={`text-xl font-black ${(transferFeesByCurrency[curr] || 0) > 0 ? 'text-amber-400' : 'text-neutral-medium/30'}`}>
                   {(transferFeesByCurrency[curr] || 0) > 0 ? `-${formatCurrencySimple(transferFeesByCurrency[curr], curr)}` : '—'}
                 </p>
               </div>
               {/* Pending */}
               <div className={`p-5 rounded-[20px] border ${theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'}`}>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Chưa thanh toán</p>
+                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Unpaid</p>
                 <p className="text-xl font-black text-status-warning">{pendingTotal > 0 ? formatCurrencySimple(pendingTotal, curr) : '—'}</p>
               </div>
               {/* Invoice count */}
               <div className={`p-5 rounded-[20px] border ${theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'}`}>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Số hoá đơn</p>
+                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Invoices</p>
                 <p className="text-xl font-black text-primary">{count}</p>
               </div>
             </div>
@@ -141,7 +141,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         return (
           <div key={curr} className={`p-8 rounded-[24px] border ${theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'}`}>
             <h3 className="text-xl font-black uppercase tracking-tighter text-primary mb-6">
-              Doanh thu theo khách hàng <span className="text-sm font-bold text-neutral-medium ml-2">({curr})</span>
+              Revenue by Client <span className="text-sm font-bold text-neutral-medium ml-2">({curr})</span>
             </h3>
             <div className="space-y-4">
               {clientList.map(([name, rev]) => (
@@ -162,8 +162,8 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
       {/* Pending invoices — with currency shown */}
       <div className={`p-8 rounded-[24px] border ${theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'}`}>
-        <h3 className="text-xl font-black uppercase tracking-tighter text-status-warning mb-6">⚠️ Chưa thanh toán ({pending.length})</h3>
-        {pending.length === 0 ? <p className="opacity-30 text-xs font-black uppercase">Tất cả đã thanh toán 🎉</p> : (
+        <h3 className="text-xl font-black uppercase tracking-tighter text-status-warning mb-6">⚠️ Unpaid ({pending.length})</h3>
+        {pending.length === 0 ? <p className="opacity-30 text-xs font-black uppercase">All invoices paid 🎉</p> : (
           <div className="space-y-3">
             {pending.map(inv => (
               <div key={inv.id} className={`flex items-center justify-between p-4 rounded-xl border ${theme === 'dark' ? 'border-white/5 bg-black/20' : 'border-gray-100 bg-gray-50'}`}>

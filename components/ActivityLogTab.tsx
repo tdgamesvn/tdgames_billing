@@ -7,13 +7,13 @@ interface ActivityLogTabProps {
 }
 
 const ACTION_CONFIG: Record<string, { icon: string; label: string; color: string }> = {
-  created: { icon: '📥', label: 'Tạo mới', color: 'text-status-success' },
-  updated: { icon: '✏️', label: 'Cập nhật', color: 'text-status-info' },
-  status_changed: { icon: '🔄', label: 'Đổi trạng thái', color: 'text-status-warning' },
-  deleted: { icon: '🗑️', label: 'Xoá', color: 'text-status-error' },
-  einvoice_draft: { icon: '📄', label: 'eInvoice tạo nháp', color: 'text-emerald-400' },
-  einvoice_failed: { icon: '❌', label: 'eInvoice thất bại', color: 'text-status-error' },
-  email_sent: { icon: '✉️', label: 'Gửi email', color: 'text-blue-400' },
+  created: { icon: '📥', label: 'Created', color: 'text-status-success' },
+  updated: { icon: '✏️', label: 'Updated', color: 'text-status-info' },
+  status_changed: { icon: '🔄', label: 'Status Changed', color: 'text-status-warning' },
+  deleted: { icon: '🗑️', label: 'Deleted', color: 'text-status-error' },
+  einvoice_draft: { icon: '📄', label: 'eInvoice Draft', color: 'text-emerald-400' },
+  einvoice_failed: { icon: '❌', label: 'eInvoice Failed', color: 'text-status-error' },
+  email_sent: { icon: '✉️', label: 'Email Sent', color: 'text-blue-400' },
 };
 
 const getActionConfig = (action: string) =>
@@ -24,13 +24,13 @@ const formatTime = (iso: string) => {
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return 'Vừa xong';
-  if (diffMins < 60) return `${diffMins} phút trước`;
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours} giờ trước`;
+  if (diffHours < 24) return `${diffHours}h ago`;
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays} ngày trước`;
-  return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return d.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
 export const ActivityLogTab: React.FC<ActivityLogTabProps> = ({ theme }) => {
@@ -60,7 +60,7 @@ export const ActivityLogTab: React.FC<ActivityLogTabProps> = ({ theme }) => {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-4xl font-black text-primary uppercase tracking-tighter">📋 Activity Log</h2>
-          <p className={`text-sm mt-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>Lịch sử thao tác hoá đơn</p>
+          <p className={`text-sm mt-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>Invoice operation history</p>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -68,7 +68,7 @@ export const ActivityLogTab: React.FC<ActivityLogTabProps> = ({ theme }) => {
             onChange={e => setFilterAction(e.target.value)}
             className={`px-3 py-2 rounded-xl text-xs font-bold border ${theme === 'dark' ? 'bg-surface border-white/10 text-white' : 'bg-white border-gray-200 text-black'}`}
           >
-            <option value="">Tất cả ({logs.length})</option>
+            <option value="">All ({logs.length})</option>
             {actionTypes.map(a => {
               const cfg = getActionConfig(a);
               return <option key={a} value={a}>{cfg.icon} {cfg.label}</option>;
@@ -85,7 +85,7 @@ export const ActivityLogTab: React.FC<ActivityLogTabProps> = ({ theme }) => {
             <div className="w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center mx-auto mb-4">
               <span className="text-2xl opacity-30">📋</span>
             </div>
-            <p className="opacity-30 font-black uppercase tracking-widest text-xs">Chưa có hoạt động nào</p>
+            <p className="opacity-30 font-black uppercase tracking-widest text-xs">No activity yet</p>
           </div>
         ) : (
           <div className="relative">

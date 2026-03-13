@@ -74,7 +74,7 @@ export const EmailModal: React.FC<EmailModalProps> = ({ theme, invoice, onClose,
   `;
 
   const handleSend = async () => {
-    if (!to) return setError('Vui lòng nhập email người nhận.');
+    if (!to) return setError('Please enter a recipient email.');
     setSending(true);
     setError(null);
     try {
@@ -90,7 +90,7 @@ export const EmailModal: React.FC<EmailModalProps> = ({ theme, invoice, onClose,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Email gửi thất bại');
+      if (!res.ok) throw new Error(data.error || 'Failed to send email');
       setSuccess(true);
       onSent(to);
     } catch (e: any) {
@@ -111,14 +111,14 @@ export const EmailModal: React.FC<EmailModalProps> = ({ theme, invoice, onClose,
             <div className="w-20 h-20 rounded-2xl bg-status-success/10 flex items-center justify-center mx-auto mb-6">
               <span className="text-4xl">✉️</span>
             </div>
-            <h3 className={`text-xl font-black uppercase tracking-tighter mb-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Email Đã Gửi!</h3>
-            <p className={`text-sm mb-6 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>Gửi đến {to} thành công</p>
-            <Button onClick={onClose} variant="primary" size="sm">Đóng</Button>
+            <h3 className={`text-xl font-black uppercase tracking-tighter mb-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Email Sent!</h3>
+            <p className={`text-sm mb-6 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>Sent to {to} successfully</p>
+            <Button onClick={onClose} variant="primary" size="sm">Close</Button>
           </div>
         ) : (
           <>
             <div className="flex items-center justify-between mb-6">
-              <h3 className={`text-xl font-black uppercase tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-black'}`}>✉️ Gửi Email Invoice</h3>
+              <h3 className={`text-xl font-black uppercase tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-black'}`}>✉️ Send Invoice Email</h3>
               <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/10 transition-colors text-neutral-medium hover:text-white">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
@@ -126,11 +126,11 @@ export const EmailModal: React.FC<EmailModalProps> = ({ theme, invoice, onClose,
 
             <div className="space-y-4 mb-6">
               <div>
-                <label className={labelCls}>Người nhận</label>
+                <label className={labelCls}>Recipient</label>
                 <input className={inputCls} type="email" value={to} onChange={e => setTo(e.target.value)} placeholder="email@example.com" />
               </div>
               <div>
-                <label className={labelCls}>Tiêu đề</label>
+                <label className={labelCls}>Subject</label>
                 <input className={inputCls} value={subject} onChange={e => setSubject(e.target.value)} />
               </div>
               {/* Preview card */}
@@ -153,13 +153,13 @@ export const EmailModal: React.FC<EmailModalProps> = ({ theme, invoice, onClose,
             )}
 
             <div className="grid grid-cols-2 gap-4">
-              <Button onClick={onClose} variant="ghost" size="sm">Huỷ</Button>
+              <Button onClick={onClose} variant="ghost" size="sm">Cancel</Button>
               <button
                 onClick={handleSend}
                 disabled={sending}
                 className="py-4 rounded-2xl text-sm font-black uppercase tracking-widest bg-gradient-primary text-black transition-all hover:scale-[1.02] shadow-btn-glow disabled:opacity-50"
               >
-                {sending ? '⏳ Đang gửi...' : '📤 Gửi Email'}
+                {sending ? '⏳ Sending...' : '📤 Send Email'}
               </button>
             </div>
           </>

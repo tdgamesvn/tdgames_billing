@@ -39,18 +39,18 @@ export const EInvoiceModals: React.FC<EInvoiceModalsProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
             </svg>
           </div>
-          <h3 className={`text-xl font-black uppercase tracking-tighter text-center mb-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Lưu hoá đơn?</h3>
+          <h3 className={`text-xl font-black uppercase tracking-tighter text-center mb-2 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>Save Invoice?</h3>
           <p className={`text-sm text-center mb-8 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>
-            Bạn có muốn lưu trữ hoá đơn <span className="font-black text-primary">{pendingInvoiceToSave?.invoiceNumber}</span> vào database không?
+            Do you want to save invoice <span className="font-black text-primary">{pendingInvoiceToSave?.invoiceNumber}</span> to database?
           </p>
           <div className="grid grid-cols-2 gap-4">
             <button onClick={onDismissSave}
               className={`py-4 rounded-2xl text-sm font-black uppercase tracking-widest border transition-all hover:scale-[1.02] ${theme === 'dark' ? 'border-white/10 text-white/60 hover:text-white hover:border-white/30' : 'border-gray-200 text-gray-500 hover:text-black hover:border-gray-400'}`}>
-              Không
+              No
             </button>
             <button onClick={onConfirmSave}
               className="py-4 rounded-2xl text-sm font-black uppercase tracking-widest bg-primary text-black transition-all hover:scale-[1.02] hover:bg-primary/90 shadow-btn-glow">
-              Có, lưu ngay!
+              Yes, Save Now!
             </button>
           </div>
         </div>

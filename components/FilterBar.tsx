@@ -38,31 +38,31 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           <label className={labelStyle}>Studio</label>
           <div className="relative">
             <select value={filterStudio} onChange={e => setFilterStudio(e.target.value)} className={selectStyle}>
-              <option value="">Tất cả Studio</option>
+              <option value="">All Studios</option>
               {studios.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             {chevron}
           </div>
         </div>
-        {/* Khách hàng */}
+        {/* Client */}
         <div className="flex flex-col flex-1 min-w-[180px]">
-          <label className={labelStyle}>Khách hàng</label>
+          <label className={labelStyle}>Client</label>
           <div className="relative">
             <select value={filterClient} onChange={e => setFilterClient(e.target.value)} className={selectStyle}>
-              <option value="">Tất cả khách hàng</option>
+              <option value="">All Clients</option>
               {clients.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             {chevron}
           </div>
         </div>
-        {/* Từ ngày */}
+        {/* From Date */}
         <div className="flex flex-col min-w-[160px]">
-          <label className={labelStyle}>Từ ngày</label>
+          <label className={labelStyle}>From</label>
           <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className={inputStyle} />
         </div>
-        {/* Đến ngày */}
+        {/* To Date */}
         <div className="flex flex-col min-w-[160px]">
-          <label className={labelStyle}>Đến ngày</label>
+          <label className={labelStyle}>To</label>
           <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className={inputStyle} />
         </div>
         {/* Actions */}
@@ -70,12 +70,12 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           {hasFilter && (
             <button onClick={clearAll}
               className="h-[52px] px-5 rounded-xl text-[11px] font-black uppercase tracking-widest text-status-error border border-status-error/30 hover:bg-status-error/10 transition-all">
-              ✕ Xoá filter
+              ✕ Clear Filter
             </button>
           )}
           <div className="h-[52px] px-5 rounded-xl border border-primary/10 bg-primary/5 flex flex-col items-center justify-center">
             <span className="text-[18px] font-black text-primary leading-none">{filteredCount}</span>
-            <span className="text-[9px] font-black uppercase tracking-widest text-neutral-medium leading-none">/ {totalCount} hoá đơn</span>
+            <span className="text-[9px] font-black uppercase tracking-widest text-neutral-medium leading-none">/ {totalCount} invoices</span>
           </div>
         </div>
       </div>
