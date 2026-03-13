@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFA500"/>
+      <stop offset="100%" stop-color="#FF6B00"/>
+    </linearGradient>
+  </defs>
+  <!-- TD Games cube logo - simplified for favicon -->
+  <g fill="url(#g)">
+    <!-- Top crown/arrow -->
+    <polygon points="256,40 296,120 256,95 216,120"/>
+    <!-- Left chevron -->
+    <polygon points="160,140 256,190 352,140 352,160 256,210 160,160"/>
+    <!-- Main cube body -->
+    <polygon points="130,200 256,270 256,470 130,400"/>
+    <polygon points="382,200 256,270 256,470 382,400"/>
+    <!-- Bottom face -->
+    <polygon points="130,200 256,270 382,200 256,130"/>
+  </g>
+</svg>
