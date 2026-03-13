@@ -45,12 +45,9 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
         <h2 className="text-4xl font-black text-primary uppercase tracking-tighter">Invoice History</h2>
         <p className={`${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'} text-sm mt-2`}>Synced from Supabase</p>
       </div>
-      <div className="flex gap-2">
-        <Button onClick={onSyncEInvoices} variant="ghost" size="sm" disabled={isSyncingEInvoices}>
-          {isSyncingEInvoices ? '⏳ Syncing...' : '🔄 Sync eInvoice'}
-        </Button>
-        <Button onClick={onRefresh} variant="ghost" size="sm" disabled={isLoading}>{isLoading ? 'Loading...' : 'Refresh'}</Button>
-      </div>
+      <Button onClick={onSyncEInvoices} variant="ghost" size="sm" disabled={isLoading || isSyncingEInvoices}>
+        {isSyncingEInvoices ? '⏳ Syncing...' : isLoading ? 'Loading...' : '🔄 Refresh'}
+      </Button>
     </div>
 
     <FilterBar
