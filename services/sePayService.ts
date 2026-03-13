@@ -260,7 +260,7 @@ export async function createAndPollDraft(
 /**
  * Get the current detail/status of an eInvoice from SePay.
  * Uses GET /v1/invoices/{reference_code}
- * Returns null if 404 (deleted on SePay).
+ * Returns null if deleted on SePay (404 or cancelled).
  */
 export async function getEInvoiceDetail(
     referenceCode: string
@@ -272,13 +272,24 @@ export async function getEInvoiceDetail(
     try {
         const result = await callProxy('get-invoice-detail', { reference_code: referenceCode });
         const inv = result?.data || result;
+
+        // Edge Function returns _deleted: true for 404
+        if (inv._deleted || inv.status === 'deleted') {
+            return null;
+        }
+
+        // document_type 3 = cancelled/deleted on SePay
+        if (inv.document_type === 3 || inv.status === 'cancelled') {
+            return null;
+        }
+
         return {
             status: inv.status || 'draft',
             invoice_number: inv.invoice_number,
             pdf_url: inv.pdf_url,
         };
     } catch (err: any) {
-        // 404 means deleted on SePay
+        // Fallback: 404 or not found in error message
         if (err?.message?.includes('404') || err?.message?.toLowerCase()?.includes('not found')) {
             return null;
         }
