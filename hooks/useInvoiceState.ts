@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DEFAULT_INVOICE } from '../constants';
 import { InvoiceData, ServiceItem, BankingInfo, ClientInfo, ClientRecord, StudioRecord, StudioInfo, AccountUser } from '../types';
+import { supabase } from '../services/supabaseClient';
 import { createAndPollDraft } from '../services/sePayService';
 import {
   saveInvoiceToCloud,
@@ -28,11 +29,11 @@ export function useInvoiceState() {
   // ── Core State ──
   const [currentUser, setCurrentUser] = useState<AccountUser | null>(null);
   const [invoice, setInvoice] = useState<InvoiceData>(DEFAULT_INVOICE);
-  const [activeTab, setActiveTab] = useState<'edit' | 'preview' | 'history' | 'dashboard'>('edit');
+  const [activeTab, setActiveTab] = useState<'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring'>('edit');
 
-  const accessibleTabs: Array<'edit' | 'preview' | 'history' | 'dashboard'> =
+  const accessibleTabs: Array<'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring'> =
     currentUser?.role === 'admin'
-      ? ['edit', 'preview', 'history', 'dashboard']
+      ? ['edit', 'preview', 'history', 'dashboard', 'activity', 'recurring']
       : ['edit', 'preview'];
 
   // ── Data State ──
@@ -70,6 +71,11 @@ export function useInvoiceState() {
   const [showEInvoicePrompt, setShowEInvoicePrompt] = useState(false);
   const [eInvoiceTargetInvoice, setEInvoiceTargetInvoice] = useState<InvoiceData | null>(null);
 
+  // ── Exchange Rate (USD→VND for eInvoice) ──
+  const [showExchangeRateModal, setShowExchangeRateModal] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<number>(25400);
+  const [exchangeRateTarget, setExchangeRateTarget] = useState<InvoiceData | null>(null);
+
   // ── Save-after-export ──
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [pendingInvoiceToSave, setPendingInvoiceToSave] = useState<InvoiceData | null>(null);
@@ -82,6 +88,9 @@ export function useInvoiceState() {
 
   // ── Reset confirm ──
   const [resetConfirmId, setResetConfirmId] = useState<string | null>(null);
+
+  // ── Email modal (P3-4) ──
+  const [emailInvoice, setEmailInvoice] = useState<InvoiceData | null>(null);
 
   // ── Effects ──
   useEffect(() => {
@@ -98,6 +107,49 @@ export function useInvoiceState() {
     });
     if (activeTab === 'history' || activeTab === 'dashboard') loadHistory();
   }, [activeTab]);
+
+  // ── Realtime Subscription (P3-1) ──
+  const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  useEffect(() => {
+    if (!currentUser) {
+      // Cleanup if user logged out
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
+      return;
+    }
+
+    // Subscribe to invoice_invoices changes
+    const channel = supabase
+      .channel('invoice-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'invoice_invoices' },
+        (payload) => {
+          // Auto-refresh history data
+          loadHistory();
+
+          // Show toast based on event type
+          const eventLabels: Record<string, string> = {
+            INSERT: '📥 Hoá đơn mới được tạo',
+            UPDATE: '✏️ Hoá đơn đã được cập nhật',
+            DELETE: '🗑️ Hoá đơn đã bị xoá',
+          };
+          const msg = eventLabels[payload.eventType] || 'Dữ liệu đã thay đổi';
+          setLastMessage({ text: msg, type: 'success' });
+        }
+      )
+      .subscribe();
+
+    realtimeChannelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      realtimeChannelRef.current = null;
+    };
+  }, [currentUser]);
 
   useEffect(() => {
     getNextInvoiceNumber().then(nextNum => {
@@ -301,20 +353,80 @@ export function useInvoiceState() {
     finally { setIsLoading(false); }
   };
 
-  const toggleStatus = async (id: string, currentStatus: InvoiceData['status']) => {
-    const nextStatus = currentStatus === 'paid' ? 'pending' : 'paid';
-    const paidDate = nextStatus === 'paid' ? new Date().toISOString().split('T')[0] : undefined;
-    try {
-      await updateInvoiceStatusInCloud(id, nextStatus, paidDate);
-      setHistory(prev => prev.map(inv => inv.id === id ? { ...inv, status: nextStatus, paidDate } : inv));
-      notify(nextStatus === 'paid' ? 'Đã xác nhận thanh toán!' : 'Chuyển về Pending.', 'success');
-    } catch (error) { notify("Lỗi cập nhật trạng thái.", "error"); }
+  // ── Payment Modal State ──
+  const [paymentModal, setPaymentModal] = useState<{
+    id: string;
+    invoiceTotal: number;
+    currency: string;
+    amountReceived: number;
+    transferFee: number;
+  } | null>(null);
+
+  /** Calculate invoice total from items, discount, tax */
+  const calcInvoiceTotal = (inv: InvoiceData): number => {
+    const items = typeof inv.items === 'string' ? JSON.parse(inv.items) : (inv.items || []);
+    const subtotal = items.reduce((a: number, i: any) => a + i.quantity * i.unitPrice, 0);
+    const disc = inv.discountType === 'percentage' ? subtotal * (inv.discountValue / 100) : inv.discountValue;
+    const afterDisc = Math.max(0, subtotal - disc);
+    const tax = afterDisc * (inv.taxRate / 100);
+    return afterDisc + tax;
   };
 
-  const handleDeleteInvoice = async (id: string) => {
-    if (!confirm('Bạn có chắc muốn xoá hoá đơn này không?')) return;
-    try { await deleteInvoiceFromCloud(id); setHistory(prev => prev.filter(inv => inv.id !== id)); notify('Đã xoá hoá đơn.', 'success'); }
-    catch (e: any) { notify('Lỗi xoá hoá đơn: ' + e.message, 'error'); }
+  const toggleStatus = async (id: string, currentStatus: InvoiceData['status']) => {
+    if (currentStatus === 'paid') {
+      // Revert to pending — no modal needed
+      try {
+        await updateInvoiceStatusInCloud(id, 'pending');
+        setHistory(prev => prev.map(inv => inv.id === id ? { ...inv, status: 'pending', paidDate: undefined, amount_received: undefined, transfer_fee: undefined } : inv));
+        notify('Chuyển về Pending.', 'success');
+      } catch { notify('Lỗi cập nhật trạng thái.', 'error'); }
+      return;
+    }
+    // Mark as paid — show payment modal
+    const inv = history.find(h => h.id === id);
+    if (!inv) return;
+    const total = calcInvoiceTotal(inv);
+    setPaymentModal({
+      id,
+      invoiceTotal: total,
+      currency: inv.currency || 'USD',
+      amountReceived: total, // default = full amount
+      transferFee: 0,
+    });
+  };
+
+  const confirmPayment = async () => {
+    if (!paymentModal) return;
+    const { id, amountReceived, transferFee } = paymentModal;
+    const paidDate = new Date().toISOString().split('T')[0];
+    try {
+      await updateInvoiceStatusInCloud(id, 'paid', paidDate, amountReceived, transferFee);
+      setHistory(prev => prev.map(inv => inv.id === id ? { ...inv, status: 'paid' as const, paidDate, amount_received: amountReceived, transfer_fee: transferFee } : inv));
+      notify('Đã xác nhận thanh toán!', 'success');
+    } catch { notify('Lỗi cập nhật trạng thái.', 'error'); }
+    setPaymentModal(null);
+  };
+
+  // ── Delete confirm (custom modal instead of native confirm) ──
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; hasDraft: boolean } | null>(null);
+
+  const handleDeleteInvoice = (id: string) => {
+    const inv = history.find(h => h.id === id);
+    const hasDraft = inv?.einvoice_status === 'draft';
+    setDeleteConfirm({ id, hasDraft });
+  };
+
+  const confirmDeleteInvoice = async () => {
+    if (!deleteConfirm) return;
+    try {
+      await deleteInvoiceFromCloud(deleteConfirm.id);
+      setHistory(prev => prev.filter(inv => inv.id !== deleteConfirm.id));
+      notify('Đã xoá hoá đơn.', 'success');
+    } catch (e: any) {
+      notify('Lỗi xoá hoá đơn: ' + e.message, 'error');
+    } finally {
+      setDeleteConfirm(null);
+    }
   };
 
   const loadFromHistory = (item: InvoiceData) => {
@@ -390,12 +502,33 @@ export function useInvoiceState() {
   const handleCreateEInvoice = async (targetInv?: InvoiceData) => {
     const inv = targetInv || invoice;
     setShowEInvoicePrompt(false);
+
+    // If invoice is in USD, show exchange rate modal first
+    if (inv.currency === 'USD') {
+      setExchangeRateTarget(inv);
+      setShowExchangeRateModal(true);
+      return;
+    }
+
+    // VND invoice — proceed directly
+    await executeCreateEInvoice(inv);
+  };
+
+  /** Called after exchange rate is confirmed for USD invoices, or directly for VND */
+  const confirmCreateEInvoiceWithRate = async () => {
+    if (!exchangeRateTarget) return;
+    setShowExchangeRateModal(false);
+    await executeCreateEInvoice(exchangeRateTarget, exchangeRate);
+    setExchangeRateTarget(null);
+  };
+
+  const executeCreateEInvoice = async (inv: InvoiceData, rate?: number) => {
     setShowEInvoiceModal(true);
     setEInvoiceProgress('Đang khởi tạo...');
     setEInvoiceResult(null);
     setEInvoiceError(null);
     try {
-      const result = await createAndPollDraft(inv, (msg) => setEInvoiceProgress(msg));
+      const result = await createAndPollDraft(inv, (msg) => setEInvoiceProgress(msg), rate);
       setEInvoiceResult(result);
       setEInvoiceProgress(null);
       setInvoice(prev => ({ ...prev, einvoice_status: 'draft', einvoice_reference_code: result.reference_code, einvoice_tracking_code: result.tracking_code, einvoice_pdf_url: result.pdf_url }));
@@ -425,16 +558,13 @@ export function useInvoiceState() {
   };
 
   const handleDownloadEInvoice = (inv: InvoiceData) => {
-    const edgeFnUrl = import.meta.env.VITE_SEPAY_EDGE_FUNCTION_URL;
     const params = new URLSearchParams({
-      key: import.meta.env.VITE_SEPAY_API_KEY || 'tdgames-sepay-2026',
-      action: 'download-pdf',
       reference_code: inv.einvoice_reference_code || '',
       tracking_code: inv.einvoice_tracking_code || '',
       pdf_url: inv.einvoice_pdf_url || '',
       filename: `eInvoice_${inv.einvoice_reference_code || inv.invoiceNumber}`,
     });
-    window.open(`${edgeFnUrl}?${params.toString()}`, '_blank');
+    window.open(`https://n8n.tdconsulting.vn/webhook/sepay-invoice-download?${params.toString()}`, '_blank');
   };
 
   const handleLogout = () => {
@@ -473,8 +603,15 @@ export function useInvoiceState() {
     handleAddStudio, handleSetDefaultStudio, handleDeleteStudio, handleEditStudio, handleUpdateStudio,
     handleAddBank, handleDeleteBank, handleSetDefaultBank, handleEditBank, handleCancelEdit, handleUpdateBank, handleBankSelect,
     handleSaveToCloud, toggleStatus, handleDeleteInvoice, loadFromHistory, handleDuplicateInvoice,
+    // Payment modal
+    paymentModal, setPaymentModal, confirmPayment,
+    deleteConfirm, setDeleteConfirm, confirmDeleteInvoice,
     handleConfirmSave, handleDismissSave,
     handleExport,
     handleCreateEInvoice, handleResetEInvoice, confirmResetEInvoice, handleDownloadEInvoice,
+    // Exchange rate (USD→VND)
+    showExchangeRateModal, setShowExchangeRateModal, exchangeRate, setExchangeRate, exchangeRateTarget, confirmCreateEInvoiceWithRate,
+    // Email (P3-4)
+    emailInvoice, setEmailInvoice,
   };
 }

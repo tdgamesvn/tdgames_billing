@@ -118,6 +118,8 @@ const parseInvoice = (row: any): InvoiceData => ({
     einvoice_reference_code: row.einvoice_reference_code || '',
     einvoice_tracking_code: row.einvoice_tracking_code || '',
     einvoice_pdf_url: row.einvoice_pdf_url || '',
+    amount_received: row.amount_received ?? undefined,
+    transfer_fee: row.transfer_fee ?? undefined,
     createdAt: row.created_at,
 });
 
@@ -164,11 +166,19 @@ export const getNextInvoiceNumber = async (): Promise<string> => {
 export const updateInvoiceStatusInCloud = async (
     id: string,
     status: InvoiceData['status'],
-    paidDate?: string
+    paidDate?: string,
+    amountReceived?: number,
+    transferFee?: number
 ) => {
     const payload: Record<string, unknown> = { status };
     if (status === 'paid' && paidDate) payload.paid_date = paidDate;
-    if (status === 'pending') payload.paid_date = null;
+    if (status === 'paid' && amountReceived !== undefined) payload.amount_received = amountReceived;
+    if (status === 'paid' && transferFee !== undefined) payload.transfer_fee = transferFee;
+    if (status === 'pending') {
+        payload.paid_date = null;
+        payload.amount_received = null;
+        payload.transfer_fee = null;
+    }
     const { error } = await supabase
         .from('invoice_invoices')
         .update(payload)
@@ -385,3 +395,101 @@ export const loginWithCredentials = async (username: string, password: string): 
         role: account.role === 'admin' ? 'admin' : 'member',
     };
 };
+
+// ────────────────────────────────────────────────────────────────
+// ACTIVITY LOG METHODS (P3-2)
+// ────────────────────────────────────────────────────────────────
+
+export interface ActivityLog {
+    id: string;
+    invoice_id: string | null;
+    action: string;
+    actor: string;
+    details: Record<string, any>;
+    created_at: string;
+}
+
+export const fetchActivityLogs = async (limit: number = 100): Promise<ActivityLog[]> => {
+    const { data, error } = await supabase
+        .from('invoice_activity_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+    if (error) throw new Error(`Fetch activity logs failed: ${error.message}`);
+    return data || [];
+};
+
+export const logManualActivity = async (invoiceId: string | null, action: string, actor: string, details: Record<string, any> = {}): Promise<void> => {
+    const { error } = await supabase
+        .from('invoice_activity_logs')
+        .insert({ invoice_id: invoiceId, action, actor, details });
+    if (error) console.error('Log activity failed:', error.message);
+};
+
+// ────────────────────────────────────────────────────────────────
+// RECURRING INVOICE METHODS (P3-3)
+// ────────────────────────────────────────────────────────────────
+
+export interface RecurringTemplate {
+    id: string;
+    name: string;
+    frequency: 'monthly' | 'quarterly' | 'yearly';
+    next_run: string;
+    client_info: any;
+    studio_info: any;
+    banking_info: any;
+    items: any[];
+    currency: string;
+    tax_rate: number;
+    discount_type: string;
+    discount_value: number;
+    payment_method: string;
+    is_active: boolean;
+    last_generated_at: string | null;
+    created_at: string;
+}
+
+export const fetchRecurringTemplates = async (): Promise<RecurringTemplate[]> => {
+    const { data, error } = await supabase
+        .from('invoice_recurring')
+        .select('*')
+        .order('created_at', { ascending: false });
+    if (error) throw new Error(`Fetch recurring templates failed: ${error.message}`);
+    return data || [];
+};
+
+export const saveRecurringTemplate = async (template: Omit<RecurringTemplate, 'id' | 'created_at' | 'last_generated_at'>): Promise<string> => {
+    const { data, error } = await supabase
+        .from('invoice_recurring')
+        .insert(template)
+        .select('id')
+        .single();
+    if (error) throw new Error(`Save recurring template failed: ${error.message}`);
+    return data.id;
+};
+
+export const updateRecurringTemplate = async (id: string, updates: Partial<RecurringTemplate>): Promise<void> => {
+    const { error } = await supabase
+        .from('invoice_recurring')
+        .update(updates)
+        .eq('id', id);
+    if (error) throw new Error(`Update recurring template failed: ${error.message}`);
+};
+
+export const deleteRecurringTemplate = async (id: string): Promise<void> => {
+    const { error } = await supabase
+        .from('invoice_recurring')
+        .delete()
+        .eq('id', id);
+    if (error) throw new Error(`Delete recurring template failed: ${error.message}`);
+};
+
+export const toggleRecurringActive = async (id: string, isActive: boolean): Promise<void> => {
+    const { error } = await supabase
+        .from('invoice_recurring')
+        .update({ is_active: isActive })
+        .eq('id', id);
+    if (error) throw new Error(`Toggle recurring active failed: ${error.message}`);
+};
+
+

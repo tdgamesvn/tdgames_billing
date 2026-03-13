@@ -24,6 +24,7 @@ interface HistoryTabProps {
   onResetEInvoice: (id: string) => void;
   onConfirmResetEInvoice: () => void;
   onCancelResetEInvoice: () => void;
+  onSendEmail: (inv: InvoiceData) => void;
 }
 
 export const HistoryTab: React.FC<HistoryTabProps> = ({
@@ -33,7 +34,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
   resetConfirmId,
   formatCurrencySimple, onRefresh, onLoadFromHistory, onDuplicateInvoice,
   onCreateEInvoice, onDownloadEInvoice, onToggleStatus, onDeleteInvoice,
-  onResetEInvoice, onConfirmResetEInvoice, onCancelResetEInvoice,
+  onResetEInvoice, onConfirmResetEInvoice, onCancelResetEInvoice, onSendEmail,
 }) => (
   <div className="animate-fadeInUp space-y-8">
     <div className="flex justify-between items-end">
@@ -63,59 +64,90 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
           <p className="opacity-50 font-black uppercase tracking-widest text-xs">No invoices found</p>
         </div>
       )}
-      {filteredHistory.map((inv) => (
-        <div key={inv.id} className={`p-6 rounded-[24px] border transition-all hover:scale-[1.02] ${theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'} relative overflow-hidden group`}>
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${inv.status === 'paid' ? 'bg-status-success/20 text-status-success' : 'bg-status-warning/20 text-status-warning'}`}>
+      {filteredHistory.map((inv) => {
+        const sub = inv.items.reduce((a, b) => a + (b.quantity * b.unitPrice), 0);
+        const disc = inv.discountType === 'percentage' ? sub * (inv.discountValue / 100) : (inv.discountValue || 0);
+        const invoiceTotal = Math.max(0, sub - disc) * (1 + (inv.taxRate || 0) / 100);
+        const hasFee = inv.status === 'paid' && inv.transfer_fee !== undefined && inv.transfer_fee > 0;
+
+        return (
+        <div key={inv.id} className={`rounded-[20px] border transition-all hover:scale-[1.01] ${theme === 'dark' ? 'bg-surface border-primary/10 hover:border-primary/25' : 'bg-white border-gray-200 shadow-md hover:shadow-lg'} relative overflow-hidden group`}>
+          {/* Status accent bar */}
+          <div className={`h-1 w-full ${inv.status === 'paid' ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' : 'bg-gradient-to-r from-amber-500 to-amber-400'}`} />
+
+          <div className="p-5">
+            {/* Row 1: Invoice number + Date */}
+            <div className="flex justify-between items-center mb-3">
+              <h3 className={`text-lg font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{inv.invoiceNumber}</h3>
+              <span className={`text-[10px] font-bold tabular-nums ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>{inv.issueDate}</span>
+            </div>
+
+            {/* Row 2: Client + Studio */}
+            <p className={`text-sm font-semibold truncate ${theme === 'dark' ? 'text-white/70' : 'text-gray-600'}`}>{inv.clientInfo?.name || 'Untitled Client'}</p>
+            {inv.studioInfo?.name && <p className={`text-[10px] truncate mt-0.5 ${theme === 'dark' ? 'text-neutral-medium/50' : 'text-gray-400'}`}>{inv.studioInfo.name}</p>}
+
+            {/* Row 3: Badges row */}
+            <div className="flex items-center gap-2 mt-3">
+              <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${inv.status === 'paid' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>
                 {inv.status}
               </span>
-              {inv.paidDate && <p className="text-[9px] text-status-success/70 font-bold mt-1">Paid: {inv.paidDate}</p>}
+              {inv.paidDate && <span className="text-[9px] text-emerald-400/60 font-bold tabular-nums">{inv.paidDate}</span>}
               {inv.einvoice_status === 'draft' && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onResetEInvoice(inv.id!); }}
-                  title="Click để reset eInvoice"
-                  className="inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-400 hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer border-none relative z-10"
-                >
-                  eInvoice ✓ ×
+                <button type="button" onClick={(e) => { e.stopPropagation(); onResetEInvoice(inv.id!); }} title="Reset eInvoice"
+                  className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-500/15 text-emerald-400 hover:bg-red-500/15 hover:text-red-400 transition-colors cursor-pointer">
+                  eInvoice ✓
                 </button>
               )}
-              {inv.einvoice_status === 'failed' && <span className="inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-black uppercase bg-red-500/20 text-red-400">eInvoice ✗</span>}
+              {inv.einvoice_status === 'failed' && <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-red-500/15 text-red-400">eInvoice ✗</span>}
             </div>
-            <p className="text-[10px] text-neutral-medium font-bold uppercase">{inv.issueDate}</p>
-          </div>
-          <h3 className={`text-xl font-black mb-1 ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{inv.invoiceNumber}</h3>
-          <p className={`text-sm mb-1 font-medium truncate ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>{inv.clientInfo?.name || 'Untitled Client'}</p>
-          {inv.studioInfo?.name && <p className={`text-[10px] mb-3 truncate ${theme === 'dark' ? 'text-neutral-medium/60' : 'text-gray-400'}`}>🏢 {inv.studioInfo.name}</p>}
-          <div className="flex justify-between items-center pt-4 border-t border-primary/10">
-            <p className="text-primary font-black">{formatCurrencySimple(inv.items.reduce((a, b) => a + (b.quantity * b.unitPrice), 0), inv.currency)}</p>
-            <div className="flex gap-2">
-              <button onClick={() => onDuplicateInvoice(inv)} title="Clone Invoice" className="p-2 hover:text-blue-400 transition-colors text-blue-500/40">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+
+            {/* Row 4: Amount + Payment details */}
+            <div className="mt-4 pt-3 border-t border-primary/5">
+              <div className="flex justify-between items-end">
+                <div>
+                  <p className="text-xl font-black text-primary tabular-nums">{formatCurrencySimple(invoiceTotal, inv.currency)}</p>
+                  {hasFee && (
+                    <div className="flex items-center gap-3 mt-1.5">
+                      <span className="text-xs font-bold text-emerald-400 tabular-nums">↳ Nhận {formatCurrencySimple(inv.amount_received!, inv.currency)}</span>
+                      <span className="text-xs font-bold text-orange-500 tabular-nums">phí -{formatCurrencySimple(inv.transfer_fee!, inv.currency)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Action bar — visible on hover */}
+            <div className={`flex items-center justify-end gap-1.5 mt-3 pt-3 border-t border-primary/5 opacity-40 group-hover:opacity-100 transition-opacity`}>
+              <button onClick={() => onLoadFromHistory(inv)} title="Edit" className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-gray-100'} hover:text-primary`}>
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
-              <button onClick={() => onLoadFromHistory(inv)} title="Load to Editor" className="p-2 hover:text-primary transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <button onClick={() => onDuplicateInvoice(inv)} title="Clone" className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-gray-100'} hover:text-blue-400`}>
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
               {(!inv.einvoice_status || inv.einvoice_status === 'none' || inv.einvoice_status === 'failed') ? (
-                <button onClick={() => onCreateEInvoice(inv)} title="Xuất HĐ Điện Tử" className="p-2 hover:text-emerald-400 transition-colors text-emerald-500/40">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                <button onClick={() => onCreateEInvoice(inv)} title="Xuất eInvoice" className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-gray-100'} hover:text-emerald-400`}>
+                  <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
               ) : inv.einvoice_status === 'draft' ? (
-                <button onClick={() => onDownloadEInvoice(inv)} title="Tải HĐ Điện Tử" className="p-2 hover:text-emerald-400 transition-colors text-emerald-400">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                <button onClick={() => onDownloadEInvoice(inv)} title="Tải PDF" className={`p-2 rounded-lg transition-colors text-emerald-400 ${theme === 'dark' ? 'hover:bg-emerald-500/10' : 'hover:bg-emerald-50'}`}>
+                  <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
               ) : null}
-              <button onClick={() => onToggleStatus(inv.id!, inv.status)} title="Mark Paid/Pending" className="p-2 hover:text-primary transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <button onClick={() => onToggleStatus(inv.id!, inv.status)} title={inv.status === 'paid' ? 'Revert to Pending' : 'Mark Paid'} className={`p-2 rounded-lg transition-colors ${inv.status === 'paid' ? 'text-emerald-400' : ''} ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-gray-100'} hover:text-primary`}>
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
-              <button onClick={() => onDeleteInvoice(inv.id!)} title="Xoá hoá đơn" className="p-2 hover:text-status-error transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <button onClick={() => onSendEmail(inv)} title="Email" className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-gray-100'} hover:text-blue-400`}>
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+              <div className={`w-px h-5 mx-0.5 ${theme === 'dark' ? 'bg-white/10' : 'bg-gray-200'}`} />
+              <button onClick={() => onDeleteInvoice(inv.id!)} title="Xoá" className={`p-2 rounded-lg transition-colors text-red-500/50 hover:text-red-400 ${theme === 'dark' ? 'hover:bg-red-500/10' : 'hover:bg-red-50'}`}>
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
             </div>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
 
     {/* Reset eInvoice Confirmation Popup */}

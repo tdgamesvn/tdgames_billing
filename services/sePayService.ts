@@ -46,7 +46,7 @@ function mapTaxRate(rate: number | undefined): number {
 // Ref: POST v1/invoices/create
 // Edge Function proxy injects: provider_account_id, template_code, invoice_series, is_draft
 
-function mapInvoiceToSePay(invoice: InvoiceData) {
+function mapInvoiceToSePay(invoice: InvoiceData, exchangeRate?: number) {
     // Parse clientInfo/items if they come as JSON strings (e.g., from NocoDB history)
     let client = invoice.clientInfo || { name: '', address: '', contactPerson: '', email: '' };
     if (typeof client === 'string') {
@@ -66,21 +66,35 @@ function mapInvoiceToSePay(invoice: InvoiceData) {
         throw new Error('At least one invoice item is required. Please add items before creating an eInvoice.');
     }
 
+    // Determine if we need currency conversion (USD → VND)
+    const needsConversion = invoice.currency === 'USD' && exchangeRate && exchangeRate > 0;
+
     // Determine buyer type
     const hasTaxCode = !!(client.taxCode?.trim());
     const isIndividual = client.clientType === 'individual';
 
     // Build invoice items per SePay API spec
-    const sePayItems = items.map((item, idx) => ({
-        line_number: idx + 1,
-        line_type: 1, // 1=normal product/service
-        item_code: `SV${String(idx + 1).padStart(3, '0')}`, // Required for line_type 1|2
-        item_name: item.description,
-        unit: 'Service',
-        quantity: item.quantity,
-        unit_price: item.unitPrice,
-        tax_rate: mapTaxRate(invoice.taxRate),
-    }));
+    const sePayItems = items.map((item, idx) => {
+        const unitPriceVND = needsConversion ? Math.round(item.unitPrice * exchangeRate) : item.unitPrice;
+        const totalUSD = item.quantity * item.unitPrice;
+        
+        // Append USD info to description when converting
+        let itemName = item.description;
+        if (needsConversion) {
+            itemName = `${item.description} (USD ${item.unitPrice.toLocaleString('en-US')} x ${exchangeRate.toLocaleString('vi-VN')} = ${unitPriceVND.toLocaleString('vi-VN')} VND/unit)`;
+        }
+
+        return {
+            line_number: idx + 1,
+            line_type: 1, // 1=normal product/service
+            item_code: `SV${String(idx + 1).padStart(3, '0')}`,
+            item_name: itemName,
+            unit: 'Service',
+            quantity: item.quantity,
+            unit_price: unitPriceVND,
+            tax_rate: mapTaxRate(invoice.taxRate),
+        };
+    });
 
     // Handle discount (total level → add line_type: 3)
     if (invoice.discountValue > 0) {
@@ -95,13 +109,21 @@ function mapInvoiceToSePay(invoice: InvoiceData) {
             discountAmount = invoice.discountValue;
         }
 
-        // Per SePay demo: discount line only needs item_name, tax_rate, before_discount_and_tax_amount
+        // Convert discount to VND if needed
+        const discountVND = needsConversion ? Math.round(discountAmount * exchangeRate) : discountAmount;
+        const discountLabel = invoice.discountType === 'percentage'
+            ? `Discount ${invoice.discountValue}%`
+            : `Discount`;
+        const discountName = needsConversion
+            ? `${discountLabel} (USD ${discountAmount.toLocaleString('en-US')} x ${exchangeRate.toLocaleString('vi-VN')})`
+            : discountLabel;
+
         sePayItems.push({
             line_number: sePayItems.length + 1,
             line_type: 3, // 3=commercial discount line
-            item_name: `Discount ${invoice.discountType === 'percentage' ? invoice.discountValue + '%' : ''}`.trim(),
+            item_name: discountName,
             tax_rate: mapTaxRate(invoice.taxRate),
-            before_discount_and_tax_amount: discountAmount,
+            before_discount_and_tax_amount: discountVND,
         } as any);
     }
 
@@ -120,10 +142,12 @@ function mapInvoiceToSePay(invoice: InvoiceData) {
             phone: isIndividual ? (client.contactPerson || '') : '',
         },
         items: sePayItems,
-        currency: invoice.currency || 'USD',
+        currency: needsConversion ? 'VND' : (invoice.currency || 'USD'),
         issued_date: issuedDate,
         payment_method: invoice.payment_method || 'CK',
-        notes: (invoice as any).notes || '',
+        notes: needsConversion
+            ? `Original currency: USD | Exchange rate: 1 USD = ${exchangeRate.toLocaleString('vi-VN')} VND${(invoice as any).notes ? ' | ' + (invoice as any).notes : ''}`
+            : ((invoice as any).notes || ''),
     };
 }
 
@@ -151,9 +175,10 @@ export interface CheckStatusResult {
 /**
  * Create a draft eInvoice via the Edge Function proxy.
  * Returns tracking_code for polling.
+ * @param exchangeRate — optional USD→VND rate for foreign currency invoices
  */
-export async function createDraftEInvoice(invoice: InvoiceData): Promise<CreateDraftResult> {
-    const sePayPayload = mapInvoiceToSePay(invoice);
+export async function createDraftEInvoice(invoice: InvoiceData, exchangeRate?: number): Promise<CreateDraftResult> {
+    const sePayPayload = mapInvoiceToSePay(invoice, exchangeRate);
     const result = await callProxy('create-draft', sePayPayload);
     
     // Check if proxy returned a debug error object (SePay returned 400)
@@ -185,11 +210,12 @@ export async function checkEInvoiceStatus(
 
 /**
  * Full flow: create draft → poll until complete → return result.
- * Calls onProgress callback with status messages.
+ * @param exchangeRate — optional USD→VND rate for foreign currency invoices
  */
 export async function createAndPollDraft(
     invoice: InvoiceData,
-    onProgress?: (msg: string) => void
+    onProgress?: (msg: string) => void,
+    exchangeRate?: number
 ): Promise<{
     reference_code: string;
     tracking_code: string;
@@ -197,7 +223,7 @@ export async function createAndPollDraft(
     invoice_number?: string;
 }> {
     onProgress?.('Sending invoice to SePay...');
-    const { tracking_code } = await createDraftEInvoice(invoice);
+    const { tracking_code } = await createDraftEInvoice(invoice, exchangeRate);
     onProgress?.(`Sent. Tracking: ${tracking_code}`);
 
     // Poll max 30 times, 2s interval
@@ -230,3 +256,4 @@ export async function createAndPollDraft(
 
     throw new Error('Timeout: SePay did not respond within 60 seconds. Please try again.');
 }
+

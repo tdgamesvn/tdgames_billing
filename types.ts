@@ -66,6 +66,8 @@ export interface InvoiceData {
   einvoice_reference_code?: string;
   einvoice_tracking_code?: string;
   einvoice_pdf_url?: string;
+  amount_received?: number;
+  transfer_fee?: number;
 }
 
 export interface AccountUser {

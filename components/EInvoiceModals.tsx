@@ -115,15 +115,12 @@ export const EInvoiceModals: React.FC<EInvoiceModalsProps> = ({
                 ) : (
                   <button
                     onClick={() => {
-                      const edgeFnUrl = import.meta.env.VITE_SEPAY_EDGE_FUNCTION_URL;
                       const params = new URLSearchParams({
-                        key: import.meta.env.VITE_SEPAY_API_KEY || 'tdgames-sepay-2026',
-                        action: 'download-pdf',
                         reference_code: eInvoiceResult.reference_code || '',
                         tracking_code: eInvoiceResult.tracking_code || '',
                         filename: `eInvoice_${eInvoiceResult.reference_code}`,
                       });
-                      window.open(`${edgeFnUrl}?${params.toString()}`, '_blank');
+                      window.open(`https://n8n.tdconsulting.vn/webhook/sepay-invoice-download?${params.toString()}`, '_blank');
                     }}
                     className="inline-block px-6 py-3 rounded-2xl bg-emerald-500 text-white font-black text-sm uppercase tracking-widest hover:bg-emerald-600 transition-all cursor-pointer"
                   >

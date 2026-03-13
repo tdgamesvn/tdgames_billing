@@ -427,13 +427,15 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
             <div className="divide-y divide-primary/5">
               {invoice.items.map((item, idx) => (
                 <div key={item.id}
-                  className={`grid items-center gap-4 px-8 py-5 group transition-all ${invoice.theme === 'dark' ? 'hover:bg-white/2' : 'hover:bg-gray-50/50'}`}
+                  className={`grid items-start gap-4 px-8 py-5 group transition-all ${invoice.theme === 'dark' ? 'hover:bg-white/2' : 'hover:bg-gray-50/50'}`}
                   style={{ gridTemplateColumns: '1fr 80px 110px 130px 36px' }}>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-start gap-3">
                     <span className="text-[11px] font-black text-primary/50 w-5 text-center shrink-0">{String(idx + 1).padStart(2, '0')}</span>
-                    <input type="text" value={item.description} onChange={(e) => updateItem(item.id, 'description', e.target.value)}
+                    <textarea value={item.description} onChange={(e) => { updateItem(item.id, 'description', e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                      ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
                       placeholder="Service description..."
-                      className={`w-full bg-transparent text-sm font-bold outline-none border-b border-transparent focus:border-primary/40 transition-colors pb-0.5 ${invoice.theme === 'dark' ? 'text-white placeholder-white/20' : 'text-black placeholder-black/20'}`} />
+                      rows={1}
+                      className={`w-full bg-transparent text-sm font-bold outline-none border-b border-transparent focus:border-primary/40 transition-colors pb-0.5 resize-none overflow-hidden ${invoice.theme === 'dark' ? 'text-white placeholder-white/20' : 'text-black placeholder-black/20'}`} />
                   </div>
                   <input type="number" value={item.quantity} onChange={(e) => updateItem(item.id, 'quantity', Number(e.target.value))}
                     className={`w-full bg-transparent text-sm font-bold text-center outline-none border-b border-transparent focus:border-primary/40 transition-colors pb-0.5 ${invoice.theme === 'dark' ? 'text-white' : 'text-black'}`} />

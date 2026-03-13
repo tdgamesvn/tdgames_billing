@@ -30,7 +30,19 @@ const buildRevenueByCurrency = (invoices: InvoiceData[]) => {
     const curr = inv.currency || 'USD';
     const name = inv.clientInfo?.name || 'Unknown';
     if (!map[curr]) map[curr] = {};
-    map[curr][name] = (map[curr][name] || 0) + calcTotal(inv);
+    // Use amount_received if available (actual money), else fall back to invoice total
+    const amount = inv.amount_received ?? calcTotal(inv);
+    map[curr][name] = (map[curr][name] || 0) + amount;
+  });
+  return map;
+};
+
+/** Sum transfer fees by currency */
+const calcTransferFeesByCurrency = (invoices: InvoiceData[]) => {
+  const map: Record<string, number> = {};
+  invoices.filter(i => i.status === 'paid' && i.transfer_fee && i.transfer_fee > 0).forEach(inv => {
+    const curr = inv.currency || 'USD';
+    map[curr] = (map[curr] || 0) + (inv.transfer_fee || 0);
   });
   return map;
 };
@@ -54,6 +66,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   const pending = filteredHistory.filter(i => i.status !== 'paid');
   const revByCurrency = buildRevenueByCurrency(filteredHistory);
   const pendingByCurrency = calcPendingByCurrency(filteredHistory);
+  const transferFeesByCurrency = calcTransferFeesByCurrency(filteredHistory);
   const currencies = Array.from(new Set<string>(filteredHistory.map(i => String(i.currency || 'USD')))).sort();
 
   return (
@@ -83,7 +96,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           const pendingTotal = pendingByCurrency[curr] || 0;
           const count = filteredHistory.filter(i => (i.currency || 'USD') === curr).length;
           return (
-            <div key={curr} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div key={curr} className="grid grid-cols-1 md:grid-cols-5 gap-4">
               {/* Currency label */}
               <div className={`p-5 rounded-[20px] border flex items-center gap-3 ${theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'}`}>
                 <span className="text-3xl font-black text-primary">{curr === 'VND' ? '₫' : '$'}</span>
@@ -94,8 +107,15 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               </div>
               {/* Revenue */}
               <div className={`p-5 rounded-[20px] border ${theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'}`}>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Doanh thu (đã thu)</p>
+                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Thực nhận</p>
                 <p className="text-xl font-black text-status-success">{formatCurrencySimple(revTotal, curr)}</p>
+              </div>
+              {/* Transfer Fees */}
+              <div className={`p-5 rounded-[20px] border ${theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'}`}>
+                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Phí CK</p>
+                <p className={`text-xl font-black ${(transferFeesByCurrency[curr] || 0) > 0 ? 'text-amber-400' : 'text-neutral-medium/30'}`}>
+                  {(transferFeesByCurrency[curr] || 0) > 0 ? `-${formatCurrencySimple(transferFeesByCurrency[curr], curr)}` : '—'}
+                </p>
               </div>
               {/* Pending */}
               <div className={`p-5 rounded-[20px] border ${theme === 'dark' ? 'bg-surface border-primary/10' : 'bg-white border-gray-200 shadow-md'}`}>
