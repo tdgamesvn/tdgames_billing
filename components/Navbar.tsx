@@ -1,5 +1,6 @@
 import React from 'react';
 import { AccountUser } from '../types';
+import { ExchangeRateData } from '../services/exchangeRateService';
 
 interface NavbarProps {
   theme: string;
@@ -8,9 +9,11 @@ interface NavbarProps {
   accessibleTabs: Array<'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring'>;
   onTabChange: (tab: 'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring') => void;
   onLogout: () => void;
+  vcbRate: ExchangeRateData | null;
+  vcbRateLoading: boolean;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ theme, currentUser, activeTab, accessibleTabs, onTabChange, onLogout }) => (
+export const Navbar: React.FC<NavbarProps> = ({ theme, currentUser, activeTab, accessibleTabs, onTabChange, onLogout, vcbRate, vcbRateLoading }) => (
   <nav className={`h-20 sticky top-0 backdrop-blur-md border-b flex items-center justify-between px-6 md:px-12 z-50 transition-colors duration-300 ${theme === 'dark' ? 'bg-[#0F0F0F]/95 border-primary/10' : 'bg-white/95 border-gray-200 shadow-sm'}`}>
     <div className="flex items-center gap-3">
       <img src="https://pub-f0ef2ac3b67c4d4da2fe20c73ab57f83.r2.dev/logo_td.png" alt="Logo" className="w-10 h-10 object-contain" />
@@ -32,6 +35,23 @@ export const Navbar: React.FC<NavbarProps> = ({ theme, currentUser, activeTab, a
         ))}
       </div>
 
+      {/* VCB Exchange Rate Badge */}
+      <div className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold tabular-nums transition-all ${theme === 'dark' ? 'bg-surface border-primary/10 text-neutral-light' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+        <span className="text-primary">$</span>
+        {vcbRateLoading ? (
+          <span className="animate-pulse text-neutral-medium">loading...</span>
+        ) : vcbRate ? (
+          <>
+            <span className={theme === 'dark' ? 'text-white' : 'text-black'}>
+              {vcbRate.sell.toLocaleString('vi-VN')}
+            </span>
+            <span className={`text-[9px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>VND</span>
+          </>
+        ) : (
+          <span className="text-neutral-medium">—</span>
+        )}
+      </div>
+
       {/* User info + Logout */}
       <div className="flex items-center gap-2 ml-2">
         <div className={`hidden md:flex flex-col items-end leading-none`}>
@@ -43,7 +63,7 @@ export const Navbar: React.FC<NavbarProps> = ({ theme, currentUser, activeTab, a
         </div>
         <button
           onClick={onLogout}
-          title="Đăng xuất"
+          title="Logout"
           className={`p-2 rounded-xl transition-all hover:scale-110 ${theme === 'dark'
             ? 'text-neutral-medium hover:text-status-error hover:bg-status-error/10'
             : 'text-gray-400 hover:text-red-500 hover:bg-red-50'

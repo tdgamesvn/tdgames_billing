@@ -31,6 +31,8 @@ const App: React.FC = () => {
         accessibleTabs={state.accessibleTabs}
         onTabChange={state.setActiveTab}
         onLogout={state.handleLogout}
+        vcbRate={state.vcbRate}
+        vcbRateLoading={state.vcbRateLoading}
       />
 
       <main className="flex-1 p-6 md:p-12 max-w-[1400px] mx-auto w-full">
@@ -250,15 +252,15 @@ const App: React.FC = () => {
                 <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
                   <span className="text-3xl">💱</span>
                 </div>
-                <h3 className={`text-xl font-black mb-2 ${state.invoice.theme === 'dark' ? 'text-white' : 'text-black'}`}>Quy đổi USD → VND</h3>
+                <h3 className={`text-xl font-black mb-2 ${state.invoice.theme === 'dark' ? 'text-white' : 'text-black'}`}>Convert USD → VND</h3>
                 <p className={`text-sm ${state.invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'}`}>
-                  SePay chỉ hỗ trợ VND. Nhập tỷ giá để quy đổi hoá đơn sang VND.
+                  SePay only supports VND. Enter exchange rate to convert invoice.
                 </p>
               </div>
 
               {/* Invoice summary */}
               <div className={`mb-5 p-4 rounded-xl ${state.invoice.theme === 'dark' ? 'bg-black/30 border border-white/5' : 'bg-gray-50 border border-gray-100'}`}>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${state.invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Hoá đơn gốc (USD)</p>
+                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${state.invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>Original Invoice (USD)</p>
                 <div className="flex justify-between items-center">
                   <span className={`text-sm font-bold ${state.invoice.theme === 'dark' ? 'text-white' : 'text-black'}`}>{inv.invoiceNumber}</span>
                   <span className="text-lg font-black text-primary tabular-nums">${totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
@@ -268,7 +270,7 @@ const App: React.FC = () => {
               {/* Exchange rate input */}
               <div className="mb-5">
                 <label className={`text-[11px] font-black uppercase tracking-widest block mb-2 ${state.invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>
-                  Tỷ giá (1 USD = ? VND)
+                  Exchange Rate (1 USD = ? VND)
                 </label>
                 <input
                   type="number"
@@ -279,13 +281,21 @@ const App: React.FC = () => {
                   min="1"
                 />
                 <p className={`text-[11px] mt-1 ${state.invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>
-                  Lấy tỷ giá bán USD tại ngân hàng vào ngày giao dịch
+                  {state.vcbRate ? (
+                    <button
+                      type="button"
+                      onClick={() => state.setExchangeRate(state.vcbRate!.sell)}
+                      className="underline decoration-dotted hover:text-primary transition-colors cursor-pointer"
+                    >
+                      🏦 VCB sell rate: {state.vcbRate.sell.toLocaleString('vi-VN')} VND
+                    </button>
+                  ) : 'Use the USD sell rate from your bank on the transaction date'}
                 </p>
               </div>
 
               {/* Converted preview */}
               <div className={`mb-6 p-4 rounded-xl ${state.invoice.theme === 'dark' ? 'bg-emerald-500/5 border border-emerald-500/20' : 'bg-emerald-50 border border-emerald-200'}`}>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 text-emerald-500`}>Giá trị quy đổi (VND)</p>
+                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 text-emerald-500`}>Converted Value (VND)</p>
                 <p className="text-2xl font-black text-emerald-400 tabular-nums">
                   {totalVND.toLocaleString('vi-VN')} ₫
                 </p>
@@ -296,10 +306,10 @@ const App: React.FC = () => {
 
               <div className="flex gap-3">
                 <button onClick={() => state.setShowExchangeRateModal(false)} className={`flex-1 py-3 rounded-xl font-black text-sm uppercase tracking-wider transition-colors ${state.invoice.theme === 'dark' ? 'bg-white/5 hover:bg-white/10 text-white' : 'bg-gray-100 hover:bg-gray-200 text-black'}`}>
-                  Huỷ
+                  Cancel
                 </button>
                 <button onClick={state.confirmCreateEInvoiceWithRate} className="flex-1 py-3 rounded-xl font-black text-sm uppercase tracking-wider bg-emerald-500 hover:bg-emerald-600 text-white transition-colors">
-                  Xuất eInvoice (VND)
+                  Create eInvoice (VND)
                 </button>
               </div>
             </div>

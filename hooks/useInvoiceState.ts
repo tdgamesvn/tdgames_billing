@@ -3,6 +3,7 @@ import { DEFAULT_INVOICE } from '../constants';
 import { InvoiceData, ServiceItem, BankingInfo, ClientInfo, ClientRecord, StudioRecord, StudioInfo, AccountUser } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { createAndPollDraft, getEInvoiceDetail } from '../services/sePayService';
+import { fetchExchangeRate, ExchangeRateData } from '../services/exchangeRateService';
 import {
   saveInvoiceToCloud,
   fetchInvoicesFromCloud,
@@ -93,6 +94,10 @@ export function useInvoiceState() {
   const [exchangeRate, setExchangeRate] = useState<number>(25400);
   const [exchangeRateTarget, setExchangeRateTarget] = useState<InvoiceData | null>(null);
 
+  // ── Live VCB Exchange Rate ──
+  const [vcbRate, setVcbRate] = useState<ExchangeRateData | null>(null);
+  const [vcbRateLoading, setVcbRateLoading] = useState(false);
+
   // ── Save-after-export ──
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [pendingInvoiceToSave, setPendingInvoiceToSave] = useState<InvoiceData | null>(null);
@@ -167,6 +172,28 @@ export function useInvoiceState() {
       realtimeChannelRef.current = null;
     };
   }, [currentUser]);
+
+  // ── Auto-fetch VCB Exchange Rate ──
+  useEffect(() => {
+    const loadRate = async () => {
+      setVcbRateLoading(true);
+      try {
+        const data = await fetchExchangeRate();
+        setVcbRate(data);
+        // Auto-populate the exchange rate with VCB sell rate
+        if (data.sell > 0) setExchangeRate(data.sell);
+      } catch (err) {
+        console.warn('[VCB Rate] Failed to fetch:', err);
+      } finally {
+        setVcbRateLoading(false);
+      }
+    };
+
+    loadRate();
+    // Refresh every hour
+    const interval = setInterval(loadRate, 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     getNextInvoiceNumber().then(nextNum => {
@@ -692,6 +719,8 @@ export function useInvoiceState() {
     syncEInvoiceStatuses, isSyncingEInvoices,
     // Exchange rate (USD→VND)
     showExchangeRateModal, setShowExchangeRateModal, exchangeRate, setExchangeRate, exchangeRateTarget, confirmCreateEInvoiceWithRate,
+    // Live VCB rate
+    vcbRate, vcbRateLoading,
     // Email (P3-4)
     emailInvoice, setEmailInvoice,
   };
