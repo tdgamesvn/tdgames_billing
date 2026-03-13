@@ -62,10 +62,11 @@ export interface InvoiceData {
   items: ServiceItem[];
   createdAt?: any;
   payment_method?: 'TM' | 'CK' | 'TM/CK' | 'KHAC';
-  einvoice_status?: 'none' | 'draft' | 'failed';
+  einvoice_status?: 'none' | 'draft' | 'issued' | 'failed';
   einvoice_reference_code?: string;
   einvoice_tracking_code?: string;
   einvoice_pdf_url?: string;
+  einvoice_invoice_number?: string;
   amount_received?: number;
   transfer_fee?: number;
 }

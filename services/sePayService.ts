@@ -257,3 +257,31 @@ export async function createAndPollDraft(
     throw new Error('Timeout: SePay did not respond within 60 seconds. Please try again.');
 }
 
+/**
+ * Get the current detail/status of an eInvoice from SePay.
+ * Uses GET /v1/invoices/{reference_code}
+ * Returns null if 404 (deleted on SePay).
+ */
+export async function getEInvoiceDetail(
+    referenceCode: string
+): Promise<{
+    status: 'draft' | 'issued' | 'cancelled';
+    invoice_number?: string;
+    pdf_url?: string;
+} | null> {
+    try {
+        const result = await callProxy('get-invoice-detail', { reference_code: referenceCode });
+        const inv = result?.data || result;
+        return {
+            status: inv.status || 'draft',
+            invoice_number: inv.invoice_number,
+            pdf_url: inv.pdf_url,
+        };
+    } catch (err: any) {
+        // 404 means deleted on SePay
+        if (err?.message?.includes('404') || err?.message?.toLowerCase()?.includes('not found')) {
+            return null;
+        }
+        throw err;
+    }
+}

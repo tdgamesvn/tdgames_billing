@@ -50,6 +50,7 @@ const App: React.FC = () => {
             onResetEInvoice={state.handleResetEInvoice} onConfirmResetEInvoice={state.confirmResetEInvoice}
             onCancelResetEInvoice={() => state.setResetConfirmId(null)}
             onSendEmail={(inv) => state.setEmailInvoice(inv)}
+            onSyncEInvoices={state.syncEInvoiceStatuses} isSyncingEInvoices={state.isSyncingEInvoices}
           />
         ) : state.activeTab === 'dashboard' ? (
           <DashboardTab

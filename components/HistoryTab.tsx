@@ -25,6 +25,8 @@ interface HistoryTabProps {
   onConfirmResetEInvoice: () => void;
   onCancelResetEInvoice: () => void;
   onSendEmail: (inv: InvoiceData) => void;
+  onSyncEInvoices: () => void;
+  isSyncingEInvoices: boolean;
 }
 
 export const HistoryTab: React.FC<HistoryTabProps> = ({
@@ -35,6 +37,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
   formatCurrencySimple, onRefresh, onLoadFromHistory, onDuplicateInvoice,
   onCreateEInvoice, onDownloadEInvoice, onToggleStatus, onDeleteInvoice,
   onResetEInvoice, onConfirmResetEInvoice, onCancelResetEInvoice, onSendEmail,
+  onSyncEInvoices, isSyncingEInvoices,
 }) => (
   <div className="animate-fadeInUp space-y-8">
     <div className="flex justify-between items-end">
@@ -42,7 +45,12 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
         <h2 className="text-4xl font-black text-primary uppercase tracking-tighter">Invoice History</h2>
         <p className={`${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-500'} text-sm mt-2`}>Synced from Supabase</p>
       </div>
-      <Button onClick={onRefresh} variant="ghost" size="sm" disabled={isLoading}>{isLoading ? 'Loading...' : 'Refresh'}</Button>
+      <div className="flex gap-2">
+        <Button onClick={onSyncEInvoices} variant="ghost" size="sm" disabled={isSyncingEInvoices}>
+          {isSyncingEInvoices ? '⏳ Syncing...' : '🔄 Sync eInvoice'}
+        </Button>
+        <Button onClick={onRefresh} variant="ghost" size="sm" disabled={isLoading}>{isLoading ? 'Loading...' : 'Refresh'}</Button>
+      </div>
     </div>
 
     <FilterBar
@@ -94,9 +102,14 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
               {inv.paidDate && <span className="text-[9px] text-emerald-400/60 font-bold tabular-nums">{inv.paidDate}</span>}
               {inv.einvoice_status === 'draft' && (
                 <button type="button" onClick={(e) => { e.stopPropagation(); onResetEInvoice(inv.id!); }} title="Reset eInvoice"
-                  className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-500/15 text-emerald-400 hover:bg-red-500/15 hover:text-red-400 transition-colors cursor-pointer">
-                  eInvoice ✓
+                  className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-500/15 text-amber-400 hover:bg-red-500/15 hover:text-red-400 transition-colors cursor-pointer">
+                  Nháp ✎
                 </button>
+              )}
+              {inv.einvoice_status === 'issued' && (
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-500/15 text-emerald-400">
+                  Đã Ký{inv.einvoice_invoice_number ? ` #${inv.einvoice_invoice_number}` : ''}
+                </span>
               )}
               {inv.einvoice_status === 'failed' && <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-red-500/15 text-red-400">eInvoice ✗</span>}
             </div>
@@ -128,7 +141,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                 <button onClick={() => onCreateEInvoice(inv)} title="Xuất eInvoice" className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-gray-100'} hover:text-emerald-400`}>
                   <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
-              ) : inv.einvoice_status === 'draft' ? (
+              ) : (inv.einvoice_status === 'draft' || inv.einvoice_status === 'issued') ? (
                 <button onClick={() => onDownloadEInvoice(inv)} title="Tải PDF" className={`p-2 rounded-lg transition-colors text-emerald-400 ${theme === 'dark' ? 'hover:bg-emerald-500/10' : 'hover:bg-emerald-50'}`}>
                   <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>

@@ -118,6 +118,7 @@ const parseInvoice = (row: any): InvoiceData => ({
     einvoice_reference_code: row.einvoice_reference_code || '',
     einvoice_tracking_code: row.einvoice_tracking_code || '',
     einvoice_pdf_url: row.einvoice_pdf_url || '',
+    einvoice_invoice_number: row.einvoice_invoice_number || '',
     amount_received: row.amount_received ?? undefined,
     transfer_fee: row.transfer_fee ?? undefined,
     createdAt: row.created_at,
@@ -201,16 +202,21 @@ export const updateEInvoiceInCloud = async (
         einvoice_reference_code?: string;
         einvoice_tracking_code?: string;
         einvoice_pdf_url?: string;
+        einvoice_invoice_number?: string;
     }
 ) => {
+    const updatePayload: Record<string, any> = {
+        einvoice_status: data.einvoice_status,
+        einvoice_reference_code: data.einvoice_reference_code || '',
+        einvoice_tracking_code: data.einvoice_tracking_code || '',
+        einvoice_pdf_url: data.einvoice_pdf_url || '',
+    };
+    if (data.einvoice_invoice_number !== undefined) {
+        updatePayload.einvoice_invoice_number = data.einvoice_invoice_number;
+    }
     const { error } = await supabase
         .from('invoice_invoices')
-        .update({
-            einvoice_status: data.einvoice_status,
-            einvoice_reference_code: data.einvoice_reference_code || '',
-            einvoice_tracking_code: data.einvoice_tracking_code || '',
-            einvoice_pdf_url: data.einvoice_pdf_url || '',
-        })
+        .update(updatePayload)
         .eq('id', id);
     if (error) throw new Error(`Update eInvoice failed: ${error.message}`);
 };

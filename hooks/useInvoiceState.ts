@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { DEFAULT_INVOICE } from '../constants';
 import { InvoiceData, ServiceItem, BankingInfo, ClientInfo, ClientRecord, StudioRecord, StudioInfo, AccountUser } from '../types';
 import { supabase } from '../services/supabaseClient';
-import { createAndPollDraft } from '../services/sePayService';
+import { createAndPollDraft, getEInvoiceDetail } from '../services/sePayService';
 import {
   saveInvoiceToCloud,
   fetchInvoicesFromCloud,
@@ -567,6 +567,54 @@ export function useInvoiceState() {
     window.open(`https://n8n.tdconsulting.vn/webhook/sepay-invoice-download?${params.toString()}`, '_blank');
   };
 
+  // ── Sync eInvoice statuses from SePay ─────────────────────────
+  const [isSyncingEInvoices, setIsSyncingEInvoices] = useState(false);
+
+  const syncEInvoiceStatuses = async () => {
+    const drafts = history.filter(inv => inv.einvoice_status === 'draft' && inv.einvoice_reference_code);
+    if (drafts.length === 0) { notify('Không có hoá đơn nháp cần sync', 'warning'); return; }
+
+    setIsSyncingEInvoices(true);
+    let updated = 0;
+    let deleted = 0;
+    let errors = 0;
+
+    for (const inv of drafts) {
+      try {
+        const detail = await getEInvoiceDetail(inv.einvoice_reference_code!);
+        if (detail === null) {
+          // Deleted on SePay — clear eInvoice data
+          await updateEInvoiceInCloud(inv.id!, { einvoice_status: '', einvoice_reference_code: '', einvoice_tracking_code: '', einvoice_pdf_url: '', einvoice_invoice_number: '' });
+          deleted++;
+        } else if (detail.status === 'issued') {
+          await updateEInvoiceInCloud(inv.id!, {
+            einvoice_status: 'issued',
+            einvoice_reference_code: inv.einvoice_reference_code,
+            einvoice_tracking_code: inv.einvoice_tracking_code,
+            einvoice_pdf_url: detail.pdf_url || inv.einvoice_pdf_url,
+            einvoice_invoice_number: detail.invoice_number || '',
+          });
+          updated++;
+        } else if (detail.status === 'cancelled') {
+          await updateEInvoiceInCloud(inv.id!, { einvoice_status: '', einvoice_reference_code: '', einvoice_tracking_code: '', einvoice_pdf_url: '', einvoice_invoice_number: '' });
+          deleted++;
+        }
+        // 'draft' — no change
+      } catch (err) {
+        console.error(`[Sync] Error checking ${inv.einvoice_reference_code}:`, err);
+        errors++;
+      }
+    }
+
+    setIsSyncingEInvoices(false);
+    loadHistory();
+    const parts = [];
+    if (updated > 0) parts.push(`${updated} đã ký`);
+    if (deleted > 0) parts.push(`${deleted} đã xoá`);
+    if (errors > 0) parts.push(`${errors} lỗi`);
+    notify(parts.length > 0 ? `Sync: ${parts.join(', ')}` : `${drafts.length} hoá đơn nháp — chưa có thay đổi`, parts.length > 0 ? 'success' : 'warning');
+  };
+
   const handleLogout = () => {
     setCurrentUser(null);
     setActiveTab('edit');
@@ -609,6 +657,8 @@ export function useInvoiceState() {
     handleConfirmSave, handleDismissSave,
     handleExport,
     handleCreateEInvoice, handleResetEInvoice, confirmResetEInvoice, handleDownloadEInvoice,
+    // Sync eInvoice
+    syncEInvoiceStatuses, isSyncingEInvoices,
     // Exchange rate (USD→VND)
     showExchangeRateModal, setShowExchangeRateModal, exchangeRate, setExchangeRate, exchangeRateTarget, confirmCreateEInvoiceWithRate,
     // Email (P3-4)
