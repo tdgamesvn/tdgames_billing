@@ -27,7 +27,24 @@ import {
 
 export function useInvoiceState() {
   // ── Core State ──
-  const [currentUser, setCurrentUser] = useState<AccountUser | null>(null);
+  const [currentUser, _setCurrentUser] = useState<AccountUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('invoice_user');
+      if (!saved) return null;
+      const { user, expiresAt } = JSON.parse(saved);
+      if (Date.now() > expiresAt) { localStorage.removeItem('invoice_user'); return null; }
+      return user as AccountUser;
+    } catch { return null; }
+  });
+
+  const setCurrentUser = (user: AccountUser | null) => {
+    _setCurrentUser(user);
+    if (user) {
+      localStorage.setItem('invoice_user', JSON.stringify({ user, expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 }));
+    } else {
+      localStorage.removeItem('invoice_user');
+    }
+  };
   const [invoice, setInvoice] = useState<InvoiceData>(DEFAULT_INVOICE);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring'>('edit');
 
