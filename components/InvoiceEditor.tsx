@@ -111,12 +111,12 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
         <div className="space-y-4">
           {studios.length > 0 && (
             <Select label="Studio Profile" onChange={e => { const s = studios.find(x => x.id === e.target.value); if (s) { const { id, isDefault, ...info } = s; updateInvoice('studioInfo', info); } }}>
-              <option value="">-- Chọn công ty --</option>
+              <option value="">-- Select Studio --</option>
               {studios.map(s => <option key={s.id} value={s.id}>{s.name}{s.isDefault ? ' ★' : ''}</option>)}
             </Select>
           )}
           <Select label="Banking Profile" onChange={onBankSelect}>
-            <option value="">-- Chọn tài khoản --</option>
+            <option value="">-- Select Account --</option>
             {banks.map(b => (<option key={b.id} value={b.id}>{b.alias || b.accountName}</option>))}
           </Select>
           <Select label="Invoice Theme" value={invoice.theme} onChange={(e) => updateInvoice('theme', e.target.value)}>
@@ -337,8 +337,8 @@ export const InvoiceEditor: React.FC<InvoiceEditorProps> = ({
             {/* Saved client selector */}
             {clients.length > 0 && (
               <div className="mb-6">
-                <Select label="Khách hàng đã lưu" onChange={e => onSelectClient(e.target.value)}>
-                  <option value="">-- Chọn nhanh khách hàng --</option>
+                <Select label="Saved Clients" onChange={e => onSelectClient(e.target.value)}>
+                  <option value="">-- Quick select client --</option>
                   {clients.map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}
                 </Select>
               </div>
