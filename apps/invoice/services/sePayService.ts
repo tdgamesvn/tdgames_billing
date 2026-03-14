@@ -1,4 +1,4 @@
-import { InvoiceData } from '../types';
+import { InvoiceData } from '@/types';
 
 // ── Config ──────────────────────────────────────────────────────
 const EDGE_FUNCTION_URL = import.meta.env.VITE_SEPAY_EDGE_FUNCTION_URL;

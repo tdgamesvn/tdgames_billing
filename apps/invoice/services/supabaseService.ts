@@ -1,5 +1,5 @@
-import { supabase } from './supabaseClient';
-import { InvoiceData, BankingInfo, ClientInfo, ClientRecord, StudioInfo, StudioRecord, AccountUser } from '../types';
+import { supabase } from '@/services/supabaseClient';
+import { InvoiceData, BankingInfo, ClientInfo, ClientRecord, StudioInfo, StudioRecord, AccountUser } from '@/types';
 
 export interface SaveResponse {
     success: boolean;

@@ -76,3 +76,117 @@ export interface AccountUser {
   username: string;
   role: 'admin' | 'member';
 }
+
+// ── Expense Module Types ──────────────────────────────────────
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+}
+
+export interface ExpenseRecord {
+  id?: string;
+  title: string;
+  amount: number;
+  currency: 'USD' | 'VND';
+  expense_date: string;
+  category_id: string | null;
+  category?: ExpenseCategory;
+  project: string;
+  client_name: string;
+  vendor: string;
+  payment_method: string;
+  status: 'pending' | 'approved' | 'paid';
+  notes: string;
+  receipt_url: string;
+  created_by: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface RecurringExpense {
+  id?: string;
+  title: string;
+  amount: number;
+  currency: 'USD' | 'VND';
+  category_id: string | null;
+  category?: ExpenseCategory;
+  project: string;
+  vendor: string;
+  frequency: 'monthly' | 'quarterly' | 'yearly';
+  next_run: string;
+  is_active: boolean;
+  created_at?: string;
+}
+
+// ── Workforce Module Types ────────────────────────────────────
+export interface Worker {
+  id?: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  type: 'freelancer' | 'inhouse';
+  bank_name: string;
+  bank_account: string;
+  tax_code: string;
+  notes: string;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export interface WorkerContract {
+  id?: string;
+  worker_id: string;
+  title: string;
+  start_date: string;
+  end_date: string | null;
+  rate_type: 'per_task' | 'monthly' | 'hourly';
+  rate_amount: number;
+  currency: string;
+  status: 'active' | 'completed' | 'terminated';
+  notes: string;
+  created_at?: string;
+}
+
+export interface WorkforceTask {
+  id?: string;
+  worker_id: string | null;
+  worker?: Worker;
+  project: string;
+  client_name: string;
+  title: string;
+  clickup_task_id: string | null;
+  clickup_list_id: string | null;
+  clickup_status: string | null;
+  status: 'in_progress' | 'completed' | 'approved' | 'rejected';
+  price: number;
+  currency: string;
+  completed_at: string | null;
+  approved_at: string | null;
+  notes: string;
+  synced_at: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Settlement {
+  id?: string;
+  worker_id: string;
+  worker?: Worker;
+  period: string;
+  total_tasks: number;
+  total_amount: number;
+  currency: string;
+  status: 'draft' | 'sent' | 'accepted' | 'paid';
+  expense_id: string | null;
+  notes: string;
+  created_at?: string;
+  tasks?: WorkforceTask[];
+}
+
+export interface SettlementTask {
+  id?: string;
+  settlement_id: string;
+  task_id: string;
+}

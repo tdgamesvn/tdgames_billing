@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DEFAULT_INVOICE } from '../constants';
-import { InvoiceData, ServiceItem, BankingInfo, ClientInfo, ClientRecord, StudioRecord, StudioInfo, AccountUser } from '../types';
-import { supabase } from '../services/supabaseClient';
+import { DEFAULT_INVOICE } from '@/constants';
+import { InvoiceData, ServiceItem, BankingInfo, ClientInfo, ClientRecord, StudioRecord, StudioInfo, AccountUser } from '@/types';
+import { supabase } from '@/services/supabaseClient';
 import { createAndPollDraft, getEInvoiceDetail } from '../services/sePayService';
 import { fetchExchangeRate, ExchangeRateData } from '../services/exchangeRateService';
 import {
