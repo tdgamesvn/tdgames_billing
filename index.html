@@ -81,6 +81,15 @@
       margin: 0;
     }
 
+    /* Hide native date picker icon – we use a custom overlay button */
+    .date-input-custom::-webkit-calendar-picker-indicator {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+      right: 0;
+    }
+
     /* Print Styles - Color-accurate PDF Export */
     @media print {
       @page {
