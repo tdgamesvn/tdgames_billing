@@ -33,5 +33,13 @@ export const APPS: AppConfig[] = [
     color: '#5856D6',
     gradient: 'linear-gradient(135deg, #5856D6 0%, #AF52DE 100%)',
   },
+  {
+    id: 'crm',
+    name: 'CRM',
+    icon: '👥',
+    description: 'Quản lý khách hàng tập trung',
+    color: '#0A84FF',
+    gradient: 'linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%)',
+  },
 ];
 

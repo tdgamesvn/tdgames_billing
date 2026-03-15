@@ -9,8 +9,8 @@ interface NavbarProps {
   accessibleTabs: Array<'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring'>;
   onTabChange: (tab: 'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring') => void;
   onLogout: () => void;
-  vcbRate: ExchangeRateData | null;
-  vcbRateLoading: boolean;
+  vcbRate?: ExchangeRateData | null;
+  vcbRateLoading?: boolean;
   onBack?: () => void;
   appName?: string;
   tabLabels?: Record<string, string>;
@@ -29,35 +29,37 @@ export const Navbar: React.FC<NavbarProps> = ({ theme, currentUser, activeTab, a
         <span className={`text-lg font-bold uppercase tracking-widest leading-none ${theme === 'dark' ? 'text-white' : 'text-black'}`}>TD Games {appName || 'Billing'}</span>
       </div>
 
-      {/* VCB USD/VND Exchange Rate */}
-      <div className={`hidden md:flex items-center gap-2.5 ml-3 px-4 py-1.5 rounded-xl border ${theme === 'dark' ? 'bg-surface/60 border-primary/15' : 'bg-gray-50 border-gray-200'}`}>
-        <div className="flex items-center gap-1">
-          <span className="text-primary text-sm font-black">USD</span>
-          <span className={`text-[10px] ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>→</span>
-          <span className={`text-sm font-black ${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-600'}`}>VND</span>
-        </div>
-        <div className={`w-px h-6 ${theme === 'dark' ? 'bg-white/10' : 'bg-gray-200'}`} />
-        {vcbRateLoading ? (
-          <span className="animate-pulse text-xs text-neutral-medium">loading...</span>
-        ) : vcbRate ? (
-          <div className="flex flex-col items-end leading-none">
-            <span className={`text-sm font-black tabular-nums ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-              {vcbRate.sell.toLocaleString('vi-VN')} <span className={`text-[9px] font-bold ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>₫</span>
-            </span>
-            <span className={`text-[8px] font-bold uppercase tracking-wider mt-0.5 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>
-              VCB • {(() => {
-                try {
-                  const d = new Date(vcbRate.updated_at);
-                  if (isNaN(d.getTime())) return vcbRate.updated_at;
-                  return d.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
-                } catch { return vcbRate.updated_at; }
-              })()}
-            </span>
+      {/* VCB USD/VND Exchange Rate — only render when props are passed */}
+      {(vcbRate !== undefined || vcbRateLoading) && (
+        <div className={`hidden md:flex items-center gap-2.5 ml-3 px-4 py-1.5 rounded-xl border ${theme === 'dark' ? 'bg-surface/60 border-primary/15' : 'bg-gray-50 border-gray-200'}`}>
+          <div className="flex items-center gap-1">
+            <span className="text-primary text-sm font-black">USD</span>
+            <span className={`text-[10px] ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>→</span>
+            <span className={`text-sm font-black ${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-600'}`}>VND</span>
           </div>
-        ) : (
-          <span className="text-neutral-medium text-xs">—</span>
-        )}
-      </div>
+          <div className={`w-px h-6 ${theme === 'dark' ? 'bg-white/10' : 'bg-gray-200'}`} />
+          {vcbRateLoading ? (
+            <span className="animate-pulse text-xs text-neutral-medium">loading...</span>
+          ) : vcbRate ? (
+            <div className="flex flex-col items-end leading-none">
+              <span className={`text-sm font-black tabular-nums ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                {vcbRate.sell.toLocaleString('vi-VN')} <span className={`text-[9px] font-bold ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>₫</span>
+              </span>
+              <span className={`text-[8px] font-bold uppercase tracking-wider mt-0.5 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>
+                VCB • {(() => {
+                  try {
+                    const d = new Date(vcbRate.updated_at);
+                    if (isNaN(d.getTime())) return vcbRate.updated_at;
+                    return d.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+                  } catch { return vcbRate.updated_at; }
+                })()}
+              </span>
+            </div>
+          ) : (
+            <span className="text-neutral-medium text-xs">—</span>
+          )}
+        </div>
+      )}
     </div>
 
     <div className="flex items-center gap-3">

@@ -5,8 +5,9 @@ import HomeScreen from './components/HomeScreen';
 import InvoiceApp from './apps/invoice/components/InvoiceApp';
 import ExpenseApp from './apps/expense/components/ExpenseApp';
 import WorkforceApp from './apps/workforce/components/WorkforceApp';
+import CrmApp from './apps/crm/components/CrmApp';
 
-const VALID_APPS = ['invoice', 'expense', 'workforce'];
+const VALID_APPS = ['invoice', 'expense', 'workforce', 'crm'];
 
 /** Parse hash like #workforce/tasks → { app: 'workforce', tab: 'tasks' } */
 const parseHash = (): { app: string | null; tab: string | null } => {
@@ -95,6 +96,10 @@ const App: React.FC = () => {
 
   if (activeApp === 'workforce') {
     return <WorkforceApp currentUser={currentUser} onBack={handleBack} initialTab={initialTab} />;
+  }
+
+  if (activeApp === 'crm') {
+    return <CrmApp currentUser={currentUser} onBack={handleBack} initialTab={initialTab} />;
   }
 
   // ── Home Screen ──

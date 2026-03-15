@@ -1,0 +1,168 @@
+import { supabase } from '@/services/supabaseClient';
+import { CrmClient, CrmContact, CrmDocument, CrmProject, CrmProjectFile } from '@/types';
+
+// ══════════════════════════════════════════════════════════════
+// ── Clients ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+export async function fetchClients(): Promise<CrmClient[]> {
+  const { data, error } = await supabase
+    .from('crm_clients')
+    .select('*, contacts:crm_contacts(*)')
+    .order('name');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createClient(
+  client: Omit<CrmClient, 'id' | 'created_at' | 'updated_at' | 'contacts'>
+): Promise<CrmClient> {
+  const { data, error } = await supabase
+    .from('crm_clients')
+    .insert(client)
+    .select('*, contacts:crm_contacts(*)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateClient(id: string, updates: Partial<CrmClient>): Promise<void> {
+  const { contacts, ...clean } = updates as any;
+  const { error } = await supabase
+    .from('crm_clients')
+    .update({ ...clean, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteClient(id: string): Promise<void> {
+  const { error } = await supabase.from('crm_clients').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── Contacts ──────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+export async function fetchContacts(clientId: string): Promise<CrmContact[]> {
+  const { data, error } = await supabase
+    .from('crm_contacts')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('is_primary', { ascending: false })
+    .order('name');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createContact(contact: Omit<CrmContact, 'id' | 'created_at'>): Promise<CrmContact> {
+  const { data, error } = await supabase.from('crm_contacts').insert(contact).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateContact(id: string, updates: Partial<CrmContact>): Promise<void> {
+  const { error } = await supabase.from('crm_contacts').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteContact(id: string): Promise<void> {
+  const { error } = await supabase.from('crm_contacts').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── Documents ─────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+export async function fetchDocuments(clientId?: string): Promise<CrmDocument[]> {
+  let q = supabase.from('crm_documents').select('*').order('created_at', { ascending: false });
+  if (clientId) q = q.eq('client_id', clientId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createDocument(doc: Omit<CrmDocument, 'id' | 'created_at'>): Promise<CrmDocument> {
+  const { data, error } = await supabase.from('crm_documents').insert(doc).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateDocument(id: string, updates: Partial<CrmDocument>): Promise<void> {
+  const { error } = await supabase.from('crm_documents').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  const { error } = await supabase.from('crm_documents').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── Projects ──────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+export async function fetchProjects(clientId?: string): Promise<CrmProject[]> {
+  let q = supabase.from('crm_projects').select('*, files:crm_project_files(*)').order('created_at', { ascending: false });
+  if (clientId) q = q.eq('client_id', clientId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createProject(proj: Omit<CrmProject, 'id' | 'created_at' | 'updated_at' | 'files'>): Promise<CrmProject> {
+  const { data, error } = await supabase.from('crm_projects').insert(proj).select('*, files:crm_project_files(*)').single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateProject(id: string, updates: Partial<CrmProject>): Promise<void> {
+  const { files, ...clean } = updates as any;
+  const { error } = await supabase.from('crm_projects').update({ ...clean, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  const { error } = await supabase.from('crm_projects').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ── Project Files ─────────────────────────────────────────────
+
+export async function createProjectFile(file: Omit<CrmProjectFile, 'id' | 'created_at'>): Promise<CrmProjectFile> {
+  const { data, error } = await supabase.from('crm_project_files').insert(file).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteProjectFile(id: string): Promise<void> {
+  const { error } = await supabase.from('crm_project_files').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── Invoice Sync (Payment Tracking — read-only) ──────────────
+// ══════════════════════════════════════════════════════════════
+
+export interface InvoiceRecord {
+  id: string;
+  invoice_number: string;
+  client_name: string;
+  status: string;
+  paid_date: string | null;
+  currency: string;
+  items: { id: string; description: string; quantity: number; unitPrice: number }[];
+  created_at: string;
+}
+
+export async function fetchInvoicesByClient(clientName?: string): Promise<InvoiceRecord[]> {
+  let q = supabase
+    .from('invoice_invoices')
+    .select('id, invoice_number, client_name, status, paid_date, currency, items, created_at')
+    .order('created_at', { ascending: false });
+  if (clientName) q = q.eq('client_name', clientName);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}

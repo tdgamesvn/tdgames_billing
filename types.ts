@@ -199,3 +199,79 @@ export interface SettlementTask {
   settlement_id: string;
   task_id: string;
 }
+
+// ── CRM ──────────────────────────────────────────────────────
+export interface CrmContact {
+  id: string;
+  client_id: string;
+  name: string;
+  role: string;
+  email: string;
+  phone: string;
+  is_primary: boolean;
+  notes: string;
+  created_at: string;
+}
+
+export interface CrmClient {
+  id: string;
+  name: string;
+  client_type: 'company' | 'individual';
+  contact_person: string;
+  email: string;
+  phone: string;
+  address: string;
+  country: string;
+  tax_code: string;
+  website: string;
+  industry: string;
+  status: 'lead' | 'contacted' | 'no_response' | 'responding' | 'negotiating' | 'contracting' | 'active' | 'paused' | 'completed' | 'lost';
+  lead_source: string;
+  lead_direction: string;
+  lead_source_detail: string;
+  notes: string;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+  contacts?: CrmContact[];
+}
+
+export interface CrmDocument {
+  id: string;
+  client_id: string;
+  doc_type: 'contract' | 'nda' | 'invoice' | 'proposal' | 'other';
+  title: string;
+  file_url: string;
+  file_name: string;
+  file_size: number;
+  notes: string;
+  created_at: string;
+}
+
+export interface CrmProject {
+  id: string;
+  client_id: string;
+  name: string;
+  description: string;
+  status: 'active' | 'completed' | 'paused' | 'cancelled';
+  start_date: string;
+  end_date: string;
+  budget: number;
+  currency: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  files?: CrmProjectFile[];
+}
+
+export interface CrmProjectFile {
+  id: string;
+  project_id: string;
+  title: string;
+  file_url: string;
+  file_type: 'document' | 'image' | 'link' | 'other';
+  file_name: string;
+  file_size: number;
+  notes: string;
+  created_at: string;
+}
