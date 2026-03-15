@@ -16,10 +16,11 @@ import { EmailModal } from './EmailModal';
 interface InvoiceAppProps {
   currentUser: AccountUser;
   onBack: () => void;
+  initialTab?: string | null;
 }
 
-const InvoiceApp: React.FC<InvoiceAppProps> = ({ currentUser, onBack }) => {
-  const state = useInvoiceState();
+const InvoiceApp: React.FC<InvoiceAppProps> = ({ currentUser, onBack, initialTab }) => {
+  const state = useInvoiceState(initialTab);
 
   // Sync the currentUser from parent
   React.useEffect(() => {

@@ -14,11 +14,21 @@ import {
   updateCategory,
   deleteCategory,
 } from '../services/expenseService';
+import { setHashTab } from '@/App';
 
 export type ExpenseTab = 'list' | 'add' | 'recurring' | 'categories';
 
-export function useExpenseState(currentUser: string) {
-  const [activeTab, setActiveTab] = useState<ExpenseTab>('list');
+const VALID_TABS: ExpenseTab[] = ['list', 'add', 'recurring', 'categories'];
+
+export function useExpenseState(currentUser: string, initialTab?: string | null) {
+  const [activeTab, _setActiveTab] = useState<ExpenseTab>(() => {
+    if (initialTab && VALID_TABS.includes(initialTab as ExpenseTab)) return initialTab as ExpenseTab;
+    return 'list';
+  });
+  const setActiveTab = useCallback((tab: ExpenseTab) => {
+    _setActiveTab(tab);
+    setHashTab(tab);
+  }, []);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [recurring, setRecurring] = useState<RecurringExpense[]>([]);

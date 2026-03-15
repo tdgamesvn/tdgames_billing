@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AccountUser } from '@/types';
 import { ToastNotification } from '@/components/ToastNotification';
 import { Navbar } from '@/apps/invoice/components/Navbar';
+import { fetchExchangeRate, ExchangeRateData } from '@/apps/invoice/services/exchangeRateService';
 import { useWorkforceState, WorkforceTab } from '../hooks/useWorkforceState';
 import WorkerList from './WorkerList';
 import WorkerForm from './WorkerForm';
@@ -12,6 +13,7 @@ import ClickUpConfig from './ClickUpConfig';
 interface WorkforceAppProps {
   currentUser: AccountUser;
   onBack: () => void;
+  initialTab?: string | null;
 }
 
 const TAB_MAP: Record<WorkforceTab, string> = {
@@ -38,11 +40,32 @@ const REVERSE_TAB: Record<string, WorkforceTab> = {
   dashboard: 'config',
 };
 
-const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack }) => {
-  const state = useWorkforceState(currentUser.username);
+const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack, initialTab }) => {
+  const state = useWorkforceState(currentUser.username, initialTab);
+
+  // ── Live VCB Exchange Rate ──
+  const [vcbRate, setVcbRate] = useState<ExchangeRateData | null>(null);
+  const [vcbRateLoading, setVcbRateLoading] = useState(false);
+
+  useEffect(() => {
+    const loadRate = async () => {
+      setVcbRateLoading(true);
+      try {
+        const data = await fetchExchangeRate();
+        setVcbRate(data);
+      } catch (err) {
+        console.warn('[VCB Rate] Failed to fetch:', err);
+      } finally {
+        setVcbRateLoading(false);
+      }
+    };
+    loadRate();
+    const interval = setInterval(loadRate, 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const navbarTab = TAB_MAP[state.activeTab];
-  const accessibleTabs = (['history', 'edit', 'recurring', 'activity', 'dashboard'] as const).map(t => t);
+  const accessibleTabs = (['history', 'recurring', 'activity', 'dashboard'] as const).map(t => t);
 
   const showToast = (message: string, type: 'success' | 'error') => {
     state.setToast({ message, type });
@@ -70,8 +93,8 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack }) => {
           state.setActiveTab(wfTab);
         }}
         onLogout={onBack}
-        vcbRate={null}
-        vcbRateLoading={false}
+        vcbRate={vcbRate}
+        vcbRateLoading={vcbRateLoading}
         onBack={onBack}
         appName="Workforce"
         tabLabels={TAB_LABELS}
@@ -89,6 +112,7 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack }) => {
             onDelete={state.handleDeleteWorker}
             onToggleActive={(w) => state.handleUpdateWorker(w.id!, { is_active: !w.is_active })}
             onRefresh={state.loadAll}
+            onAdd={() => { state.setEditingWorker(null); state.setActiveTab('workerForm'); }}
           />
         )}
         {state.activeTab === 'workerForm' && (
@@ -116,6 +140,7 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack }) => {
             onUpdate={state.handleUpdateTask}
             onRefresh={state.loadAll}
             onToast={showToast}
+            vcbSellRate={vcbRate?.sell || 0}
           />
         )}
         {state.activeTab === 'settlements' && (
@@ -123,6 +148,7 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack }) => {
             settlements={state.settlements}
             workers={state.workers}
             tasks={state.tasks}
+            vcbSellRate={vcbRate?.sell || 0}
             onCreateSettlement={state.handleCreateSettlement}
             onUpdateSettlement={state.handleUpdateSettlement}
             onDeleteSettlement={state.handleDeleteSettlement}

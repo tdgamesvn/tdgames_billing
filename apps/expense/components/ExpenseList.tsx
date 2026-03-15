@@ -15,6 +15,7 @@ interface Props {
   onDelete: (id: string) => void;
   onToggleStatus: (exp: ExpenseRecord) => void;
   onRefresh: () => void;
+  onAdd: () => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -36,7 +37,7 @@ const ExpenseList: React.FC<Props> = ({
   filterDateTo, setFilterDateTo,
   filterStatus, setFilterStatus,
   totalVND, totalUSD,
-  onEdit, onDelete, onToggleStatus, onRefresh,
+  onEdit, onDelete, onToggleStatus, onRefresh, onAdd,
 }) => {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const theme = 'dark';
@@ -54,9 +55,14 @@ const ExpenseList: React.FC<Props> = ({
           <h2 className="text-4xl font-black text-primary uppercase tracking-tighter">Expense History</h2>
           <p className="text-neutral-medium text-sm mt-2">Synced from Supabase</p>
         </div>
-        <Button onClick={onRefresh} variant="ghost" size="sm" disabled={isLoading}>
-          {isLoading ? '⏳ Loading...' : '🔄 Refresh'}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button onClick={onAdd} variant="primary" size="sm">
+            ＋ Thêm chi phí
+          </Button>
+          <Button onClick={onRefresh} variant="ghost" size="sm" disabled={isLoading}>
+            {isLoading ? '⏳ Loading...' : '🔄 Refresh'}
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards — 3 columns like Invoice Dashboard stat cards */}
@@ -134,6 +140,12 @@ const ExpenseList: React.FC<Props> = ({
                 {/* Row 2: Vendor + Project */}
                 <p className="text-sm font-semibold truncate text-white/70">{exp.vendor || 'Không có vendor'}</p>
                 {exp.project && <p className="text-[10px] truncate mt-0.5 text-neutral-medium/50">📁 {exp.project}</p>}
+                {exp.receipt_url && (
+                  <a href={exp.receipt_url} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] mt-0.5 text-primary/60 hover:text-primary transition-colors">
+                    📎 Xem hoá đơn
+                  </a>
+                )}
 
                 {/* Row 3: Badges */}
                 <div className="flex items-center gap-2 mt-3">

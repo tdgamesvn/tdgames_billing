@@ -127,7 +127,7 @@ export async function createSettlement(
     .single();
   if (sErr) throw sErr;
 
-  // 2. Link tasks
+  // 2. Link tasks (NO auto-mark paid — user decides when to mark paid)
   if (taskIds.length > 0) {
     const links = taskIds.map(tid => ({
       settlement_id: settlement.id,
@@ -135,13 +135,6 @@ export async function createSettlement(
     }));
     const { error: lErr } = await supabase.from('wf_settlement_tasks').insert(links);
     if (lErr) throw lErr;
-
-    // 3. Mark tasks as approved
-    const { error: tErr } = await supabase
-      .from('wf_tasks')
-      .update({ status: 'approved', approved_at: new Date().toISOString().split('T')[0], updated_at: new Date().toISOString() })
-      .in('id', taskIds);
-    if (tErr) throw tErr;
   }
 
   return settlement;
@@ -151,9 +144,37 @@ export async function updateSettlement(id: string, updates: Partial<Settlement>)
   const { worker, tasks, ...clean } = updates as any;
   const { error } = await supabase.from('wf_settlements').update(clean).eq('id', id);
   if (error) throw error;
+
+  // When marking as 'paid', also mark all linked tasks as paid
+  if (updates.status === 'paid') {
+    const { data: links } = await supabase.from('wf_settlement_tasks').select('task_id').eq('settlement_id', id);
+    if (links && links.length > 0) {
+      const taskIds = links.map((l: any) => l.task_id);
+      await supabase
+        .from('wf_tasks')
+        .update({ payment_status: 'paid', updated_at: new Date().toISOString() })
+        .in('id', taskIds);
+    }
+  }
 }
 
 export async function deleteSettlement(id: string): Promise<void> {
+  // 1. Get linked task IDs before deleting
+  const { data: links } = await supabase.from('wf_settlement_tasks').select('task_id').eq('settlement_id', id);
+
+  // 2. Delete link records
+  await supabase.from('wf_settlement_tasks').delete().eq('settlement_id', id);
+
+  // 3. Rollback linked tasks to unpaid
+  if (links && links.length > 0) {
+    const taskIds = links.map((l: any) => l.task_id);
+    await supabase
+      .from('wf_tasks')
+      .update({ payment_status: 'unpaid', updated_at: new Date().toISOString() })
+      .in('id', taskIds);
+  }
+
+  // 4. Delete settlement
   const { error } = await supabase.from('wf_settlements').delete().eq('id', id);
   if (error) throw error;
 }

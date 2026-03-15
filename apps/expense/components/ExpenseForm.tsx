@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ExpenseRecord, ExpenseCategory } from '@/types';
+
+const R2_UPLOAD_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/r2-expense-upload`;
 
 interface Props {
   categories: ExpenseCategory[];
@@ -34,8 +36,13 @@ const EMPTY: Omit<ExpenseRecord, 'id' | 'created_at' | 'updated_at' | 'category'
   created_by: '',
 };
 
+const ACCEPTED_TYPES = '.pdf,.jpg,.jpeg,.png,.webp';
+const MAX_SIZE_MB = 10;
+
 const ExpenseForm: React.FC<Props> = ({ categories, editingExpense, onSave, onUpdate, onCancel }) => {
   const [form, setForm] = useState(EMPTY);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const isEditing = !!editingExpense;
 
   useEffect(() => {
@@ -58,6 +65,57 @@ const ExpenseForm: React.FC<Props> = ({ categories, editingExpense, onSave, onUp
       onSave(form);
     }
   };
+
+  // ── File Upload to R2 ──
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      alert(`File quá lớn! Tối đa ${MAX_SIZE_MB}MB.`);
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(R2_UPLOAD_URL, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+
+      update('receipt_url', data.url);
+    } catch (err: any) {
+      alert('Upload thất bại: ' + (err.message || 'Unknown error'));
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const handleRemoveReceipt = async () => {
+    if (!form.receipt_url) return;
+    try {
+      // Extract R2 key from public URL (everything after the domain)
+      const url = new URL(form.receipt_url);
+      const key = url.pathname.replace(/^\//, '');
+      if (key) {
+        await fetch(R2_UPLOAD_URL, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key }),
+        });
+      }
+    } catch { /* ignore delete errors */ }
+    update('receipt_url', '');
+  };
+
+  const isImageUrl = (url: string) => /\.(jpg|jpeg|png|webp|gif)$/i.test(url);
 
   const inputClass = "w-full bg-transparent border border-primary/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all";
   const labelClass = "block text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2";
@@ -143,10 +201,66 @@ const ExpenseForm: React.FC<Props> = ({ categories, editingExpense, onSave, onUp
               </select>
             </div>
 
-            {/* Receipt URL */}
+            {/* Receipt Upload */}
             <div>
-              <label className={labelClass}>URL Hoá đơn / Receipt</label>
-              <input type="url" value={form.receipt_url} onChange={e => update('receipt_url', e.target.value)} className={inputClass} placeholder="https://..." />
+              <label className={labelClass}>Hoá đơn / Receipt</label>
+              {form.receipt_url ? (
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-primary/10 bg-black/20">
+                  {isImageUrl(form.receipt_url) ? (
+                    <a href={form.receipt_url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                      <img src={form.receipt_url} alt="Receipt" className="w-14 h-14 object-cover rounded-lg border border-white/10" />
+                    </a>
+                  ) : (
+                    <a href={form.receipt_url} target="_blank" rel="noopener noreferrer"
+                      className="flex-shrink-0 w-14 h-14 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                      <span className="text-2xl">📄</span>
+                    </a>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <a href={form.receipt_url} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline truncate block">
+                      {decodeURIComponent(form.receipt_url.split('/').pop() || 'File')}
+                    </a>
+                    <p className="text-[10px] text-neutral-medium mt-0.5">Bấm để xem</p>
+                  </div>
+                  <button type="button" onClick={handleRemoveReceipt}
+                    className="flex-shrink-0 p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors" title="Xoá file">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept={ACCEPTED_TYPES}
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                    className="hidden"
+                    id="receipt-upload"
+                  />
+                  <label htmlFor="receipt-upload"
+                    className={`flex items-center justify-center gap-3 w-full py-4 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
+                      uploading
+                        ? 'border-primary/30 bg-primary/5 cursor-wait'
+                        : 'border-primary/10 hover:border-primary/30 hover:bg-primary/5'
+                    }`}>
+                    {uploading ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                        <span className="text-sm text-primary font-bold">Đang upload...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 text-primary/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <span className="text-sm text-neutral-medium">Chọn file PDF, JPG, PNG (tối đa {MAX_SIZE_MB}MB)</span>
+                      </>
+                    )}
+                  </label>
+                </div>
+              )}
             </div>
 
             {/* Notes */}
@@ -174,3 +288,4 @@ const ExpenseForm: React.FC<Props> = ({ categories, editingExpense, onSave, onUp
 };
 
 export default ExpenseForm;
+

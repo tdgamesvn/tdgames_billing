@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Worker, WorkforceTask } from '@/types';
 import * as clickup from '../services/clickupService';
-import { ClickUpConfig, ClickUpSpace, ClickUpList } from '../services/clickupService';
+import { ClickUpConfig, ClickUpSpace, ClickUpList, ListContext } from '../services/clickupService';
 import * as wfSvc from '../services/workforceService';
 
 interface TaskListProps {
@@ -15,6 +15,7 @@ interface TaskListProps {
   onUpdate: (id: string, updates: Partial<WorkforceTask>) => void;
   onRefresh: () => void;
   onToast: (msg: string, type: 'success' | 'error') => void;
+  vcbSellRate: number;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -28,25 +29,47 @@ const TaskList: React.FC<TaskListProps> = ({
   tasks, workers, isLoading,
   filterStatus, setFilterStatus,
   filterWorker, setFilterWorker,
-  onUpdate, onRefresh, onToast,
+  onUpdate, onRefresh, onToast, vcbSellRate,
 }) => {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ synced: number; skipped: number; total: number } | null>(null);
   const [config, setConfig] = useState<ClickUpConfig | null>(null);
+  const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
+  const [filterSpace, setFilterSpace] = useState('');
+  const [filterFolder, setFilterFolder] = useState('');
+  const [filterList, setFilterList] = useState('');
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editPrice, setEditPrice] = useState('');
+  const [editCurrency, setEditCurrency] = useState('VND');
+  const [editRate, setEditRate] = useState('');
+  const [editBonus, setEditBonus] = useState('');
+  const [editBonusNote, setEditBonusNote] = useState('');
+  const [editNotes, setEditNotes] = useState('');
 
   useEffect(() => {
     clickup.loadConfig().then(c => setConfig(c)).catch(() => {});
   }, []);
 
   const totalPrice = tasks.reduce((s, t) => s + (t.price || 0), 0);
-  const approvedCount = tasks.filter(t => t.status === 'approved').length;
+  const closedCount = tasks.filter(t => !!t.closed_date).length;
+  const unpaidCount = tasks.filter(t => t.payment_status !== 'paid' && !!t.closed_date).length;
+
+  // Apply local hierarchy filters
+  const filteredDisplayTasks = tasks.filter(t => {
+    if (filterSpace && t.clickup_space_name !== filterSpace) return false;
+    if (filterFolder && t.clickup_folder_name !== filterFolder) return false;
+    if (filterList && t.clickup_list_name !== filterList) return false;
+    return true;
+  });
 
   // ── Map ClickUp status → our status ──
   const mapStatus = (clickupStatus: string): WorkforceTask['status'] => {
     const lower = clickupStatus.toLowerCase();
     if (['closed', 'done', 'complete', 'approved'].some(s => lower.includes(s))) return 'approved';
-    if (['review', 'qa', 'testing'].some(s => lower.includes(s))) return 'completed';
     if (['rejected', 'cancelled', 'canceled'].some(s => lower.includes(s))) return 'rejected';
+    // Only internal review/QA = completed; client_review remains in_progress
+    if (lower.includes('client')) return 'in_progress';
+    if (['review', 'qa', 'testing'].some(s => lower.includes(s))) return 'completed';
     return 'in_progress';
   };
 
@@ -60,6 +83,16 @@ const TaskList: React.FC<TaskListProps> = ({
     const selectedListIds = config.spaces
       .flatMap((sp: ClickUpSpace) => sp.lists.filter((l: ClickUpList) => l.selected).map((l: ClickUpList) => l.id));
 
+    // Build listContexts with hierarchy info
+    const listContexts: ListContext[] = config.spaces.flatMap((sp: ClickUpSpace) =>
+      sp.lists.filter((l: ClickUpList) => l.selected).map((l: ClickUpList) => ({
+        list_id: l.id,
+        list_name: l.name,
+        folder_name: l.folder || null,
+        space_name: sp.name,
+      }))
+    );
+
     if (selectedListIds.length === 0) {
       onToast('Chưa chọn list nào — vào tab Cấu hình để chọn lists', 'error');
       return;
@@ -68,8 +101,8 @@ const TaskList: React.FC<TaskListProps> = ({
     setSyncing(true);
     setSyncResult(null);
     try {
-      // 1. Fetch tasks from ClickUp
-      const data = await clickup.syncTasks(config.api_token, config.team_id, selectedListIds);
+      // 1. Fetch tasks from ClickUp with hierarchy context
+      const data = await clickup.syncTasks(config.api_token, config.team_id, selectedListIds, listContexts);
       const clickupTasks = data.tasks;
 
       // 2. Build worker email → worker map
@@ -98,7 +131,12 @@ const TaskList: React.FC<TaskListProps> = ({
         // Check if task already exists
         const existing = tasks.find(t => t.clickup_task_id === ct.clickup_task_id);
         const ourStatus = mapStatus(ct.clickup_status);
-        const completedAt = ct.date_done ? ct.date_done.split('T')[0] : null;
+        const startDate = ct.date_created ? ct.date_created.split('T')[0] : null;
+        // Use date_done if available; fallback to date_updated for closed/approved tasks
+        let closedDate = ct.date_done ? ct.date_done.split('T')[0] : null;
+        if (!closedDate && (ourStatus === 'approved' || ourStatus === 'completed') && ct.date_updated) {
+          closedDate = ct.date_updated.split('T')[0];
+        }
 
         if (existing) {
           // Update existing
@@ -106,7 +144,12 @@ const TaskList: React.FC<TaskListProps> = ({
             title: ct.title,
             clickup_status: ct.clickup_status,
             status: ourStatus,
-            completed_at: completedAt,
+            start_date: startDate,
+            closed_date: closedDate,
+            completed_at: closedDate,
+            clickup_space_name: ct.space_name || null,
+            clickup_folder_name: ct.folder_name || null,
+            clickup_list_name: ct.list_name || null,
             synced_at: new Date().toISOString(),
             worker_id: matchedWorker.id!,
           });
@@ -114,17 +157,26 @@ const TaskList: React.FC<TaskListProps> = ({
           // Insert new
           await wfSvc.saveTask({
             worker_id: matchedWorker.id!,
-            project: ct.list_name || '',
-            client_name: '',
+            project: ct.folder_name || ct.list_name || '',
+            client_name: ct.space_name || '',
             title: ct.title,
             clickup_task_id: ct.clickup_task_id,
             clickup_list_id: ct.clickup_list_id,
             clickup_status: ct.clickup_status,
+            clickup_space_name: ct.space_name || null,
+            clickup_folder_name: ct.folder_name || null,
+            clickup_list_name: ct.list_name || null,
             status: ourStatus,
             price: 0,
             currency: 'VND',
-            completed_at: completedAt,
-            approved_at: ourStatus === 'approved' ? (completedAt || new Date().toISOString().split('T')[0]) : null,
+            exchange_rate: 0,
+            bonus: 0,
+            bonus_note: '',
+            start_date: startDate,
+            closed_date: closedDate,
+            completed_at: closedDate,
+            approved_at: ourStatus === 'approved' ? (closedDate || new Date().toISOString().split('T')[0]) : null,
+            payment_status: 'unpaid',
             notes: '',
             synced_at: new Date().toISOString(),
           });
@@ -175,14 +227,18 @@ const TaskList: React.FC<TaskListProps> = ({
       )}
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <div className="p-5 rounded-[20px] border border-primary/10 bg-surface">
           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Tổng task</p>
           <p className="text-3xl font-black text-white">{tasks.length}</p>
         </div>
         <div className="p-5 rounded-[20px] border border-primary/10 bg-surface">
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Đã duyệt</p>
-          <p className="text-3xl font-black text-emerald-400">{approvedCount}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Đã đóng</p>
+          <p className="text-3xl font-black text-emerald-400">{closedCount}</p>
+        </div>
+        <div className="p-5 rounded-[20px] border border-primary/10 bg-surface">
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Chưa thanh toán</p>
+          <p className="text-3xl font-black text-amber-400">{unpaidCount}</p>
         </div>
         <div className="p-5 rounded-[20px] border border-primary/10 bg-surface">
           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Tổng giá trị</p>
@@ -203,7 +259,38 @@ const TaskList: React.FC<TaskListProps> = ({
           <option value="">Tất cả nhân sự</option>
           {workers.map(w => <option key={w.id} value={w.id}>{w.full_name}</option>)}
         </select>
-        <span className="text-neutral-medium text-xs ml-auto">{tasks.length} tasks</span>
+        <select className="bg-surface border border-primary/10 text-neutral-light rounded-xl px-4 h-[44px] text-sm focus:outline-none focus:border-primary/40 transition-all" value={filterSpace} onChange={e => { setFilterSpace(e.target.value); setFilterFolder(''); setFilterList(''); }}>
+          <option value="">Tất cả khách hàng</option>
+          {[...new Set(tasks.map(t => t.clickup_space_name).filter(Boolean))].sort().map(s => <option key={s} value={s!}>{s}</option>)}
+        </select>
+        <select className="bg-surface border border-primary/10 text-neutral-light rounded-xl px-4 h-[44px] text-sm focus:outline-none focus:border-primary/40 transition-all" value={filterFolder} onChange={e => { setFilterFolder(e.target.value); setFilterList(''); }}>
+          <option value="">Tất cả project</option>
+          {[...new Set(tasks.filter(t => !filterSpace || t.clickup_space_name === filterSpace).map(t => t.clickup_folder_name).filter(Boolean))].sort().map(f => <option key={f} value={f!}>{f}</option>)}
+        </select>
+        <select className="bg-surface border border-primary/10 text-neutral-light rounded-xl px-4 h-[44px] text-sm focus:outline-none focus:border-primary/40 transition-all" value={filterList} onChange={e => setFilterList(e.target.value)}>
+          <option value="">Tất cả list</option>
+          {[...new Set(tasks.filter(t => (!filterSpace || t.clickup_space_name === filterSpace) && (!filterFolder || t.clickup_folder_name === filterFolder)).map(t => t.clickup_list_name).filter(Boolean))].sort().map(l => <option key={l} value={l!}>{l}</option>)}
+        </select>
+        <span className="text-neutral-medium text-xs ml-auto mr-3">{filteredDisplayTasks.length} / {tasks.length} tasks</span>
+        {/* View Toggle */}
+        <div className="flex items-center bg-surface border border-primary/10 rounded-xl overflow-hidden">
+          <button
+            onClick={() => setViewMode('board')}
+            className={`px-3 h-[44px] text-sm font-bold transition-all flex items-center gap-1.5 ${viewMode === 'board' ? 'bg-primary/20 text-primary' : 'text-neutral-medium hover:text-white'}`}
+            title="Board View"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+            Board
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`px-3 h-[44px] text-sm font-bold transition-all flex items-center gap-1.5 ${viewMode === 'list' ? 'bg-primary/20 text-primary' : 'text-neutral-medium hover:text-white'}`}
+            title="List View"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+            List
+          </button>
+        </div>
       </div>
 
       {/* Loading */}
@@ -224,10 +311,10 @@ const TaskList: React.FC<TaskListProps> = ({
         </div>
       )}
 
-      {/* Task Cards */}
-      {!isLoading && tasks.length > 0 && (
+      {/* Task Cards — Board View */}
+      {!isLoading && tasks.length > 0 && viewMode === 'board' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {tasks.map(t => {
+          {filteredDisplayTasks.map(t => {
             const workerName = t.worker?.full_name || workers.find(w => w.id === t.worker_id)?.full_name || 'Chưa assign';
             const isFromClickUp = !!t.clickup_task_id;
             return (
@@ -239,30 +326,191 @@ const TaskList: React.FC<TaskListProps> = ({
                   'from-blue-500 to-blue-600'
                 }`} />
                 <div className="p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <h3 className="text-white font-bold text-sm line-clamp-2 pr-2">{t.title}</h3>
-                    <span className={`shrink-0 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                  {/* Row 1: Title + Status badge */}
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h3 className="text-white font-bold text-sm line-clamp-2 leading-snug">{t.title}</h3>
+                    <span className={`shrink-0 text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg ${
                       t.status === 'approved' ? 'bg-emerald-500/20 text-emerald-400' :
                       t.status === 'completed' ? 'bg-yellow-500/20 text-yellow-400' :
                       t.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
                       'bg-blue-500/20 text-blue-400'
                     }`}>{STATUS_LABELS[t.status]}</span>
                   </div>
-                  <p className="text-neutral-medium text-xs mb-1">👤 {workerName}</p>
-                  {t.project && <p className="text-neutral-medium/60 text-xs">📁 {t.project}</p>}
-                  {t.client_name && <p className="text-neutral-medium/60 text-xs">🏢 {t.client_name}</p>}
-                  {isFromClickUp && (
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-400">ClickUp</span>
-                      {t.clickup_status && <span className="text-neutral-medium/50 text-[10px]">{t.clickup_status}</span>}
+
+                  {/* Row 2: Breadcrumb hierarchy (Space | Folder | List) */}
+                  {(t.clickup_space_name || t.clickup_folder_name || t.clickup_list_name) && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-neutral-medium/70 mb-2 flex-wrap">
+                      {t.clickup_space_name && <span className="bg-white/5 px-1.5 py-0.5 rounded">{t.clickup_space_name}</span>}
+                      {t.clickup_space_name && t.clickup_folder_name && <span className="text-neutral-medium/30">|</span>}
+                      {t.clickup_folder_name && <span className="bg-white/5 px-1.5 py-0.5 rounded">{t.clickup_folder_name}</span>}
+                      {(t.clickup_space_name || t.clickup_folder_name) && t.clickup_list_name && <span className="text-neutral-medium/30">|</span>}
+                      {t.clickup_list_name && <span className="bg-white/5 px-1.5 py-0.5 rounded">{t.clickup_list_name}</span>}
                     </div>
                   )}
-                  <p className="text-primary font-black text-lg mt-3">
-                    {t.price > 0 ? `${t.price.toLocaleString()} ` : '— '}
-                    <span className="text-xs text-neutral-medium">{t.currency}</span>
-                  </p>
-                  {t.synced_at && (
-                    <p className="text-neutral-medium/40 text-[10px] mt-1">🔄 {new Date(t.synced_at).toLocaleString('vi-VN')}</p>
+
+                  {/* Row 3: Worker + Dates (spread across) */}
+                  <div className="flex items-center justify-between text-xs text-neutral-medium mb-2">
+                    <span>👤 {workerName}</span>
+                    <div className="flex items-center gap-2 text-[10px] text-neutral-medium/50">
+                      {t.start_date && <span>🟢 {t.start_date}</span>}
+                      {t.closed_date && <span>🔴 {t.closed_date}</span>}
+                    </div>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-white/5 my-2" />
+
+                  {/* Row 4: ClickUp Status + Payment Status */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {isFromClickUp && t.clickup_status && (
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/20">
+                        {t.clickup_status}
+                      </span>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        const next = t.payment_status === 'paid' ? 'unpaid' : 'paid';
+                        onUpdate(t.id!, { payment_status: next });
+                        onToast(next === 'paid' ? '💰 Đã đánh dấu thanh toán' : '⏳ Đã chuyển về chưa thanh toán', 'success');
+                      }}
+                      className={`text-[9px] font-bold px-2.5 py-1 rounded-md cursor-pointer hover:scale-105 active:scale-95 transition-all ${
+                        t.payment_status === 'paid'
+                          ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                          : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
+                      }`}
+                      title="Click để đổi trạng thái thanh toán"
+                    >
+                      {t.payment_status === 'paid' ? '💰 Đã TT' : '⏳ Chưa TT'}
+                    </button>
+                    {t.synced_at && (
+                      <span className="text-neutral-medium/30 text-[9px] ml-auto">🔄 {new Date(t.synced_at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    )}
+                  </div>
+                  {/* Price Editor */}
+                  {editingPriceId === t.id ? (
+                    <div className="mt-3 space-y-2 p-3 rounded-xl bg-black/30 border border-primary/20">
+                      {/* Price + Currency */}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={editPrice}
+                          onChange={e => setEditPrice(e.target.value)}
+                          placeholder="Giá tiền"
+                          className="flex-1 bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => {
+                            const next = editCurrency === 'VND' ? 'USD' : 'VND';
+                            setEditCurrency(next);
+                            if (next === 'USD' && vcbSellRate > 0) setEditRate(String(vcbSellRate));
+                            if (next === 'VND') setEditRate('');
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest border transition-all ${
+                            editCurrency === 'USD'
+                              ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                              : 'bg-primary/20 text-primary border-primary/30'
+                          }`}
+                        >
+                          {editCurrency}
+                        </button>
+                      </div>
+                      {/* Exchange rate row (USD only) */}
+                      {editCurrency === 'USD' && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-neutral-medium text-[10px] whitespace-nowrap">Tỉ giá:</span>
+                          <input
+                            type="number"
+                            value={editRate}
+                            onChange={e => setEditRate(e.target.value)}
+                            placeholder="VD: 25500"
+                            className="flex-1 bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50"
+                          />
+                          {editPrice && editRate && (
+                            <span className="text-emerald-400 text-[10px] font-bold whitespace-nowrap">
+                              = {(parseFloat(editPrice) * parseFloat(editRate)).toLocaleString()} VNĐ
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {/* Bonus */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-neutral-medium text-[10px] whitespace-nowrap">Bonus:</span>
+                        <input
+                          type="number"
+                          value={editBonus}
+                          onChange={e => setEditBonus(e.target.value)}
+                          placeholder="0"
+                          className="w-28 bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50"
+                        />
+                        <input
+                          type="text"
+                          value={editBonusNote}
+                          onChange={e => setEditBonusNote(e.target.value)}
+                          placeholder="Lý do bonus"
+                          className="flex-1 bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50"
+                        />
+                      </div>
+                      {/* Notes */}
+                      <input
+                        type="text"
+                        value={editNotes}
+                        onChange={e => setEditNotes(e.target.value)}
+                        placeholder="Ghi chú"
+                        className="w-full bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50"
+                      />
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            const p = parseFloat(editPrice) || 0;
+                            const r = parseFloat(editRate) || 0;
+                            const b = parseFloat(editBonus) || 0;
+                            onUpdate(t.id!, { price: p, currency: editCurrency, exchange_rate: r, bonus: b, bonus_note: editBonusNote, notes: editNotes });
+                            setEditingPriceId(null);
+                          }}
+                          className="flex-1 py-1.5 rounded-lg bg-primary text-black font-black text-[10px] uppercase tracking-widest hover:bg-primary/90 transition-all"
+                        >Lưu</button>
+                        <button
+                          onClick={() => setEditingPriceId(null)}
+                          className="flex-1 py-1.5 rounded-lg border border-primary/20 text-neutral-medium font-black text-[10px] uppercase tracking-widest hover:text-white transition-all"
+                        >Hủy</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className="mt-3 cursor-pointer group/price hover:bg-white/5 rounded-lg px-2 py-1 -mx-2 transition-all"
+                      onClick={() => {
+                        setEditingPriceId(t.id!);
+                        setEditPrice(t.price > 0 ? String(t.price) : '');
+                        setEditCurrency(t.currency || 'VND');
+                        setEditRate(t.exchange_rate > 0 ? String(t.exchange_rate) : (t.currency === 'USD' && vcbSellRate > 0 ? String(vcbSellRate) : ''));
+                        setEditBonus(t.bonus > 0 ? String(t.bonus) : '');
+                        setEditBonusNote(t.bonus_note || '');
+                        setEditNotes(t.notes || '');
+                      }}
+                    >
+                      <p className="text-primary font-black text-lg">
+                        {t.price > 0 ? `${t.price.toLocaleString()} ` : '— '}
+                        <span className="text-xs text-neutral-medium">{t.currency}</span>
+                        <span className="text-[10px] text-neutral-medium/40 ml-2 opacity-0 group-hover/price:opacity-100 transition-opacity">✏️ sửa</span>
+                      </p>
+                      {t.currency === 'USD' && t.exchange_rate > 0 && t.price > 0 && (
+                        <p className="text-emerald-400/80 text-[10px] font-bold">
+                          = {(t.price * t.exchange_rate).toLocaleString()} VNĐ (tỉ giá: {t.exchange_rate.toLocaleString()})
+                        </p>
+                      )}
+                      {t.bonus > 0 && (
+                        <p className="text-yellow-400/80 text-[10px] font-bold">
+                          + Bonus: {t.bonus.toLocaleString()} {t.currency}{t.bonus_note ? ` — ${t.bonus_note}` : ''}
+                        </p>
+                      )}
+                      {t.notes && (
+                        <p className="text-neutral-medium/50 text-[10px] mt-0.5 italic">📝 {t.notes}</p>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -270,6 +518,140 @@ const TaskList: React.FC<TaskListProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Task Table — List View */}
+      {!isLoading && tasks.length > 0 && viewMode === 'list' && (
+        <div className="rounded-[20px] border border-primary/10 bg-surface overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-primary/10">
+                  <th className="text-left px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">#</th>
+                  <th className="text-left px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium min-w-[280px]">Task</th>
+                  <th className="text-left px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">Nhân sự</th>
+                  <th className="text-left px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">Trạng thái</th>
+                  <th className="text-left px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">Thanh toán</th>
+                  <th className="text-right px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">Giá</th>
+                  <th className="text-left px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">Ngày tạo</th>
+                  <th className="text-left px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">Ngày đóng</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDisplayTasks.map((t, idx) => {
+                  const workerName = t.worker?.full_name || workers.find(w => w.id === t.worker_id)?.full_name || '—';
+                  return (
+                    <tr
+                      key={t.id}
+                      className={`border-b border-white/5 hover:bg-white/3 transition-all cursor-pointer ${
+                        editingPriceId === t.id ? 'bg-primary/5' : ''
+                      }`}
+                      onClick={() => {
+                        if (editingPriceId === t.id) return;
+                        setEditingPriceId(t.id!);
+                        setEditPrice(t.price > 0 ? String(t.price) : '');
+                        setEditCurrency(t.currency || 'VND');
+                        setEditRate(t.exchange_rate > 0 ? String(t.exchange_rate) : (t.currency === 'USD' && vcbSellRate > 0 ? String(vcbSellRate) : ''));
+                        setEditBonus(t.bonus > 0 ? String(t.bonus) : '');
+                        setEditBonusNote(t.bonus_note || '');
+                        setEditNotes(t.notes || '');
+                      }}
+                    >
+                      <td className="px-5 py-3 text-neutral-medium/50 text-xs">{idx + 1}</td>
+                      <td className="px-5 py-3">
+                        <p className="text-white font-semibold text-sm leading-snug line-clamp-1">{t.title}</p>
+                        {(t.clickup_space_name || t.clickup_folder_name || t.clickup_list_name) && (
+                          <p className="text-[10px] text-neutral-medium/50 mt-0.5">
+                            {[t.clickup_space_name, t.clickup_folder_name, t.clickup_list_name].filter(Boolean).join(' › ')}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-neutral-medium text-xs whitespace-nowrap">{workerName}</td>
+                      <td className="px-5 py-3">
+                        <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                          t.status === 'approved' ? 'bg-emerald-500/20 text-emerald-400' :
+                          t.status === 'completed' ? 'bg-yellow-500/20 text-yellow-400' :
+                          t.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
+                          'bg-blue-500/20 text-blue-400'
+                        }`}>{STATUS_LABELS[t.status]}</span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            const next = t.payment_status === 'paid' ? 'unpaid' : 'paid';
+                            onUpdate(t.id!, { payment_status: next });
+                            onToast(next === 'paid' ? '💰 Đã đánh dấu thanh toán' : '⏳ Đã chuyển về chưa thanh toán', 'success');
+                          }}
+                          className={`text-[9px] font-bold px-2.5 py-1 rounded-md cursor-pointer hover:scale-105 active:scale-95 transition-all ${
+                            t.payment_status === 'paid'
+                              ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                              : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
+                          }`}
+                          title="Click để đổi trạng thái thanh toán"
+                        >
+                          {t.payment_status === 'paid' ? 'Đã TT' : 'Chưa TT'}
+                        </button>
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <span className="text-primary font-bold text-sm">
+                          {t.price > 0 ? t.price.toLocaleString() : '—'}
+                        </span>
+                        <span className="text-neutral-medium/50 text-[10px] ml-1">{t.currency}</span>
+                        {t.bonus > 0 && (
+                          <p className="text-yellow-400/70 text-[10px] font-bold">+{t.bonus.toLocaleString()}</p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-neutral-medium/50 text-xs whitespace-nowrap">{t.start_date || '—'}</td>
+                      <td className="px-5 py-3 text-neutral-medium/50 text-xs whitespace-nowrap">{t.closed_date || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Inline Price Editor (appears below table when a row is clicked) */}
+          {editingPriceId && (
+            <div className="border-t border-primary/20 p-5 bg-black/20">
+              <div className="max-w-2xl space-y-3">
+                <p className="text-white font-bold text-sm mb-2">
+                  ✏️ {filteredDisplayTasks.find(t => t.id === editingPriceId)?.title}
+                </p>
+                <div className="flex items-center gap-2">
+                  <input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} placeholder="Giá tiền"
+                    className="flex-1 bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50" autoFocus />
+                  <button onClick={() => { const next = editCurrency === 'VND' ? 'USD' : 'VND'; setEditCurrency(next); if (next === 'USD' && vcbSellRate > 0) setEditRate(String(vcbSellRate)); if (next === 'VND') setEditRate(''); }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase border transition-all ${editCurrency === 'USD' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-primary/20 text-primary border-primary/30'}`}>{editCurrency}</button>
+                </div>
+                {editCurrency === 'USD' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-neutral-medium text-[10px]">Tỉ giá:</span>
+                    <input type="number" value={editRate} onChange={e => setEditRate(e.target.value)} placeholder="VD: 25500"
+                      className="flex-1 bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50" />
+                    {editPrice && editRate && <span className="text-emerald-400 text-[10px] font-bold">= {(parseFloat(editPrice) * parseFloat(editRate)).toLocaleString()} VNĐ</span>}
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-neutral-medium text-[10px]">Bonus:</span>
+                  <input type="number" value={editBonus} onChange={e => setEditBonus(e.target.value)} placeholder="0"
+                    className="w-28 bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50" />
+                  <input type="text" value={editBonusNote} onChange={e => setEditBonusNote(e.target.value)} placeholder="Lý do bonus"
+                    className="flex-1 bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50" />
+                </div>
+                <input type="text" value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="Ghi chú"
+                  className="w-full bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50" />
+                <div className="flex gap-2">
+                  <button onClick={() => { const p = parseFloat(editPrice) || 0; const r = parseFloat(editRate) || 0; const b = parseFloat(editBonus) || 0; onUpdate(editingPriceId!, { price: p, currency: editCurrency, exchange_rate: r, bonus: b, bonus_note: editBonusNote, notes: editNotes }); setEditingPriceId(null); }}
+                    className="py-1.5 px-6 rounded-lg bg-primary text-black font-black text-[10px] uppercase tracking-widest hover:bg-primary/90 transition-all">Lưu</button>
+                  <button onClick={() => setEditingPriceId(null)}
+                    className="py-1.5 px-6 rounded-lg border border-primary/20 text-neutral-medium font-black text-[10px] uppercase tracking-widest hover:text-white transition-all">Hủy</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

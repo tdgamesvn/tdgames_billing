@@ -1,11 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Worker, WorkerContract, WorkforceTask, Settlement } from '@/types';
 import * as svc from '../services/workforceService';
+import { supabase } from '@/services/supabaseClient';
+import { setHashTab } from '@/App';
 
 export type WorkforceTab = 'workers' | 'workerForm' | 'tasks' | 'settlements' | 'config';
 
-export function useWorkforceState(currentUsername: string) {
-  const [activeTab, setActiveTab] = useState<WorkforceTab>('workers');
+const VALID_TABS: WorkforceTab[] = ['workers', 'workerForm', 'tasks', 'settlements', 'config'];
+
+export function useWorkforceState(currentUsername: string, initialTab?: string | null) {
+  const [activeTab, _setActiveTab] = useState<WorkforceTab>(() => {
+    if (initialTab && VALID_TABS.includes(initialTab as WorkforceTab)) return initialTab as WorkforceTab;
+    return 'workers';
+  });
+  const setActiveTab = useCallback((tab: WorkforceTab) => {
+    _setActiveTab(tab);
+    setHashTab(tab);
+  }, []);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -44,6 +55,36 @@ export function useWorkforceState(currentUsername: string) {
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // ── Supabase Realtime subscription for wf_tasks ──
+  useEffect(() => {
+    const channel = supabase
+      .channel('wf_tasks_realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'wf_tasks' }, (payload) => {
+        console.log('[Realtime] Task inserted:', payload.new);
+        setTasks(prev => {
+          // Avoid duplicates
+          if (prev.some(t => t.id === payload.new.id)) return prev;
+          return [payload.new as WorkforceTask, ...prev];
+        });
+        setToast({ message: `⚡ Task mới: ${(payload.new as any).title}`, type: 'success' });
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'wf_tasks' }, (payload) => {
+        console.log('[Realtime] Task updated:', payload.new);
+        setTasks(prev => prev.map(t => t.id === payload.new.id ? (payload.new as WorkforceTask) : t));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'wf_tasks' }, (payload) => {
+        console.log('[Realtime] Task deleted:', payload.old);
+        setTasks(prev => prev.filter(t => t.id !== (payload.old as any).id));
+      })
+      .subscribe((status) => {
+        console.log('[Realtime] Subscription status:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const loadContracts = useCallback(async (workerId: string) => {
     try {
@@ -175,6 +216,11 @@ export function useWorkforceState(currentUsername: string) {
     try {
       await svc.updateSettlement(id, updates);
       setSettlements(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+      // Refresh tasks if status changed (may affect payment_status)
+      if (updates.status) {
+        const updatedTasks = await svc.fetchTasks();
+        setTasks(updatedTasks);
+      }
       setToast({ message: 'Đã cập nhật nghiệm thu', type: 'success' });
     } catch (e: any) {
       setToast({ message: e.message, type: 'error' });
@@ -185,6 +231,9 @@ export function useWorkforceState(currentUsername: string) {
     try {
       await svc.deleteSettlement(id);
       setSettlements(prev => prev.filter(s => s.id !== id));
+      // Refresh tasks — deleted settlement rollbacks tasks to unpaid
+      const updatedTasks = await svc.fetchTasks();
+      setTasks(updatedTasks);
       setToast({ message: 'Đã xóa nghiệm thu', type: 'success' });
     } catch (e: any) {
       setToast({ message: e.message, type: 'error' });

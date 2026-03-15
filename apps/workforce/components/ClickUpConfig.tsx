@@ -237,6 +237,50 @@ const ClickUpConfigComponent: React.FC<ClickUpConfigProps> = ({ onToast }) => {
               );
             })}
           </div>
+
+          {/* Realtime Sync Toggle */}
+          <div className="border-t border-primary/10 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">⚡ Realtime Sync</p>
+                <p className="text-neutral-medium/60 text-[11px]">Tự động cập nhật task khi có thay đổi trên ClickUp</p>
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    if ((config as any).webhook_id) {
+                      // Disable: delete webhook
+                      await clickup.deleteWebhook(config.api_token, (config as any).webhook_id);
+                      await clickup.saveWebhookId(null);
+                      setConfig({ ...config, webhook_id: null } as any);
+                      onToast('Đã tắt Realtime Sync', 'success');
+                    } else {
+                      // Enable: register webhook
+                      const wh = await clickup.registerWebhook(config.api_token, config.team_id);
+                      await clickup.saveWebhookId(wh.id);
+                      setConfig({ ...config, webhook_id: wh.id } as any);
+                      onToast('Đã bật Realtime Sync!', 'success');
+                    }
+                  } catch (e: any) {
+                    onToast(`Lỗi: ${e.message}`, 'error');
+                  }
+                }}
+                className={`relative w-14 h-7 rounded-full transition-all ${
+                  (config as any).webhook_id ? 'bg-emerald-500' : 'bg-neutral-dark/50'
+                }`}
+              >
+                <div className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${
+                  (config as any).webhook_id ? 'left-7' : 'left-0.5'
+                }`} />
+              </button>
+            </div>
+            {(config as any).webhook_id && (
+              <div className="flex items-center gap-2 text-xs text-emerald-400">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                Đang lắng nghe thay đổi từ ClickUp
+              </div>
+            )}
+          </div>
         </div>
       )}
 

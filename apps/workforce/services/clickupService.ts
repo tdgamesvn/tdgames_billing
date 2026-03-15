@@ -32,10 +32,19 @@ export interface SyncedTask {
   clickup_status: string;
   clickup_list_id: string;
   list_name: string;
+  folder_name: string | null;
+  space_name: string;
   assignee_emails: string[];
   date_done: string | null;
   date_created: string | null;
   date_updated: string | null;
+}
+
+export interface ListContext {
+  list_id: string;
+  list_name: string;
+  folder_name: string | null;
+  space_name: string;
 }
 
 // ── Edge Function proxy calls ─────────────────────────────────
@@ -62,8 +71,8 @@ export async function fetchLists(token: string, spaceId: string) {
   return callEdgeFunction({ action: 'get_lists', token, spaceId });
 }
 
-export async function syncTasks(token: string, teamId: string, listIds: string[]): Promise<{ tasks: SyncedTask[]; member_count: number }> {
-  return callEdgeFunction({ action: 'sync_tasks', token, teamId, listIds });
+export async function syncTasks(token: string, teamId: string, listIds: string[], listContexts?: ListContext[]): Promise<{ tasks: SyncedTask[]; member_count: number }> {
+  return callEdgeFunction({ action: 'sync_tasks', token, teamId, listIds, listContexts });
 }
 
 // ── Config CRUD ───────────────────────────────────────────────
@@ -93,6 +102,73 @@ export async function updateConfigSyncTime(): Promise<void> {
   const { error } = await supabase
     .from('wf_clickup_config')
     .update({ last_synced: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .neq('id', '00000000-0000-0000-0000-000000000000');
+  if (error) throw error;
+}
+
+// ── Webhook Management ────────────────────────────────────────
+
+const CLICKUP_API = 'https://api.clickup.com/api/v2';
+
+async function clickupApi(path: string, token: string, options?: RequestInit) {
+  const resp = await fetch(`${CLICKUP_API}${path}`, {
+    ...options,
+    headers: {
+      Authorization: token,
+      'Content-Type': 'application/json',
+      ...(options?.headers || {}),
+    },
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`ClickUp API error ${resp.status}: ${text}`);
+  }
+  // DELETE returns 204 with no body
+  if (resp.status === 204) return {};
+  return resp.json();
+}
+
+export interface ClickUpWebhook {
+  id: string;
+  endpoint: string;
+  events: string[];
+  status: string;
+}
+
+export async function listWebhooks(token: string, teamId: string): Promise<ClickUpWebhook[]> {
+  const data = await clickupApi(`/team/${teamId}/webhook`, token);
+  return data.webhooks || [];
+}
+
+export async function registerWebhook(token: string, teamId: string): Promise<ClickUpWebhook> {
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+  const endpoint = `${SUPABASE_URL}/functions/v1/clickup-webhook`;
+
+  const data = await clickupApi(`/team/${teamId}/webhook`, token, {
+    method: 'POST',
+    body: JSON.stringify({
+      endpoint,
+      events: [
+        'taskCreated',
+        'taskUpdated',
+        'taskDeleted',
+        'taskStatusUpdated',
+        'taskAssigneeUpdated',
+      ],
+    }),
+  });
+  return data.webhook || data;
+}
+
+export async function deleteWebhook(token: string, webhookId: string): Promise<void> {
+  await clickupApi(`/webhook/${webhookId}`, token, { method: 'DELETE' });
+}
+
+// Store webhook ID in config
+export async function saveWebhookId(webhookId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('wf_clickup_config')
+    .update({ webhook_id: webhookId, updated_at: new Date().toISOString() })
     .neq('id', '00000000-0000-0000-0000-000000000000');
   if (error) throw error;
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { DEFAULT_INVOICE } from '@/constants';
 import { InvoiceData, ServiceItem, BankingInfo, ClientInfo, ClientRecord, StudioRecord, StudioInfo, AccountUser } from '@/types';
 import { supabase } from '@/services/supabaseClient';
@@ -25,8 +25,12 @@ import {
   setDefaultStudioInCloud,
   deleteStudioFromCloud,
 } from '../services/supabaseService';
+import { setHashTab } from '@/App';
 
-export function useInvoiceState() {
+type InvoiceTab = 'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring';
+const VALID_TABS: InvoiceTab[] = ['edit', 'preview', 'history', 'dashboard', 'activity', 'recurring'];
+
+export function useInvoiceState(initialTab?: string | null) {
   // ── Core State ──
   const [currentUser, _setCurrentUser] = useState<AccountUser | null>(() => {
     try {
@@ -47,7 +51,14 @@ export function useInvoiceState() {
     }
   };
   const [invoice, setInvoice] = useState<InvoiceData>(DEFAULT_INVOICE);
-  const [activeTab, setActiveTab] = useState<'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring'>('edit');
+  const [activeTab, _setActiveTab] = useState<InvoiceTab>(() => {
+    if (initialTab && VALID_TABS.includes(initialTab as InvoiceTab)) return initialTab as InvoiceTab;
+    return 'edit';
+  });
+  const setActiveTab = useCallback((tab: InvoiceTab) => {
+    _setActiveTab(tab);
+    setHashTab(tab);
+  }, []);
 
   const accessibleTabs: Array<'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring'> =
     currentUser?.role === 'admin'
