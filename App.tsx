@@ -6,8 +6,11 @@ import InvoiceApp from './apps/invoice/components/InvoiceApp';
 import ExpenseApp from './apps/expense/components/ExpenseApp';
 import WorkforceApp from './apps/workforce/components/WorkforceApp';
 import CrmApp from './apps/crm/components/CrmApp';
+import HrApp from './apps/hr/components/HrApp';
+import AttendanceApp from './apps/attendance/components/AttendanceApp';
+import PayrollApp from './apps/payroll/components/PayrollApp';
 
-const VALID_APPS = ['invoice', 'expense', 'workforce', 'crm'];
+const VALID_APPS = ['invoice', 'expense', 'workforce', 'crm', 'hr', 'attendance', 'payroll'];
 
 /** Parse hash like #workforce/tasks → { app: 'workforce', tab: 'tasks' } */
 const parseHash = (): { app: string | null; tab: string | null } => {
@@ -100,6 +103,18 @@ const App: React.FC = () => {
 
   if (activeApp === 'crm') {
     return <CrmApp currentUser={currentUser} onBack={handleBack} initialTab={initialTab} />;
+  }
+
+  if (activeApp === 'hr') {
+    return <HrApp currentUser={currentUser} onBack={handleBack} initialTab={initialTab} />;
+  }
+
+  if (activeApp === 'attendance') {
+    return <AttendanceApp currentUser={currentUser} onBack={handleBack} initialTab={initialTab} />;
+  }
+
+  if (activeApp === 'payroll') {
+    return <PayrollApp currentUser={currentUser} onBack={handleBack} initialTab={initialTab} />;
   }
 
   // ── Home Screen ──

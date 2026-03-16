@@ -1,0 +1,886 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { HrEmployee, HrDepartment, HrContract, HrSalaryComponent, HrEmployeeSalary, HrDependent, HrDependentDocument } from '@/types';
+import { uploadFileToR2, toPublicUrl } from '../services/hrService';
+import * as svc from '../services/hrService';
+
+interface Props {
+  editingEmployee: HrEmployee | null;
+  departments: HrDepartment[];
+  contracts: HrContract[];
+  loadContracts: (employeeId: string) => void;
+  onSave: (emp: any) => void;
+  onUpdate: (id: string, updates: Partial<HrEmployee>) => void;
+  onCancel: () => void;
+  onSaveContract: (c: Omit<HrContract, 'id' | 'created_at'>) => void;
+  onUpdateContract: (id: string, updates: Partial<HrContract>) => void;
+  onDeleteContract: (id: string) => void;
+}
+
+const inputCls = "w-full bg-transparent border border-primary/10 rounded-xl px-4 py-3 text-white placeholder-neutral-medium/40 focus:outline-none focus:border-primary/40 transition-all text-sm";
+const labelCls = "text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2 block";
+const sectionCls = "rounded-[20px] border border-primary/10 bg-surface p-8 space-y-6";
+
+const SPECIALIZATION_OPTIONS = ['2D', '3D', 'VFX', 'Concept Art', 'Animation', 'Storyboard', 'Compositing', 'Rigging', 'Modeling', 'Texturing', 'Lighting', 'Motion Graphics'];
+
+const emptyEmployee = {
+  type: 'fulltime' as const,
+  status: 'active' as const,
+  full_name: '', avatar_url: '', email: '', phone: '',
+  date_of_birth: null as string | null, gender: '', nationality: 'Vietnam', address: '',
+  // FT
+  id_number: '', id_issue_date: null as string | null, id_issue_place: '',
+  id_card_front_url: '', id_card_back_url: '',
+  tax_code: '', insurance_number: '',
+  department_id: null as string | null, position: '', level: '',
+  salary: 0, salary_currency: 'VND',
+  start_date: null as string | null, probation_end: null as string | null,
+  // FL
+  portfolio_url: '', specializations: [] as string[], timezone: 'UTC+7',
+  rate_type: '', rate_amount: 0, rate_currency: 'USD',
+  payment_method: '', payment_details: {} as Record<string, any>,
+  // Bank
+  bank_name: '', bank_account: '', bank_branch: '',
+  // Meta
+  notes: '', tags: [] as string[],
+};
+
+const emptyContract: Omit<HrContract, 'id' | 'created_at'> = {
+  employee_id: '', contract_type: 'labor', title: '', contract_number: '',
+  start_date: new Date().toISOString().split('T')[0], end_date: null,
+  salary: 0, currency: 'VND', rate_type: '', rate_amount: 0,
+  file_url: '', status: 'active', notes: '',
+};
+
+const EmployeeForm: React.FC<Props> = ({
+  editingEmployee, departments, contracts, loadContracts,
+  onSave, onUpdate, onCancel,
+  onSaveContract, onUpdateContract, onDeleteContract,
+}) => {
+  const [form, setForm] = useState<typeof emptyEmployee>(emptyEmployee);
+  const [tagInput, setTagInput] = useState('');
+  const [contractForm, setContractForm] = useState(emptyContract);
+  const [showContractForm, setShowContractForm] = useState(false);
+  const isEdit = !!editingEmployee;
+
+  // Salary components state
+  const [salaryComponents, setSalaryComponents] = useState<HrSalaryComponent[]>([]);
+  const [salaryAmounts, setSalaryAmounts] = useState<Record<string, number>>({});
+  const [existingSalaryIds, setExistingSalaryIds] = useState<Record<string, string>>({});
+  const [loadingSalary, setLoadingSalary] = useState(false);
+
+  // Dependents state
+  const [dependents, setDependents] = useState<HrDependent[]>([]);
+  const [showAddDependent, setShowAddDependent] = useState(false);
+  const [expandedDepId, setExpandedDepId] = useState<string | null>(null);
+  const [confirmDeleteDepId, setConfirmDeleteDepId] = useState<string | null>(null);
+  const [depForm, setDepForm] = useState({ full_name: '', relationship: 'child' as string, date_of_birth: '', id_number: '', tax_code: '', deduction_from: '', deduction_to: '', notes: '' });
+  const [uploadingDocDepId, setUploadingDocDepId] = useState<string | null>(null);
+  const [docUploadType, setDocUploadType] = useState('cccd');
+  const depDocRef = useRef<HTMLInputElement>(null);
+
+  // Photo upload state
+  const avatarFileRef = useRef<HTMLInputElement>(null);
+  const frontFileRef = useRef<HTMLInputElement>(null);
+  const backFileRef = useRef<HTMLInputElement>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingFront, setUploadingFront] = useState(false);
+  const [uploadingBack, setUploadingBack] = useState(false);
+
+  const handlePhotoUpload = async (field: 'avatar_url' | 'id_card_front_url' | 'id_card_back_url', file: File) => {
+    const setLoading = field === 'avatar_url' ? setUploadingAvatar : field === 'id_card_front_url' ? setUploadingFront : setUploadingBack;
+    const ref = field === 'avatar_url' ? avatarFileRef : field === 'id_card_front_url' ? frontFileRef : backFileRef;
+    setLoading(true);
+    try {
+      const result = await uploadFileToR2(file);
+      setForm(f => ({ ...f, [field]: result.url }));
+    } catch (err: any) { alert('Upload th\u1ea5t b\u1ea1i: ' + (err.message || '')); }
+    finally { setLoading(false); if (ref.current) ref.current.value = ''; }
+  };
+
+  // Load salary components
+  useEffect(() => {
+    const loadComps = async () => {
+      setLoadingSalary(true);
+      try {
+        const comps = await svc.fetchSalaryComponents();
+        setSalaryComponents(comps.filter(c => c.is_active));
+      } catch {}
+      finally { setLoadingSalary(false); }
+    };
+    loadComps();
+  }, []);
+
+  useEffect(() => {
+    if (editingEmployee) {
+      // Load existing salary data for this employee
+      const loadEmpSalary = async () => {
+        try {
+          const items = await svc.fetchEmployeeSalary(editingEmployee.id);
+          const amounts: Record<string, number> = {};
+          const ids: Record<string, string> = {};
+          items.forEach(it => { amounts[it.component_id] = it.amount; ids[it.component_id] = it.id; });
+          setSalaryAmounts(amounts);
+          setExistingSalaryIds(ids);
+        } catch {}
+      };
+      loadEmpSalary();
+
+      // Load dependents
+      svc.fetchDependents(editingEmployee.id).then(setDependents).catch(() => {});
+
+      setForm({
+        type: editingEmployee.type,
+        status: editingEmployee.status,
+        full_name: editingEmployee.full_name,
+        avatar_url: editingEmployee.avatar_url,
+        email: editingEmployee.email,
+        phone: editingEmployee.phone,
+        date_of_birth: editingEmployee.date_of_birth,
+        gender: editingEmployee.gender,
+        nationality: editingEmployee.nationality,
+        address: editingEmployee.address,
+        id_number: editingEmployee.id_number,
+        id_issue_date: editingEmployee.id_issue_date,
+        id_issue_place: editingEmployee.id_issue_place,
+        id_card_front_url: editingEmployee.id_card_front_url || '',
+        id_card_back_url: editingEmployee.id_card_back_url || '',
+        tax_code: editingEmployee.tax_code,
+        insurance_number: editingEmployee.insurance_number,
+        department_id: editingEmployee.department_id,
+        position: editingEmployee.position,
+        level: editingEmployee.level,
+        salary: editingEmployee.salary,
+        salary_currency: editingEmployee.salary_currency,
+        start_date: editingEmployee.start_date,
+        probation_end: editingEmployee.probation_end,
+        portfolio_url: editingEmployee.portfolio_url,
+        specializations: editingEmployee.specializations || [],
+        timezone: editingEmployee.timezone,
+        rate_type: editingEmployee.rate_type,
+        rate_amount: editingEmployee.rate_amount,
+        rate_currency: editingEmployee.rate_currency,
+        payment_method: editingEmployee.payment_method,
+        payment_details: editingEmployee.payment_details || {},
+        bank_name: editingEmployee.bank_name,
+        bank_account: editingEmployee.bank_account,
+        bank_branch: editingEmployee.bank_branch,
+        notes: editingEmployee.notes,
+        tags: editingEmployee.tags || [],
+      });
+      loadContracts(editingEmployee.id);
+    } else {
+      setForm(emptyEmployee);
+      setSalaryAmounts({});
+      setExistingSalaryIds({});
+      setDependents([]);
+    }
+  }, [editingEmployee]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.full_name.trim()) return;
+
+    // Calculate total gross from salary components
+    const totalGross = (Object.values(salaryAmounts) as number[]).reduce((s, v) => s + (v || 0), 0);
+    const formWithSalary = { ...form, salary: totalGross };
+
+    if (isEdit) {
+      onUpdate(editingEmployee!.id, formWithSalary);
+      // Upsert salary records
+      for (const comp of salaryComponents) {
+        const amt = salaryAmounts[comp.id] || 0;
+        const existingId = existingSalaryIds[comp.id];
+        try {
+          if (existingId) {
+            await svc.updateEmployeeSalary(existingId, { amount: amt });
+          } else if (amt > 0) {
+            await svc.saveEmployeeSalary({
+              employee_id: editingEmployee!.id, component_id: comp.id,
+              amount: amt, note: '', effective_from: new Date().toISOString().split('T')[0], effective_to: null,
+            });
+          }
+        } catch {}
+      }
+    } else {
+      // For new employee, pass salary amounts so parent can save after employee is created
+      (formWithSalary as any)._salaryAmounts = salaryAmounts;
+      onSave(formWithSalary);
+    }
+  };
+
+  const toggleSpec = (spec: string) => {
+    setForm(f => ({
+      ...f,
+      specializations: f.specializations.includes(spec)
+        ? f.specializations.filter(s => s !== spec)
+        : [...f.specializations, spec],
+    }));
+  };
+
+  const addTag = () => {
+    const t = tagInput.trim();
+    if (t && !form.tags.includes(t)) {
+      setForm(f => ({ ...f, tags: [...f.tags, t] }));
+      setTagInput('');
+    }
+  };
+
+  const handleContractSubmit = () => {
+    if (!contractForm.title.trim() || !editingEmployee) return;
+    onSaveContract({ ...contractForm, employee_id: editingEmployee.id });
+    setContractForm({ ...emptyContract, employee_id: editingEmployee.id });
+    setShowContractForm(false);
+  };
+
+  return (
+    <div className="animate-fadeInUp space-y-8">
+      {/* Header */}
+      <div>
+        <h2 className="text-4xl font-black uppercase tracking-tighter" style={{ color: '#FF375F' }}>
+          {isEdit ? 'Chỉnh sửa nhân sự' : 'Thêm nhân sự mới'}
+        </h2>
+        <p className="text-neutral-medium text-sm mt-1">
+          {isEdit ? `Cập nhật — ${editingEmployee!.full_name} (${editingEmployee!.employee_code})` : 'Nhập thông tin nhân sự mới'}
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* ── Section: Basic Info ── */}
+        <div className={sectionCls}>
+          <h3 className="text-lg font-black text-white uppercase tracking-tight">Thông tin cơ bản</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className={labelCls}>Họ tên *</label>
+              <input className={inputCls} value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Nguyễn Văn A" required />
+            </div>
+            <div>
+              <label className={labelCls}>Loại nhân sự *</label>
+              <select className={inputCls} value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as any }))}>
+                <option value="fulltime">Fulltime</option>
+                <option value="freelancer">Freelancer</option>
+                <option value="parttime">Part-time</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Trạng thái</label>
+              <select className={inputCls} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as any }))}>
+                <option value="active">Đang làm việc</option>
+                <option value="inactive">Nghỉ việc</option>
+                <option value="offboarded">Offboarded</option>
+                <option value="blacklist">Blacklist</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Email</label>
+              <input className={inputCls} value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
+            </div>
+            <div>
+              <label className={labelCls}>Số điện thoại</label>
+              <input className={inputCls} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="0912 345 678" />
+            </div>
+            <div>
+              <label className={labelCls}>Ngày sinh</label>
+              <input type="date" className={inputCls} value={form.date_of_birth || ''} onChange={e => setForm(f => ({ ...f, date_of_birth: e.target.value || null }))} />
+            </div>
+            <div>
+              <label className={labelCls}>Giới tính</label>
+              <select className={inputCls} value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
+                <option value="">-- Chọn --</option>
+                <option value="male">Nam</option>
+                <option value="female">Nữ</option>
+                <option value="other">Khác</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Quốc tịch</label>
+              <input className={inputCls} value={form.nationality} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))} />
+            </div>
+            <div className="md:col-span-3">
+              <label className={labelCls}>Địa chỉ</label>
+              <input className={inputCls} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Số nhà, đường, quận, TP..." />
+            </div>
+          </div>
+        </div>
+
+        {/* ── Section: CCCD & Photos ── */}
+        <div className={sectionCls}>
+          <h3 className="text-lg font-black text-white uppercase tracking-tight">🪪 CMND / CCCD & Ảnh nhân sự</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className={labelCls}>Số CMND/CCCD</label>
+              <input className={inputCls} value={form.id_number} onChange={e => setForm(f => ({ ...f, id_number: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelCls}>Ngày cấp</label>
+              <input type="date" className={inputCls} value={form.id_issue_date || ''} onChange={e => setForm(f => ({ ...f, id_issue_date: e.target.value || null }))} />
+            </div>
+            <div>
+              <label className={labelCls}>Nơi cấp</label>
+              <input className={inputCls} value={form.id_issue_place} onChange={e => setForm(f => ({ ...f, id_issue_place: e.target.value }))} />
+            </div>
+          </div>
+          {/* Photo uploads */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+            {/* Avatar */}
+            <div>
+              <label className={labelCls}>Ảnh nhân sự</label>
+              <input type="file" ref={avatarFileRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload('avatar_url', f); }} />
+              {form.avatar_url ? (
+                <div className="relative group rounded-xl overflow-hidden border border-primary/10 cursor-pointer" style={{ aspectRatio: '1/1' }}
+                  onClick={() => avatarFileRef.current?.click()}>
+                  <img src={toPublicUrl(form.avatar_url)} alt="Avatar" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                    <span className="text-white text-xs font-bold">📷 Đổi ảnh</span>
+                  </div>
+                </div>
+              ) : (
+                <div onClick={() => avatarFileRef.current?.click()}
+                  className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all hover:border-primary/40 ${uploadingAvatar ? 'border-primary/30 bg-primary/5' : 'border-primary/10 bg-white/[0.02]'}`}
+                  style={{ aspectRatio: '1/1' }}>
+                  {uploadingAvatar ? (
+                    <><div className="w-6 h-6 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /><span className="text-xs font-bold text-primary">Đang upload...</span></>
+                  ) : (
+                    <><span className="text-3xl">👤</span><span className="text-xs text-neutral-medium">Upload ảnh nhân sự</span></>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* CCCD Front */}
+            <div>
+              <label className={labelCls}>CCCD Mặt trước</label>
+              <input type="file" ref={frontFileRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload('id_card_front_url', f); }} />
+              {form.id_card_front_url ? (
+                <div className="relative group rounded-xl overflow-hidden border border-primary/10 cursor-pointer" style={{ aspectRatio: '1.6/1' }}
+                  onClick={() => frontFileRef.current?.click()}>
+                  <img src={toPublicUrl(form.id_card_front_url)} alt="CCCD Mặt trước" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                    <span className="text-white text-xs font-bold">🔄 Thay ảnh</span>
+                  </div>
+                </div>
+              ) : (
+                <div onClick={() => frontFileRef.current?.click()}
+                  className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all hover:border-primary/40 ${uploadingFront ? 'border-primary/30 bg-primary/5' : 'border-primary/10 bg-white/[0.02]'}`}
+                  style={{ aspectRatio: '1.6/1' }}>
+                  {uploadingFront ? (
+                    <><div className="w-6 h-6 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /><span className="text-xs font-bold text-primary">Đang upload...</span></>
+                  ) : (
+                    <><span className="text-3xl">📷</span><span className="text-xs text-neutral-medium">Upload mặt trước</span></>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* CCCD Back */}
+            <div>
+              <label className={labelCls}>CCCD Mặt sau</label>
+              <input type="file" ref={backFileRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload('id_card_back_url', f); }} />
+              {form.id_card_back_url ? (
+                <div className="relative group rounded-xl overflow-hidden border border-primary/10 cursor-pointer" style={{ aspectRatio: '1.6/1' }}
+                  onClick={() => backFileRef.current?.click()}>
+                  <img src={toPublicUrl(form.id_card_back_url)} alt="CCCD Mặt sau" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                    <span className="text-white text-xs font-bold">🔄 Thay ảnh</span>
+                  </div>
+                </div>
+              ) : (
+                <div onClick={() => backFileRef.current?.click()}
+                  className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all hover:border-primary/40 ${uploadingBack ? 'border-primary/30 bg-primary/5' : 'border-primary/10 bg-white/[0.02]'}`}
+                  style={{ aspectRatio: '1.6/1' }}>
+                  {uploadingBack ? (
+                    <><div className="w-6 h-6 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /><span className="text-xs font-bold text-primary">Đang upload...</span></>
+                  ) : (
+                    <><span className="text-3xl">📷</span><span className="text-xs text-neutral-medium">Upload mặt sau</span></>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Section: Fulltime-specific ── */}
+        {form.type === 'fulltime' && (
+          <div className={sectionCls}>
+            <h3 className="text-lg font-black text-white uppercase tracking-tight">🏢 Thông tin Fulltime</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className={labelCls}>Mã số thuế cá nhân</label>
+                <input className={inputCls} value={form.tax_code} onChange={e => setForm(f => ({ ...f, tax_code: e.target.value }))} />
+              </div>
+              <div>
+                <label className={labelCls}>Số sổ bảo hiểm</label>
+                <input className={inputCls} value={form.insurance_number} onChange={e => setForm(f => ({ ...f, insurance_number: e.target.value }))} />
+              </div>
+              <div>
+                <label className={labelCls}>Phòng ban</label>
+                <select className={inputCls} value={form.department_id || ''} onChange={e => setForm(f => ({ ...f, department_id: e.target.value || null }))}>
+                  <option value="">-- Chọn --</option>
+                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Chức danh</label>
+                <input className={inputCls} value={form.position} onChange={e => setForm(f => ({ ...f, position: e.target.value }))} placeholder="Senior Artist" />
+              </div>
+              <div>
+                <label className={labelCls}>Cấp bậc</label>
+                <select className={inputCls} value={form.level} onChange={e => setForm(f => ({ ...f, level: e.target.value }))}>
+                  <option value="">-- Chọn --</option>
+                  <option value="Intern">Intern</option>
+                  <option value="Junior">Junior</option>
+                  <option value="Mid">Mid</option>
+                  <option value="Senior">Senior</option>
+                  <option value="Lead">Lead</option>
+                  <option value="Manager">Manager</option>
+                  <option value="Director">Director</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Ngày bắt đầu</label>
+                <input type="date" className={inputCls} value={form.start_date || ''} onChange={e => setForm(f => ({ ...f, start_date: e.target.value || null }))} />
+              </div>
+              <div>
+                <label className={labelCls}>Ngày hết thử việc</label>
+                <input type="date" className={inputCls} value={form.probation_end || ''} onChange={e => setForm(f => ({ ...f, probation_end: e.target.value || null }))} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Section: Salary Structure (Fulltime only) ── */}
+        {form.type === 'fulltime' && (
+          <div className={sectionCls}>
+            <h3 className="text-lg font-black text-white uppercase tracking-tight">💰 Cấu trúc lương</h3>
+            {loadingSalary ? (
+              <div className="flex justify-center py-6"><div className="w-6 h-6 border-3 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" /></div>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {salaryComponents.map(comp => (
+                    <div key={comp.id} className="flex items-center gap-4 p-3 rounded-xl bg-black/20 border border-white/[0.04]">
+                      <span className="flex-1 text-white font-bold text-sm">{comp.name}</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          className="w-40 px-3 py-2 rounded-lg bg-black/30 border border-primary/10 text-white text-sm text-right outline-none focus:border-emerald-500/40 transition-colors"
+                          value={salaryAmounts[comp.id] || ''}
+                          onChange={e => setSalaryAmounts(prev => ({ ...prev, [comp.id]: +e.target.value }))}
+                          placeholder="0"
+                        />
+                        <span className="text-neutral-medium text-xs w-8">VNĐ</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Total gross */}
+                <div className="flex items-center justify-between mt-4 pt-4 border-t-2 border-emerald-500/20">
+                  <span className="text-xs font-black uppercase tracking-widest text-emerald-400">Tổng Gross</span>
+                  <div>
+                    <span className="text-white font-black text-xl">{(Object.values(salaryAmounts) as number[]).reduce((s, v) => s + (v || 0), 0).toLocaleString()}</span>
+                    <span className="text-neutral-medium text-xs ml-1">VNĐ</span>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Section: Dependents (Fulltime only) ── */}
+        {form.type === 'fulltime' && isEdit && (
+          <div className={sectionCls}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-white uppercase tracking-tight">👨‍👩‍👧‍👦 Người phụ thuộc</h3>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => setShowAddDependent(!showAddDependent)}
+                  className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80"
+                  style={{ background: 'linear-gradient(135deg, #5E5CE6, #0A84FF)' }}>
+                  {showAddDependent ? '✕ Đóng' : '+ Thêm NPT'}
+                </button>
+              </div>
+            </div>
+
+            {/* Add dependent form */}
+            {showAddDependent && (
+              <div className="p-4 rounded-xl bg-black/30 border border-primary/10 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">Họ tên *</label>
+                    <input className={inputCls} value={depForm.full_name} onChange={e => setDepForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Nguyễn Văn B" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">Quan hệ *</label>
+                    <select className={inputCls} value={depForm.relationship} onChange={e => setDepForm(f => ({ ...f, relationship: e.target.value }))}>
+                      <option value="child">Con</option>
+                      <option value="spouse">Vợ/Chồng</option>
+                      <option value="parent">Bố/Mẹ</option>
+                      <option value="other">Khác</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">Ngày sinh</label>
+                    <input type="date" className={inputCls} value={depForm.date_of_birth} onChange={e => setDepForm(f => ({ ...f, date_of_birth: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">CMND/CCCD</label>
+                    <input className={inputCls} value={depForm.id_number} onChange={e => setDepForm(f => ({ ...f, id_number: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">MST (nếu có)</label>
+                    <input className={inputCls} value={depForm.tax_code} onChange={e => setDepForm(f => ({ ...f, tax_code: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">Giảm trừ từ</label>
+                    <input type="date" className={inputCls} value={depForm.deduction_from} onChange={e => setDepForm(f => ({ ...f, deduction_from: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={async () => {
+                    if (!depForm.full_name.trim()) return;
+                    try {
+                      const saved = await svc.saveDependent({
+                        employee_id: editingEmployee!.id,
+                        full_name: depForm.full_name,
+                        relationship: depForm.relationship as any,
+                        date_of_birth: depForm.date_of_birth || null,
+                        id_number: depForm.id_number,
+                        tax_code: depForm.tax_code,
+                        deduction_from: depForm.deduction_from || null,
+                        deduction_to: depForm.deduction_to || null,
+                        status: 'active',
+                        notes: depForm.notes,
+                      });
+                      setDependents(prev => [...prev, saved]);
+                      setDepForm({ full_name: '', relationship: 'child', date_of_birth: '', id_number: '', tax_code: '', deduction_from: '', deduction_to: '', notes: '' });
+                      setShowAddDependent(false);
+                    } catch (err: any) { alert(err.message); }
+                  }} className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-xs font-bold">💾 Lưu</button>
+                  <button type="button" onClick={() => setShowAddDependent(false)} className="px-4 py-2 rounded-lg bg-white/10 text-neutral-medium text-xs font-bold">Hủy</button>
+                </div>
+              </div>
+            )}
+
+            {/* Dependents list */}
+            <div className="space-y-3 mt-4">
+              {dependents.length === 0 && !showAddDependent && (
+                <div className="text-center py-6 opacity-40">
+                  <div className="text-3xl mb-2">👨‍👩‍👧‍👦</div>
+                  <p className="text-sm">Chưa có người phụ thuộc nào</p>
+                </div>
+              )}
+              {dependents.map(dep => {
+                const relLabel = dep.relationship === 'child' ? 'Con' : dep.relationship === 'spouse' ? 'Vợ/Chồng' : dep.relationship === 'parent' ? 'Bố/Mẹ' : 'Khác';
+                const isExpanded = expandedDepId === dep.id;
+                return (
+                  <div key={dep.id} className="rounded-[16px] border border-primary/10 bg-black/20 overflow-hidden">
+                    {/* Header row */}
+                    <div className="p-4 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors"
+                      onClick={() => setExpandedDepId(isExpanded ? null : dep.id)}>
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg">{dep.relationship === 'child' ? '👶' : dep.relationship === 'spouse' ? '💍' : dep.relationship === 'parent' ? '👴' : '👤'}</span>
+                        <div>
+                          <p className="text-white font-bold text-sm">{dep.full_name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-400">{relLabel}</span>
+                            {dep.date_of_birth && <span className="text-neutral-medium text-[10px]">🎂 {dep.date_of_birth}</span>}
+                            {dep.id_number && <span className="text-neutral-medium text-[10px]">🆔 {dep.id_number}</span>}
+                            <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-md ${dep.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                              {dep.status === 'active' ? 'Đang GT' : 'Ngưng'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-neutral-medium text-xs">{dep.documents?.length || 0} giấy tờ</span>
+                        <span className="text-neutral-medium text-sm">{isExpanded ? '▲' : '▼'}</span>
+                      </div>
+                    </div>
+
+                    {/* Expanded: documents + actions */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 border-t border-white/[0.04] pt-3 space-y-3">
+                        {/* Documents list */}
+                        {(dep.documents || []).length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium">📄 Giấy tờ đính kèm</p>
+                            {dep.documents!.map(doc => (
+                              <div key={doc.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/20 border border-white/[0.04]">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 whitespace-nowrap">
+                                    {doc.doc_type === 'cccd' ? 'CCCD' : doc.doc_type === 'birth_cert' ? 'Khai sinh' : doc.doc_type === 'residence' ? 'Cư trú' : doc.doc_type === 'student_card' ? 'Thẻ SV' : doc.doc_type === 'disability_cert' ? 'Khuyết tật' : doc.doc_type === 'adoption' ? 'Nhận nuôi' : doc.doc_type === 'income_cert' ? 'Thu nhập' : 'Khác'}
+                                  </span>
+                                  <a href={toPublicUrl(doc.file_url)} target="_blank" rel="noreferrer" className="text-blue-400 text-xs hover:underline truncate">{doc.file_name || 'Xem file'}</a>
+                                </div>
+                                <button type="button" onClick={async () => {
+                                  try { await svc.deleteDependentDocument(doc.id); setDependents(prev => prev.map(d => d.id === dep.id ? { ...d, documents: d.documents?.filter(dd => dd.id !== doc.id) } : d)); } catch {}
+                                }} className="text-red-400 hover:text-red-300 text-[10px] font-bold px-2 py-1 rounded hover:bg-red-500/10 transition-all">Xóa</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Upload document */}
+                        <div className="flex items-center gap-2">
+                          <input type="file" ref={depDocRef} accept=".jpg,.jpeg,.png,.webp,.pdf" style={{ display: 'none' }}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              setUploadingDocDepId(dep.id);
+                              try {
+                                const result = await uploadFileToR2(file);
+                                const saved = await svc.saveDependentDocument({
+                                  dependent_id: dep.id, doc_type: docUploadType, file_url: result.url, file_name: file.name, notes: '',
+                                });
+                                setDependents(prev => prev.map(d => d.id === dep.id ? { ...d, documents: [...(d.documents || []), saved] } : d));
+                              } catch (err: any) { alert('Upload lỗi: ' + (err.message || '')); }
+                              finally { setUploadingDocDepId(null); if (depDocRef.current) depDocRef.current.value = ''; }
+                            }} />
+                          <select className="px-2 py-1.5 rounded-lg bg-black/30 border border-primary/10 text-white text-[11px] outline-none"
+                            value={docUploadType} onChange={e => setDocUploadType(e.target.value)}>
+                            <option value="cccd">CMND/CCCD</option>
+                            <option value="birth_cert">Giấy khai sinh</option>
+                            <option value="residence">Xác nhận cư trú</option>
+                            <option value="student_card">Thẻ sinh viên</option>
+                            <option value="disability_cert">XN khuyết tật</option>
+                            <option value="adoption">QĐ nhận nuôi</option>
+                            <option value="income_cert">XN thu nhập</option>
+                            <option value="other">Khác</option>
+                          </select>
+                          <button type="button" onClick={() => depDocRef.current?.click()}
+                            disabled={uploadingDocDepId === dep.id}
+                            className="px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 text-[11px] font-bold hover:bg-blue-500/30 transition-all disabled:opacity-30">
+                            {uploadingDocDepId === dep.id ? 'Đang upload...' : '📎 Upload giấy tờ'}
+                          </button>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center justify-between pt-2 border-t border-white/[0.04]">
+                          <button type="button" onClick={async () => {
+                            const newStatus = dep.status === 'active' ? 'inactive' : 'active';
+                            try { await svc.updateDependent(dep.id, { status: newStatus }); setDependents(prev => prev.map(d => d.id === dep.id ? { ...d, status: newStatus as any } : d)); } catch {}
+                          }} className={`text-[10px] font-bold px-3 py-1 rounded-lg transition-all ${dep.status === 'active' ? 'bg-orange-500/20 text-orange-400 hover:bg-orange-500/30' : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'}`}>
+                            {dep.status === 'active' ? '⏸ Tạm ngưng GT' : '▶ Kích hoạt GT'}
+                          </button>
+                          {confirmDeleteDepId === dep.id ? (
+                            <div className="flex gap-1">
+                              <button type="button" onClick={async () => {
+                                try { await svc.deleteDependent(dep.id); setDependents(prev => prev.filter(d => d.id !== dep.id)); setConfirmDeleteDepId(null); } catch {}
+                              }} className="px-3 py-1 rounded-lg bg-red-500 text-white text-[10px] font-bold">Xác nhận xóa</button>
+                              <button type="button" onClick={() => setConfirmDeleteDepId(null)} className="px-3 py-1 rounded-lg bg-white/10 text-neutral-medium text-[10px] font-bold">Hủy</button>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={() => setConfirmDeleteDepId(dep.id)} className="text-[10px] font-bold px-3 py-1 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all">🗑️ Xóa NPT</button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Section: Freelancer-specific ── */}
+        {(form.type === 'freelancer' || form.type === 'parttime') && (
+          <div className={sectionCls}>
+            <h3 className="text-lg font-black text-white uppercase tracking-tight">🌍 Thông tin Freelancer</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className={labelCls}>Portfolio URL</label>
+                <input className={inputCls} value={form.portfolio_url} onChange={e => setForm(f => ({ ...f, portfolio_url: e.target.value }))} placeholder="https://artstation.com/..." />
+              </div>
+              <div>
+                <label className={labelCls}>Chức danh</label>
+                <input className={inputCls} value={form.position} onChange={e => setForm(f => ({ ...f, position: e.target.value }))} placeholder="VFX Artist, Concept Artist..." />
+              </div>
+              <div>
+                <label className={labelCls}>Múi giờ</label>
+                <input className={inputCls} value={form.timezone} onChange={e => setForm(f => ({ ...f, timezone: e.target.value }))} placeholder="UTC+7" />
+              </div>
+              <div>
+                <label className={labelCls}>Loại rate</label>
+                <select className={inputCls} value={form.rate_type} onChange={e => setForm(f => ({ ...f, rate_type: e.target.value }))}>
+                  <option value="">-- Chọn --</option>
+                  <option value="hourly">Per Hour</option>
+                  <option value="per_shot">Per Shot</option>
+                  <option value="per_deliverable">Per Deliverable</option>
+                  <option value="per_task">Per Task</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Mức giá</label>
+                <div className="flex gap-2">
+                  <input type="number" className={inputCls + " flex-1"} value={form.rate_amount} onChange={e => setForm(f => ({ ...f, rate_amount: +e.target.value }))} />
+                  <select className={inputCls + " w-24"} value={form.rate_currency} onChange={e => setForm(f => ({ ...f, rate_currency: e.target.value }))}>
+                    <option value="USD">USD</option>
+                    <option value="VND">VND</option>
+                    <option value="EUR">EUR</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Thanh toán</label>
+                <select className={inputCls} value={form.payment_method} onChange={e => setForm(f => ({ ...f, payment_method: e.target.value }))}>
+                  <option value="">-- Chọn --</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="paypal">PayPal</option>
+                  <option value="wise">Wise</option>
+                  <option value="other">Khác</option>
+                </select>
+              </div>
+            </div>
+            {/* Specializations */}
+            <div>
+              <label className={labelCls}>Chuyên môn</label>
+              <div className="flex flex-wrap gap-2">
+                {SPECIALIZATION_OPTIONS.map(spec => (
+                  <button key={spec} type="button" onClick={() => toggleSpec(spec)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${form.specializations.includes(spec) ? 'bg-blue-500/30 text-blue-300 border border-blue-500/40' : 'bg-white/5 text-neutral-medium border border-transparent hover:border-white/10'}`}>
+                    {spec}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Section: Banking ── */}
+        <div className={sectionCls}>
+          <h3 className="text-lg font-black text-white uppercase tracking-tight">🏦 Thông tin Ngân hàng</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className={labelCls}>Ngân hàng</label>
+              <input className={inputCls} value={form.bank_name} onChange={e => setForm(f => ({ ...f, bank_name: e.target.value }))} placeholder="MB Bank" />
+            </div>
+            <div>
+              <label className={labelCls}>Số tài khoản</label>
+              <input className={inputCls} value={form.bank_account} onChange={e => setForm(f => ({ ...f, bank_account: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelCls}>Tên chủ tài khoản</label>
+              <input className={inputCls} value={form.bank_branch} onChange={e => setForm(f => ({ ...f, bank_branch: e.target.value }))} />
+            </div>
+          </div>
+        </div>
+
+        {/* ── Section: Notes & Tags ── */}
+        <div className={sectionCls}>
+          <h3 className="text-lg font-black text-white uppercase tracking-tight">📝 Ghi chú & Tags</h3>
+          <div>
+            <label className={labelCls}>Ghi chú</label>
+            <textarea className={inputCls + " min-h-[80px] resize-none"} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Ghi chú thêm..." />
+          </div>
+          <div>
+            <label className={labelCls}>Tags</label>
+            <div className="flex gap-2 items-center">
+              <input className={inputCls + " flex-1"} value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }} placeholder="Nhập tag rồi Enter..." />
+              <button type="button" onClick={addTag} className="px-4 py-3 rounded-xl bg-white/5 text-neutral-medium hover:text-white text-sm font-bold transition-all">+</button>
+            </div>
+            {form.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {form.tags.map(t => (
+                  <span key={t} className="flex items-center gap-1 px-3 py-1 rounded-full bg-white/5 text-neutral-light text-xs">
+                    {t}
+                    <button type="button" onClick={() => setForm(f => ({ ...f, tags: f.tags.filter(x => x !== t) }))} className="text-red-400 hover:text-red-300">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Buttons ── */}
+        <div className="flex gap-4">
+          <button type="button" onClick={onCancel} className="flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest border border-primary/10 text-neutral-medium hover:text-white hover:border-primary/30 transition-all">Huỷ</button>
+          <button type="submit" className="flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest text-white shadow-btn-glow hover:shadow-btn-glow-hover transition-all hover:scale-[1.02] active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)' }}>
+            {isEdit ? '💾 Cập nhật' : '✚ Thêm nhân sự'}
+          </button>
+        </div>
+      </form>
+
+      {/* ── Contracts (editing only) ── */}
+      {isEdit && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-black text-white uppercase tracking-tight">📄 Hợp đồng</h3>
+            <button onClick={() => setShowContractForm(!showContractForm)} className="text-xs font-black uppercase tracking-widest hover:opacity-80 transition-colors" style={{ color: '#FF375F' }}>
+              {showContractForm ? '✕ Đóng' : '✚ Thêm hợp đồng'}
+            </button>
+          </div>
+
+          {showContractForm && (
+            <div className={sectionCls}>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className={labelCls}>Tên hợp đồng *</label>
+                  <input className={inputCls} value={contractForm.title} onChange={e => setContractForm(c => ({ ...c, title: e.target.value }))} />
+                </div>
+                <div>
+                  <label className={labelCls}>Loại</label>
+                  <select className={inputCls} value={contractForm.contract_type} onChange={e => setContractForm(c => ({ ...c, contract_type: e.target.value as any }))}>
+                    <option value="labor">Hợp đồng lao động</option>
+                    <option value="service">Hợp đồng dịch vụ</option>
+                    <option value="nda">NDA</option>
+                    <option value="appendix">Phụ lục</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Số hợp đồng</label>
+                  <input className={inputCls} value={contractForm.contract_number} onChange={e => setContractForm(c => ({ ...c, contract_number: e.target.value }))} />
+                </div>
+                <div>
+                  <label className={labelCls}>Bắt đầu</label>
+                  <input type="date" className={inputCls} value={contractForm.start_date} onChange={e => setContractForm(c => ({ ...c, start_date: e.target.value }))} />
+                </div>
+                <div>
+                  <label className={labelCls}>Kết thúc</label>
+                  <input type="date" className={inputCls} value={contractForm.end_date || ''} onChange={e => setContractForm(c => ({ ...c, end_date: e.target.value || null }))} />
+                </div>
+                <div>
+                  <label className={labelCls}>Trạng thái</label>
+                  <select className={inputCls} value={contractForm.status} onChange={e => setContractForm(c => ({ ...c, status: e.target.value as any }))}>
+                    <option value="active">Đang hiệu lực</option>
+                    <option value="expired">Hết hạn</option>
+                    <option value="terminated">Đã kết thúc</option>
+                  </select>
+                </div>
+              </div>
+              <button type="button" onClick={handleContractSubmit} className="py-3 px-8 rounded-xl font-black text-xs uppercase tracking-widest text-white shadow-btn-glow transition-all hover:shadow-btn-glow-hover" style={{ background: 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)' }}>
+                ✚ Thêm hợp đồng
+              </button>
+            </div>
+          )}
+
+          {contracts.length === 0 ? (
+            <p className="text-neutral-medium text-sm text-center py-8">Chưa có hợp đồng</p>
+          ) : (
+            <div className="space-y-3">
+              {contracts.map(c => (
+                <div key={c.id} className="group relative rounded-[16px] border border-primary/10 bg-surface p-4 flex items-center justify-between hover:border-primary/30 transition-all">
+                  <div>
+                    <p className="text-white font-bold text-sm">{c.title}</p>
+                    <p className="text-neutral-medium text-xs mt-1">
+                      {c.contract_type === 'labor' ? 'HĐ Lao động' : c.contract_type === 'service' ? 'HĐ Dịch vụ' : c.contract_type === 'nda' ? 'NDA' : 'Phụ lục'}
+                      {c.contract_number && ` — ${c.contract_number}`}
+                    </p>
+                    <p className="text-neutral-medium/60 text-[11px] mt-0.5">
+                      {c.start_date} → {c.end_date || '∞'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${c.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : c.status === 'expired' ? 'bg-orange-500/20 text-orange-400' : 'bg-red-500/20 text-red-400'}`}>{c.status}</span>
+                    <button onClick={() => { if (confirm('Xóa hợp đồng này?')) onDeleteContract(c.id); }} className="p-1.5 rounded-lg hover:bg-white/5 text-neutral-medium hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default EmployeeForm;

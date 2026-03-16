@@ -275,3 +275,353 @@ export interface CrmProjectFile {
   notes: string;
   created_at: string;
 }
+
+// ── HR Module Types ───────────────────────────────────────────
+
+export interface HrDepartment {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+  manager_id: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface HrEmployee {
+  id: string;
+  employee_code: string;
+  type: 'fulltime' | 'freelancer' | 'parttime';
+  status: 'active' | 'inactive' | 'offboarded' | 'blacklist';
+  full_name: string;
+  avatar_url: string;
+  email: string;
+  phone: string;
+  date_of_birth: string | null;
+  gender: string;
+  nationality: string;
+  address: string;
+
+  // Fulltime
+  id_number: string;
+  id_issue_date: string | null;
+  id_issue_place: string;
+  id_card_front_url: string;
+  id_card_back_url: string;
+  tax_code: string;
+  insurance_number: string;
+  department_id: string | null;
+  department?: HrDepartment;
+  position: string;
+  level: string;
+  salary: number;
+  salary_currency: string;
+  start_date: string | null;
+  probation_end: string | null;
+
+  // Freelancer
+  portfolio_url: string;
+  specializations: string[];
+  timezone: string;
+  rate_type: string;
+  rate_amount: number;
+  rate_currency: string;
+  payment_method: string;
+  payment_details: Record<string, any>;
+
+  // Banking
+  bank_name: string;
+  bank_account: string;
+  bank_branch: string;
+
+  // Meta
+  notes: string;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HrContract {
+  id: string;
+  employee_id: string;
+  contract_type: 'labor' | 'service' | 'nda' | 'appendix';
+  title: string;
+  contract_number: string;
+  start_date: string;
+  end_date: string | null;
+  salary: number;
+  currency: string;
+  rate_type: string;
+  rate_amount: number;
+  file_url: string;
+  status: 'active' | 'expired' | 'terminated';
+  notes: string;
+  created_at: string;
+}
+
+export interface HrPositionHistory {
+  id: string;
+  employee_id: string;
+  change_type: 'position' | 'department' | 'salary' | 'level';
+  old_value: string;
+  new_value: string;
+  effective_date: string;
+  reason: string;
+  created_at: string;
+}
+
+export interface HrEvaluation {
+  id: string;
+  employee_id: string;
+  period: string;
+  evaluator: string;
+  score: number;
+  strengths: string;
+  weaknesses: string;
+  notes: string;
+  next_evaluation_date: string | null;
+  status: 'pending' | 'completed';
+  created_at: string;
+}
+
+export interface HrProjectHistory {
+  id: string;
+  employee_id: string;
+  project_name: string;
+  role: string;
+  start_date: string | null;
+  end_date: string | null;
+  performance_note: string;
+  created_at: string;
+}
+
+export interface HrDocument {
+  id: string;
+  employee_id: string;
+  doc_type: string;
+  title: string;
+  file_url: string;
+  file_name: string;
+  file_size: number;
+  notes: string;
+  created_at: string;
+}
+
+export interface HrReminder {
+  id: string;
+  employee_id: string | null;
+  type: 'contract_expiry' | 'birthday' | 'evaluation' | 'work_permit' | 'freelancer_payment' | 'probation_end' | 'anniversary';
+  title: string;
+  due_date: string;
+  status: 'pending' | 'notified' | 'dismissed';
+  notes: string;
+  created_at: string;
+}
+
+// ── Salary Components ─────────────────────────────────────
+
+export interface HrSalaryComponent {
+  id: string;
+  name: string;
+  code: string;
+  category: 'fixed' | 'variable';
+  is_bhxh: boolean;
+  is_taxable: boolean;
+  is_tax_exempt: boolean;
+  tax_cap_yearly: number;
+  description: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface HrEmployeeSalary {
+  id: string;
+  employee_id: string;
+  component_id: string;
+  amount: number;
+  note: string;
+  effective_from: string;
+  effective_to: string | null;
+  created_at: string;
+  // joined
+  component?: HrSalaryComponent;
+}
+
+// ── Dependents (Người phụ thuộc) ──────────────────────────
+
+export interface HrDependent {
+  id: string;
+  employee_id: string;
+  full_name: string;
+  relationship: 'parent' | 'child' | 'spouse' | 'other';
+  date_of_birth: string | null;
+  id_number: string;
+  tax_code: string;
+  deduction_from: string | null;
+  deduction_to: string | null;
+  status: 'active' | 'inactive';
+  notes: string;
+  created_at: string;
+  // joined
+  documents?: HrDependentDocument[];
+}
+
+export interface HrDependentDocument {
+  id: string;
+  dependent_id: string;
+  doc_type: string;
+  file_url: string;
+  file_name: string;
+  notes: string;
+  created_at: string;
+}
+
+// ══════════════════════════════════════════════════════════
+// ── Attendance (Chấm công) ────────────────────────────────
+// ══════════════════════════════════════════════════════════
+
+export interface AttShift {
+  id: string;
+  name: string;
+  shift_type: 'fixed' | 'rotating' | 'project';
+  start_time: string;          // HH:mm
+  end_time: string;
+  break_minutes: number;
+  late_threshold_minutes: number;
+  early_threshold_minutes: number;
+  overtime_after_minutes: number;
+  applicable_days: string[];   // ['mon','tue',...]
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AttEmployeeShift {
+  id: string;
+  employee_id: string;
+  shift_id: string;
+  effective_from: string;
+  effective_to: string | null;
+  created_at: string;
+  // joined
+  shift?: AttShift;
+  employee?: HrEmployee;
+}
+
+export interface AttRecord {
+  id: string;
+  employee_id: string;
+  date: string;
+  check_in: string | null;
+  check_out: string | null;
+  method: 'manual' | 'qr' | 'wifi';
+  shift_id: string | null;
+  status: 'present' | 'late' | 'early_leave' | 'absent' | 'half_day';
+  late_minutes: number;
+  early_minutes: number;
+  overtime_minutes: number;
+  note: string;
+  approved_by: string | null;
+  created_at: string;
+  // joined
+  employee?: HrEmployee;
+  shift?: AttShift;
+}
+
+export interface AttRequest {
+  id: string;
+  employee_id: string;
+  request_type: 'leave' | 'late' | 'early' | 'forgot' | 'overtime';
+  date_from: string;
+  date_to: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  approved_by: string | null;
+  approved_at: string | null;
+  reviewer_note: string;
+  created_at: string;
+  // joined
+  employee?: HrEmployee;
+}
+
+export interface AttQrSession {
+  id: string;
+  token: string;
+  shift_id: string | null;
+  valid_from: string;
+  valid_to: string;
+  wifi_ssid: string | null;
+  created_by: string | null;
+  created_at: string;
+  // joined
+  shift?: AttShift;
+}
+
+export interface AttMonthlySheet {
+  id: string;
+  month: number;
+  year: number;
+  title: string;
+  status: 'draft' | 'finalized';
+  notes: string;
+  created_at: string;
+}
+
+export interface AttMonthlyRecord {
+  id: string;
+  sheet_id: string;
+  employee_id: string;
+  work_days: number;         // decimal e.g. 12.56
+  ot_hours: number;
+  late_count: number;
+  absent_days: number;
+  note: string;
+  created_at: string;
+  // joined
+  employee?: HrEmployee;
+}
+
+// ══════════════════════════════════════════════════════════
+// ── Payroll (Tính lương) ──────────────────────────────────
+// ══════════════════════════════════════════════════════════
+
+export interface PayPayrollSheet {
+  id: string;
+  month: number;
+  year: number;
+  title: string;
+  status: 'draft' | 'confirmed' | 'paid';
+  created_at: string;
+}
+
+export interface PayPayrollRecord {
+  id: string;
+  sheet_id: string;
+  employee_id: string;
+  // INPUT
+  work_days: number;
+  base_salary: number;
+  lunch_allowance: number;
+  transport_allowance: number;
+  clothing_allowance: number;
+  kpi_allowance: number;
+  default_ot: number;
+  extra_ot_hours: number;
+  extra_ot: number;
+  dependents_count: number;
+  // OUTPUT
+  gross_ref: number;
+  gross_actual: number;
+  employee_bhxh: number;
+  taxable_income: number;
+  assessable_income: number;
+  pit: number;
+  net_salary: number;
+  company_bhxh: number;
+  total_company_cost: number;
+  note: string;
+  created_at: string;
+  // joined
+  employee?: HrEmployee;
+}
+

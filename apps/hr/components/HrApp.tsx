@@ -1,0 +1,150 @@
+import React from 'react';
+import { AccountUser } from '@/types';
+import { ToastNotification } from '@/components/ToastNotification';
+import { Navbar } from '@/apps/invoice/components/Navbar';
+import { useHrState, HrTab } from '../hooks/useHrState';
+import EmployeeList from './EmployeeList';
+import EmployeeForm from './EmployeeForm';
+import EmployeeDetail from './EmployeeDetail';
+import DepartmentManager from './DepartmentManager';
+import ReminderDashboard from './ReminderDashboard';
+
+interface HrAppProps {
+  currentUser: AccountUser;
+  onBack: () => void;
+  initialTab?: string | null;
+}
+
+const TAB_MAP: Record<HrTab, string> = {
+  employees: 'history',
+  employeeForm: 'edit',
+  employeeDetail: 'recurring',
+  departments: 'activity',
+  reminders: 'dashboard',
+};
+
+const TAB_LABELS: Record<string, string> = {
+  history: 'Nhân sự',
+  edit: 'Thêm/Sửa',
+  activity: 'Phòng ban',
+  dashboard: 'Nhắc việc',
+};
+
+const REVERSE_TAB: Record<string, HrTab> = {
+  history: 'employees',
+  edit: 'employeeForm',
+  activity: 'departments',
+  dashboard: 'reminders',
+};
+
+const HrApp: React.FC<HrAppProps> = ({ currentUser, onBack, initialTab }) => {
+  const state = useHrState(initialTab);
+
+
+
+  const navbarTab = TAB_MAP[state.activeTab];
+  const accessibleTabs = ['history', 'activity', 'dashboard'];
+
+  return (
+    <div className="min-h-screen flex flex-col transition-colors duration-500" style={{ backgroundColor: '#0F0F0F' }}>
+      {state.toast && (
+        <ToastNotification
+          message={{ text: state.toast.message, type: state.toast.type }}
+          onDismiss={() => state.setToast(null)}
+        />
+      )}
+
+      <Navbar
+        theme="dark"
+        currentUser={currentUser}
+        activeTab={navbarTab as any}
+        accessibleTabs={accessibleTabs as any}
+        onTabChange={(tab) => {
+          const hrTab = REVERSE_TAB[tab];
+          if (hrTab) {
+            state.setEditingEmployee(null);
+            state.setViewingEmployee(null);
+            state.setActiveTab(hrTab);
+          }
+        }}
+        onLogout={onBack}
+        onBack={onBack}
+        appName="HR"
+        tabLabels={TAB_LABELS}
+      />
+
+      <main className="flex-1 p-6 md:p-12 max-w-[1400px] mx-auto w-full">
+        {state.activeTab === 'employees' && (
+          <EmployeeList
+            employees={state.filteredEmployees}
+            departments={state.departments}
+            isLoading={state.isLoading}
+            searchQuery={state.searchQuery}
+            setSearchQuery={state.setSearchQuery}
+            filterType={state.filterType}
+            setFilterType={state.setFilterType}
+            filterStatus={state.filterStatus}
+            setFilterStatus={state.setFilterStatus}
+            filterDepartment={state.filterDepartment}
+            setFilterDepartment={state.setFilterDepartment}
+            totalCount={state.employees.length}
+            onView={(e) => { state.setViewingEmployee(e); state.setActiveTab('employeeDetail'); }}
+            onEdit={(e) => { state.setEditingEmployee(e); state.setActiveTab('employeeForm'); }}
+            onDelete={state.handleDeleteEmployee}
+            onAdd={() => { state.setEditingEmployee(null); state.setActiveTab('employeeForm'); }}
+            onRefresh={state.loadAll}
+            pendingReminders={state.pendingReminders.length}
+          />
+        )}
+
+        {state.activeTab === 'employeeForm' && (
+          <EmployeeForm
+            editingEmployee={state.editingEmployee}
+            departments={state.departments}
+            contracts={state.contracts}
+            loadContracts={state.loadContracts}
+            onSave={state.handleSaveEmployee}
+            onUpdate={state.handleUpdateEmployee}
+            onCancel={() => { state.setEditingEmployee(null); state.setActiveTab('employees'); }}
+            onSaveContract={state.handleSaveContract}
+            onUpdateContract={state.handleUpdateContract}
+            onDeleteContract={state.handleDeleteContract}
+          />
+        )}
+
+        {state.activeTab === 'employeeDetail' && state.viewingEmployee && (
+          <EmployeeDetail
+            employee={state.viewingEmployee}
+            departments={state.departments}
+            onBack={() => { state.setViewingEmployee(null); state.setActiveTab('employees'); }}
+            onEdit={(e) => { state.setEditingEmployee(e); state.setActiveTab('employeeForm'); }}
+          />
+        )}
+
+        {state.activeTab === 'departments' && (
+          <DepartmentManager
+            departments={state.departments}
+            employees={state.employees}
+            onSave={state.handleSaveDepartment}
+            onUpdate={state.handleUpdateDepartment}
+            onDelete={state.handleDeleteDepartment}
+          />
+        )}
+
+        {state.activeTab === 'reminders' && (
+          <ReminderDashboard
+            reminders={state.pendingReminders}
+            onGenerate={state.handleGenerateReminders}
+            onDismiss={state.handleDismissReminder}
+          />
+        )}
+      </main>
+
+      <footer className="py-12 border-t text-center opacity-30 text-[9px] font-black uppercase tracking-[0.5em]">
+        TD Consulting • Enterprise Billing Engine • v2.1
+      </footer>
+    </div>
+  );
+};
+
+export default HrApp;

@@ -1,0 +1,316 @@
+import { supabase } from '@/services/supabaseClient';
+import {
+  AttShift, AttEmployeeShift, AttRecord, AttRequest, AttQrSession,
+  AttMonthlySheet, AttMonthlyRecord, HrEmployee,
+} from '@/types';
+
+// ══════════════════════════════════════════════════════════
+// ── Shifts ────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+
+export async function fetchShifts(): Promise<AttShift[]> {
+  const { data, error } = await supabase
+    .from('att_shifts')
+    .select('*')
+    .order('name');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveShift(shift: Omit<AttShift, 'id' | 'created_at'>): Promise<AttShift> {
+  const { data, error } = await supabase
+    .from('att_shifts')
+    .insert(shift)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateShift(id: string, updates: Partial<AttShift>) {
+  const { error } = await supabase.from('att_shifts').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteShift(id: string) {
+  const { error } = await supabase.from('att_shifts').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ══════════════════════════════════════════════════════════
+// ── Employee Shifts (Phân ca) ─────────────────────────────
+// ══════════════════════════════════════════════════════════
+
+export async function fetchEmployeeShifts(): Promise<AttEmployeeShift[]> {
+  const { data, error } = await supabase
+    .from('att_employee_shifts')
+    .select('*, shift:att_shifts(*), employee:hr_employees(*)')
+    .order('effective_from', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveEmployeeShift(es: Omit<AttEmployeeShift, 'id' | 'created_at' | 'shift' | 'employee'>): Promise<AttEmployeeShift> {
+  const { data, error } = await supabase
+    .from('att_employee_shifts')
+    .insert(es)
+    .select('*, shift:att_shifts(*), employee:hr_employees(*)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteEmployeeShift(id: string) {
+  const { error } = await supabase.from('att_employee_shifts').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ══════════════════════════════════════════════════════════
+// ── Attendance Records ────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+
+export async function fetchRecords(filters?: { date?: string; employeeId?: string }): Promise<AttRecord[]> {
+  let q = supabase
+    .from('att_records')
+    .select('*, employee:hr_employees(*), shift:att_shifts(*)')
+    .order('date', { ascending: false });
+  if (filters?.date) q = q.eq('date', filters.date);
+  if (filters?.employeeId) q = q.eq('employee_id', filters.employeeId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchRecordsByRange(from: string, to: string): Promise<AttRecord[]> {
+  const { data, error } = await supabase
+    .from('att_records')
+    .select('*, employee:hr_employees(*), shift:att_shifts(*)')
+    .gte('date', from)
+    .lte('date', to)
+    .order('date', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function checkIn(employeeId: string, method: string = 'manual', shiftId?: string, note?: string): Promise<AttRecord> {
+  const today = new Date().toISOString().split('T')[0];
+  const now = new Date().toISOString();
+
+  // Check if record exists for today
+  const { data: existing } = await supabase
+    .from('att_records')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .eq('date', today)
+    .maybeSingle();
+
+  if (existing) {
+    // Already checked in — do check-out instead
+    const { data, error } = await supabase
+      .from('att_records')
+      .update({ check_out: now })
+      .eq('id', existing.id)
+      .select('*, employee:hr_employees(*), shift:att_shifts(*)')
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  // New check-in
+  const record: any = {
+    employee_id: employeeId,
+    date: today,
+    check_in: now,
+    method,
+    shift_id: shiftId || null,
+    note: note || '',
+  };
+
+  // Calculate late status if shift provided
+  if (shiftId) {
+    const { data: shift } = await supabase.from('att_shifts').select('*').eq('id', shiftId).single();
+    if (shift) {
+      const [sh, sm] = shift.start_time.split(':').map(Number);
+      const checkInTime = new Date(now);
+      const scheduledStart = new Date(now);
+      scheduledStart.setHours(sh, sm, 0, 0);
+      const diffMins = Math.round((checkInTime.getTime() - scheduledStart.getTime()) / 60000);
+      if (diffMins > (shift.late_threshold_minutes || 15)) {
+        record.status = 'late';
+        record.late_minutes = diffMins;
+      }
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('att_records')
+    .insert(record)
+    .select('*, employee:hr_employees(*), shift:att_shifts(*)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateRecord(id: string, updates: Partial<AttRecord>) {
+  const { error } = await supabase.from('att_records').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteRecord(id: string) {
+  const { error } = await supabase.from('att_records').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ══════════════════════════════════════════════════════════
+// ── Requests ──────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+
+export async function fetchRequests(status?: string): Promise<AttRequest[]> {
+  let q = supabase
+    .from('att_requests')
+    .select('*, employee:hr_employees(*)')
+    .order('created_at', { ascending: false });
+  if (status) q = q.eq('status', status);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveRequest(req: Omit<AttRequest, 'id' | 'created_at' | 'approved_at' | 'employee'>): Promise<AttRequest> {
+  const { data, error } = await supabase
+    .from('att_requests')
+    .insert(req)
+    .select('*, employee:hr_employees(*)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function approveRequest(id: string, approved_by: string, reviewer_note: string = '') {
+  const { error } = await supabase
+    .from('att_requests')
+    .update({ status: 'approved', approved_by, approved_at: new Date().toISOString(), reviewer_note })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function rejectRequest(id: string, approved_by: string, reviewer_note: string = '') {
+  const { error } = await supabase
+    .from('att_requests')
+    .update({ status: 'rejected', approved_by, approved_at: new Date().toISOString(), reviewer_note })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteRequest(id: string) {
+  const { error } = await supabase.from('att_requests').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ══════════════════════════════════════════════════════════
+// ── QR Sessions ───────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+
+export async function fetchQrSessions(): Promise<AttQrSession[]> {
+  const { data, error } = await supabase
+    .from('att_qr_sessions')
+    .select('*, shift:att_shifts(*)')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createQrSession(session: Omit<AttQrSession, 'id' | 'created_at' | 'shift'>): Promise<AttQrSession> {
+  const { data, error } = await supabase
+    .from('att_qr_sessions')
+    .insert(session)
+    .select('*, shift:att_shifts(*)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function validateQrToken(token: string): Promise<AttQrSession | null> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('att_qr_sessions')
+    .select('*, shift:att_shifts(*)')
+    .eq('token', token)
+    .lte('valid_from', now)
+    .gte('valid_to', now)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// ══════════════════════════════════════════════════════════
+// ── Monthly Sheets (Bảng chấm công tháng) ─────────────────
+// ══════════════════════════════════════════════════════════
+
+export async function fetchMonthlySheets(): Promise<AttMonthlySheet[]> {
+  const { data, error } = await supabase
+    .from('att_monthly_sheets')
+    .select('*')
+    .order('year', { ascending: false })
+    .order('month', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createMonthlySheet(
+  month: number, year: number, employees: HrEmployee[]
+): Promise<{ sheet: AttMonthlySheet; records: AttMonthlyRecord[] }> {
+  const title = `Bảng chấm công Tháng ${month}/${year}`;
+
+  // Create the sheet
+  const { data: sheet, error: sheetErr } = await supabase
+    .from('att_monthly_sheets')
+    .insert({ month, year, title })
+    .select()
+    .single();
+  if (sheetErr) throw sheetErr;
+
+  // Auto-populate employee records
+  const rows = employees.map(e => ({
+    sheet_id: sheet.id,
+    employee_id: e.id,
+    work_days: 0,
+    ot_hours: 0,
+    late_count: 0,
+    absent_days: 0,
+    note: '',
+  }));
+
+  const { data: records, error: recErr } = await supabase
+    .from('att_monthly_records')
+    .insert(rows)
+    .select('*, employee:hr_employees(*)');
+  if (recErr) throw recErr;
+
+  return { sheet, records: records || [] };
+}
+
+export async function fetchMonthlyRecords(sheetId: string): Promise<AttMonthlyRecord[]> {
+  const { data, error } = await supabase
+    .from('att_monthly_records')
+    .select('*, employee:hr_employees(*)')
+    .eq('sheet_id', sheetId)
+    .order('created_at');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function updateMonthlyRecord(id: string, updates: Partial<AttMonthlyRecord>) {
+  const { error } = await supabase.from('att_monthly_records').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
+export async function updateMonthlySheet(id: string, updates: Partial<AttMonthlySheet>) {
+  const { error } = await supabase.from('att_monthly_sheets').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteMonthlySheet(id: string) {
+  const { error } = await supabase.from('att_monthly_sheets').delete().eq('id', id);
+  if (error) throw error;
+}

@@ -41,5 +41,29 @@ export const APPS: AppConfig[] = [
     color: '#0A84FF',
     gradient: 'linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%)',
   },
+  {
+    id: 'hr',
+    name: 'HR',
+    icon: '🧑‍💼',
+    description: 'Quản lý nhân sự toàn diện',
+    color: '#FF375F',
+    gradient: 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)',
+  },
+  {
+    id: 'attendance',
+    name: 'Chấm công',
+    icon: '⏰',
+    description: 'Chấm công & quản lý ca làm việc',
+    color: '#FF6B35',
+    gradient: 'linear-gradient(135deg, #FF6B35 0%, #F7C948 100%)',
+  },
+  {
+    id: 'payroll',
+    name: 'Tính lương',
+    icon: '💵',
+    description: 'Tính lương & thuế TNCN',
+    color: '#10B981',
+    gradient: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+  },
 ];
 
