@@ -1,4 +1,5 @@
 import React from 'react';
+import AppBackground from '@/components/AppBackground';
 import { AccountUser } from '@/types';
 import { ToastNotification } from '@/components/ToastNotification';
 import { Navbar } from '@/apps/invoice/components/Navbar';
@@ -47,7 +48,8 @@ const AttendanceApp: React.FC<Props> = ({ currentUser, onBack, initialTab }) => 
   const accessibleTabs = ['dashboard', 'history', 'activity', 'edit', 'recurring'];
 
   return (
-    <div className="min-h-screen flex flex-col transition-colors duration-500" style={{ backgroundColor: '#0F0F0F' }}>
+    <div className="min-h-screen flex flex-col relative overflow-hidden transition-colors duration-500" style={{ backgroundColor: '#0F0F0F' }}>
+      <AppBackground />
       {state.toast && (
         <ToastNotification
           message={{ text: state.toast.message, type: state.toast.type }}

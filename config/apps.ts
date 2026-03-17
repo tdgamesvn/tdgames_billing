@@ -29,7 +29,7 @@ export const APPS: AppConfig[] = [
     id: 'workforce',
     name: 'Workforce',
     icon: '👷',
-    description: 'Quản lý nhân sự & nghiệm thu',
+    description: 'Quản lý Task và nghiệm thu',
     color: '#5856D6',
     gradient: 'linear-gradient(135deg, #5856D6 0%, #AF52DE 100%)',
   },

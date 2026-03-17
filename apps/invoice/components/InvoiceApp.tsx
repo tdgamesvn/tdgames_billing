@@ -1,4 +1,5 @@
 import React from 'react';
+import AppBackground from '@/components/AppBackground';
 import { useInvoiceState } from '../hooks/useInvoiceState';
 import { AccountUser } from '@/types';
 
@@ -30,7 +31,8 @@ const InvoiceApp: React.FC<InvoiceAppProps> = ({ currentUser, onBack, initialTab
   }, [currentUser]);
 
   return (
-    <div className="min-h-screen flex flex-col transition-colors duration-500" style={{ backgroundColor: state.invoice.theme === 'dark' ? '#0F0F0F' : '#F5F5F5' }}>
+    <div className="min-h-screen flex flex-col relative overflow-hidden transition-colors duration-500" style={{ backgroundColor: state.invoice.theme === 'dark' ? '#0F0F0F' : '#F5F5F5' }}>
+      {state.invoice.theme === 'dark' && <AppBackground />}
       <ToastNotification message={state.lastMessage} onDismiss={() => state.setLastMessage(null)} />
 
       <Navbar

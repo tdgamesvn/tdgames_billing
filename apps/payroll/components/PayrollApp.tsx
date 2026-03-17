@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import AppBackground from '@/components/AppBackground';
 import { AccountUser } from '@/types';
 import { ToastNotification } from '@/components/ToastNotification';
 import { Navbar } from '@/apps/invoice/components/Navbar';
@@ -44,7 +45,8 @@ const PayrollApp: React.FC<PayrollAppProps> = ({ currentUser, onBack }) => {
 
   // ── Sheets List View ──
   return (
-    <div className="min-h-screen bg-bg-dark">
+    <div className="min-h-screen bg-bg-dark relative overflow-hidden">
+      <AppBackground />
       <Navbar
         theme="dark"
         currentUser={currentUser}

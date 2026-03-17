@@ -61,6 +61,31 @@ const EmployeeForm: React.FC<Props> = ({
   const [contractForm, setContractForm] = useState(emptyContract);
   const [showContractForm, setShowContractForm] = useState(false);
   const isEdit = !!editingEmployee;
+  const [showValidation, setShowValidation] = useState(false);
+
+  // Required fields definition per employee type
+  const requiredFields: { key: string; label: string }[] = [
+    { key: 'full_name', label: 'Họ tên' },
+    { key: 'email', label: 'Email' },
+    { key: 'phone', label: 'SĐT' },
+    { key: 'date_of_birth', label: 'Ngày sinh' },
+    { key: 'gender', label: 'Giới tính' },
+    { key: 'address', label: 'Địa chỉ' },
+    { key: 'id_number', label: 'CMND/CCCD' },
+    ...(form.type === 'fulltime' ? [
+      { key: 'id_issue_date', label: 'Ngày cấp CMND' },
+      { key: 'id_issue_place', label: 'Nơi cấp' },
+      { key: 'department_id', label: 'Phòng ban' },
+      { key: 'position', label: 'Chức danh' },
+      { key: 'start_date', label: 'Ngày bắt đầu' },
+    ] : []),
+  ];
+  const missingRequired = requiredFields.filter(f => {
+    const val = (form as any)[f.key];
+    return !val || (typeof val === 'string' && !val.trim());
+  });
+  const isFieldMissing = (key: string) => showValidation && missingRequired.some(f => f.key === key);
+  const reqStar = (key: string) => requiredFields.some(f => f.key === key) ? ' *' : '';
 
   // Salary components state
   const [salaryComponents, setSalaryComponents] = useState<HrSalaryComponent[]>([]);
@@ -178,7 +203,8 @@ const EmployeeForm: React.FC<Props> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.full_name.trim()) return;
+    setShowValidation(true);
+    if (missingRequired.length > 0) return;
 
     // Calculate total gross from salary components
     const totalGross = (Object.values(salaryAmounts) as number[]).reduce((s, v) => s + (v || 0), 0);
@@ -250,8 +276,8 @@ const EmployeeForm: React.FC<Props> = ({
           <h3 className="text-lg font-black text-white uppercase tracking-tight">Thông tin cơ bản</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <label className={labelCls}>Họ tên *</label>
-              <input className={inputCls} value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Nguyễn Văn A" required />
+              <label className={labelCls}>Họ tên{reqStar('full_name')}</label>
+              <input className={inputCls} style={isFieldMissing('full_name') ? { borderColor: '#FF453A' } : {}} value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Nguyễn Văn A" />
             </div>
             <div>
               <label className={labelCls}>Loại nhân sự *</label>
@@ -271,20 +297,20 @@ const EmployeeForm: React.FC<Props> = ({
               </select>
             </div>
             <div>
-              <label className={labelCls}>Email</label>
-              <input className={inputCls} value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
+              <label className={labelCls}>Email{reqStar('email')}</label>
+              <input className={inputCls} style={isFieldMissing('email') ? { borderColor: '#FF453A' } : {}} value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
             </div>
             <div>
-              <label className={labelCls}>Số điện thoại</label>
-              <input className={inputCls} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="0912 345 678" />
+              <label className={labelCls}>Số điện thoại{reqStar('phone')}</label>
+              <input className={inputCls} style={isFieldMissing('phone') ? { borderColor: '#FF453A' } : {}} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="0912 345 678" />
             </div>
             <div>
-              <label className={labelCls}>Ngày sinh</label>
-              <input type="date" className={inputCls} value={form.date_of_birth || ''} onChange={e => setForm(f => ({ ...f, date_of_birth: e.target.value || null }))} />
+              <label className={labelCls}>Ngày sinh{reqStar('date_of_birth')}</label>
+              <input type="date" className={inputCls} style={isFieldMissing('date_of_birth') ? { borderColor: '#FF453A' } : {}} value={form.date_of_birth || ''} onChange={e => setForm(f => ({ ...f, date_of_birth: e.target.value || null }))} />
             </div>
             <div>
-              <label className={labelCls}>Giới tính</label>
-              <select className={inputCls} value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
+              <label className={labelCls}>Giới tính{reqStar('gender')}</label>
+              <select className={inputCls} style={isFieldMissing('gender') ? { borderColor: '#FF453A' } : {}} value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
                 <option value="">-- Chọn --</option>
                 <option value="male">Nam</option>
                 <option value="female">Nữ</option>
@@ -296,8 +322,8 @@ const EmployeeForm: React.FC<Props> = ({
               <input className={inputCls} value={form.nationality} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))} />
             </div>
             <div className="md:col-span-3">
-              <label className={labelCls}>Địa chỉ</label>
-              <input className={inputCls} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Số nhà, đường, quận, TP..." />
+              <label className={labelCls}>Địa chỉ{reqStar('address')}</label>
+              <input className={inputCls} style={isFieldMissing('address') ? { borderColor: '#FF453A' } : {}} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Số nhà, đường, quận, TP..." />
             </div>
           </div>
         </div>
@@ -307,16 +333,16 @@ const EmployeeForm: React.FC<Props> = ({
           <h3 className="text-lg font-black text-white uppercase tracking-tight">🪪 CMND / CCCD & Ảnh nhân sự</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <label className={labelCls}>Số CMND/CCCD</label>
-              <input className={inputCls} value={form.id_number} onChange={e => setForm(f => ({ ...f, id_number: e.target.value }))} />
+              <label className={labelCls}>Số CMND/CCCD{reqStar('id_number')}</label>
+              <input className={inputCls} style={isFieldMissing('id_number') ? { borderColor: '#FF453A' } : {}} value={form.id_number} onChange={e => setForm(f => ({ ...f, id_number: e.target.value }))} />
             </div>
             <div>
-              <label className={labelCls}>Ngày cấp</label>
-              <input type="date" className={inputCls} value={form.id_issue_date || ''} onChange={e => setForm(f => ({ ...f, id_issue_date: e.target.value || null }))} />
+              <label className={labelCls}>Ngày cấp{reqStar('id_issue_date')}</label>
+              <input type="date" className={inputCls} style={isFieldMissing('id_issue_date') ? { borderColor: '#FF453A' } : {}} value={form.id_issue_date || ''} onChange={e => setForm(f => ({ ...f, id_issue_date: e.target.value || null }))} />
             </div>
             <div>
-              <label className={labelCls}>Nơi cấp</label>
-              <input className={inputCls} value={form.id_issue_place} onChange={e => setForm(f => ({ ...f, id_issue_place: e.target.value }))} />
+              <label className={labelCls}>Nơi cấp{reqStar('id_issue_place')}</label>
+              <input className={inputCls} style={isFieldMissing('id_issue_place') ? { borderColor: '#FF453A' } : {}} value={form.id_issue_place} onChange={e => setForm(f => ({ ...f, id_issue_place: e.target.value }))} />
             </div>
           </div>
           {/* Photo uploads */}
@@ -413,15 +439,15 @@ const EmployeeForm: React.FC<Props> = ({
                 <input className={inputCls} value={form.insurance_number} onChange={e => setForm(f => ({ ...f, insurance_number: e.target.value }))} />
               </div>
               <div>
-                <label className={labelCls}>Phòng ban</label>
-                <select className={inputCls} value={form.department_id || ''} onChange={e => setForm(f => ({ ...f, department_id: e.target.value || null }))}>
+                <label className={labelCls}>Phòng ban{reqStar('department_id')}</label>
+              <select className={inputCls} style={isFieldMissing('department_id') ? { borderColor: '#FF453A' } : {}} value={form.department_id || ''} onChange={e => setForm(f => ({ ...f, department_id: e.target.value || null }))}>
                   <option value="">-- Chọn --</option>
                   {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Chức danh</label>
-                <input className={inputCls} value={form.position} onChange={e => setForm(f => ({ ...f, position: e.target.value }))} placeholder="Senior Artist" />
+                <label className={labelCls}>Chức danh{reqStar('position')}</label>
+              <input className={inputCls} style={isFieldMissing('position') ? { borderColor: '#FF453A' } : {}} value={form.position} onChange={e => setForm(f => ({ ...f, position: e.target.value }))} placeholder="Senior Artist" />
               </div>
               <div>
                 <label className={labelCls}>Cấp bậc</label>
@@ -437,8 +463,20 @@ const EmployeeForm: React.FC<Props> = ({
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Ngày bắt đầu</label>
-                <input type="date" className={inputCls} value={form.start_date || ''} onChange={e => setForm(f => ({ ...f, start_date: e.target.value || null }))} />
+                <label className={labelCls}>Ngày bắt đầu{reqStar('start_date')}</label>
+                <input type="date" className={inputCls} style={isFieldMissing('start_date') ? { borderColor: '#FF453A' } : {}} value={form.start_date || ''} onChange={e => {
+                  const val = e.target.value || null;
+                  setForm(f => {
+                    const updated = { ...f, start_date: val };
+                    // Auto-calculate probation end = start_date + 2 months
+                    if (val) {
+                      const d = new Date(val);
+                      d.setMonth(d.getMonth() + 2);
+                      updated.probation_end = d.toISOString().split('T')[0];
+                    }
+                    return updated;
+                  });
+                }} />
               </div>
               <div>
                 <label className={labelCls}>Ngày hết thử việc</label>
@@ -790,6 +828,14 @@ const EmployeeForm: React.FC<Props> = ({
         </div>
 
         {/* ── Buttons ── */}
+        {/* Validation warning */}
+        {showValidation && missingRequired.length > 0 && (
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+            <p className="text-red-400 text-sm font-bold">⚠️ Vui lòng điền đầy đủ các trường bắt buộc:</p>
+            <p className="text-red-400/80 text-xs mt-1">{missingRequired.map(f => f.label).join(', ')}</p>
+          </div>
+        )}
+
         <div className="flex gap-4">
           <button type="button" onClick={onCancel} className="flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest border border-primary/10 text-neutral-medium hover:text-white hover:border-primary/30 transition-all">Huỷ</button>
           <button type="submit" className="flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest text-white shadow-btn-glow hover:shadow-btn-glow-hover transition-all hover:scale-[1.02] active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)' }}>

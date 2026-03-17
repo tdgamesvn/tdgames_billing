@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import AppBackground from '@/components/AppBackground';
 import { PayPayrollSheet, PayPayrollRecord } from '@/types';
 
 interface Props {
@@ -51,7 +52,8 @@ const PayrollSheet: React.FC<Props> = ({
   const totalCompanyCost = records.reduce((s, r) => s + r.total_company_cost, 0);
 
   return (
-    <div className="min-h-screen bg-bg-dark">
+    <div className="min-h-screen bg-bg-dark relative overflow-hidden">
+      <AppBackground />
       {/* Header */}
       <div className="sticky top-0 z-30 bg-bg-dark/90 backdrop-blur-xl border-b border-primary/10">
         <div className="max-w-[1400px] mx-auto px-4 py-3 flex items-center justify-between">

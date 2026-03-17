@@ -4,6 +4,7 @@ import { HrEmployee, HrDepartment, HrContract, HrEvaluation, HrProjectHistory } 
 import * as svc from '../services/hrService';
 import { uploadFileToR2, toPublicUrl } from '../services/hrService';
 import DocumentManager from './DocumentManager';
+import ContractGenerator from './ContractGenerator';
 
 interface Props {
   employee: HrEmployee;
@@ -16,6 +17,7 @@ type DetailTab = 'info' | 'contracts' | 'evaluations' | 'projects' | 'documents'
 
 const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit }) => {
   const [activeTab, setActiveTab] = useState<DetailTab>('info');
+  const [showContractGen, setShowContractGen] = useState(false);
   const [contracts, setContracts] = useState<HrContract[]>([]);
   const [evaluations, setEvaluations] = useState<HrEvaluation[]>([]);
   const [projectHistory, setProjectHistory] = useState<HrProjectHistory[]>([]);
@@ -143,6 +145,9 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
               </div>
             </div>
             <div className="flex gap-2">
+              {(employee.type === 'fulltime' || employee.type === 'freelancer') && (
+                <button onClick={() => setShowContractGen(true)} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80" style={{ background: employee.type === 'freelancer' ? 'linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%)' : 'linear-gradient(135deg, #34C759 0%, #30D158 100%)' }}>📝 Xuất hợp đồng</button>
+              )}
               <button onClick={() => onEdit(employee)} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80" style={{ background: 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)' }}>✏️ Sửa</button>
               <button onClick={onBack} className="px-4 py-2 rounded-xl border border-primary/10 text-neutral-medium text-xs font-black uppercase tracking-widest hover:text-white hover:border-primary/30 transition-all">← Quay lại</button>
             </div>
@@ -365,6 +370,15 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
       {/* Documents Tab */}
       {!loading && activeTab === 'documents' && (
         <DocumentManager employee={employee} />
+      )}
+
+      {/* Contract Generator Modal */}
+      {showContractGen && (
+        <ContractGenerator
+          employee={employee}
+          department={departments.find(d => d.id === employee.department_id)}
+          onClose={() => setShowContractGen(false)}
+        />
       )}
     </div>
   );
