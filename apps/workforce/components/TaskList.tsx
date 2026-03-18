@@ -3,6 +3,7 @@ import { Worker, WorkforceTask } from '@/types';
 import * as clickup from '../services/clickupService';
 import { ClickUpConfig, ClickUpSpace, ClickUpList, ListContext } from '../services/clickupService';
 import * as wfSvc from '../services/workforceService';
+import { supabase } from '@/services/supabaseClient';
 
 interface TaskListProps {
   tasks: WorkforceTask[];
@@ -111,7 +112,7 @@ const TaskList: React.FC<TaskListProps> = ({
         if (w.email) emailToWorker.set(w.email.toLowerCase(), w);
       }
 
-      // 3. Upsert tasks matched by email
+      // 3. Upsert tasks matched by email — check DB directly (not stale in-memory array)
       let synced = 0;
       let skipped = 0;
 
@@ -128,8 +129,15 @@ const TaskList: React.FC<TaskListProps> = ({
           continue;
         }
 
-        // Check if task already exists
-        const existing = tasks.find(t => t.clickup_task_id === ct.clickup_task_id);
+        // Check if task already exists in DB (not in-memory) by clickup_task_id + worker_id
+        const { data: existingRows } = await supabase
+          .from('wf_tasks')
+          .select('id')
+          .eq('clickup_task_id', ct.clickup_task_id)
+          .eq('worker_id', matchedWorker.id!)
+          .limit(1);
+        const existing = existingRows && existingRows.length > 0 ? existingRows[0] : null;
+
         const ourStatus = mapStatus(ct.clickup_status);
         const startDate = ct.date_created ? ct.date_created.split('T')[0] : null;
         // Use date_done if available; fallback to date_updated for closed/approved tasks
@@ -140,7 +148,7 @@ const TaskList: React.FC<TaskListProps> = ({
 
         if (existing) {
           // Update existing
-          await wfSvc.updateTask(existing.id!, {
+          await wfSvc.updateTask(existing.id, {
             title: ct.title,
             clickup_status: ct.clickup_status,
             status: ourStatus,

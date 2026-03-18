@@ -190,6 +190,7 @@ const EmployeeList: React.FC<Props> = ({
                   <div className="space-y-1 text-xs text-neutral-medium">
                     {emp.position && <p>💼 {emp.position}{emp.level ? ` • ${emp.level}` : ''}</p>}
                     {dept && <p>🏢 {dept.name}</p>}
+                    {emp.work_email && <p>💼 {emp.work_email}</p>}
                     {emp.email && <p>📧 {emp.email}</p>}
                     {emp.phone && <p>📱 {emp.phone}</p>}
                     {emp.type === 'freelancer' && emp.specializations.length > 0 && (

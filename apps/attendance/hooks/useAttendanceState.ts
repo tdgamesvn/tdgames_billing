@@ -4,8 +4,8 @@ import * as svc from '../services/attendanceService';
 import { fetchEmployees } from '@/apps/hr/services/hrService';
 import { setHashTab } from '@/App';
 
-export type AttTab = 'dashboard' | 'log' | 'shifts' | 'requests' | 'reports';
-const VALID_TABS: AttTab[] = ['dashboard', 'log', 'shifts', 'requests', 'reports'];
+export type AttTab = 'dashboard' | 'log' | 'shifts' | 'reports' | 'leaves';
+const VALID_TABS: AttTab[] = ['dashboard', 'log', 'shifts', 'reports', 'leaves'];
 
 export function useAttendanceState(initialTab?: string | null) {
   const [activeTab, _setActiveTab] = useState<AttTab>(() => {

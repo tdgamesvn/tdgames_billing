@@ -17,7 +17,7 @@ const PayrollApp: React.FC<PayrollAppProps> = ({ currentUser, onBack }) => {
   const {
     view, sheets, records, activeSheet, loading, toast,
     setToast, createSheet, openSheet, deleteSheet,
-    updateRecord, saveRecord, confirmSheet, backToSheets,
+    updateRecord, saveRecord, confirmSheet, rollbackSheet, backToSheets,
   } = state;
 
   const [newMonth, setNewMonth] = useState(new Date().getMonth() + 1);
@@ -38,6 +38,7 @@ const PayrollApp: React.FC<PayrollAppProps> = ({ currentUser, onBack }) => {
           onUpdateRecord={updateRecord}
           onSaveRecord={saveRecord}
           onConfirm={confirmSheet}
+          onRollback={rollbackSheet}
         />
       </>
     );

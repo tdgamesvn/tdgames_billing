@@ -9,6 +9,7 @@ import ExpenseList from './ExpenseList';
 import ExpenseForm from './ExpenseForm';
 import ExpenseRecurring from './ExpenseRecurring';
 import ExpenseCategoryManager from './ExpenseCategoryManager';
+import ExpenseDashboard from './ExpenseDashboard';
 
 interface ExpenseAppProps {
   currentUser: AccountUser;
@@ -17,6 +18,7 @@ interface ExpenseAppProps {
 }
 
 const TAB_MAP: Record<ExpenseTab, string> = {
+  dashboard: 'overview',
   list: 'history',
   add: 'history',
   recurring: 'recurring',
@@ -24,12 +26,14 @@ const TAB_MAP: Record<ExpenseTab, string> = {
 };
 
 const TAB_LABELS: Record<string, string> = {
+  overview: 'Dashboard',
   history: 'Danh sách',
   recurring: 'Định kỳ',
   activity: 'Danh mục',
 };
 
 const REVERSE_TAB: Record<string, ExpenseTab> = {
+  overview: 'dashboard',
   history: 'list',
   recurring: 'recurring',
   activity: 'categories',
@@ -61,7 +65,7 @@ const ExpenseApp: React.FC<ExpenseAppProps> = ({ currentUser, onBack, initialTab
   }, []);
 
   const navbarTab = TAB_MAP[state.activeTab];
-  const accessibleTabs = (['history', 'recurring', 'activity'] as const).map(t => t);
+  const accessibleTabs = (['overview', 'history', 'recurring', 'activity'] as const).map(t => t);
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden transition-colors duration-500" style={{ backgroundColor: '#0F0F0F' }}>
@@ -98,6 +102,14 @@ const ExpenseApp: React.FC<ExpenseAppProps> = ({ currentUser, onBack, initialTab
 
       {/* Main Content */}
       <main className="flex-1 p-6 md:p-12 max-w-[1400px] mx-auto w-full">
+        {state.activeTab === 'dashboard' && (
+          <ExpenseDashboard
+            expenses={state.expenses}
+            categories={state.categories}
+            isLoading={state.isLoading}
+            onNavigateToList={() => state.setActiveTab('list')}
+          />
+        )}
         {state.activeTab === 'list' && (
           <>
             {showForm || state.editingExpense ? (

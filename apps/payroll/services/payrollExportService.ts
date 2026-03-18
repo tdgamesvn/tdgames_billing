@@ -1,0 +1,204 @@
+import * as XLSX from 'xlsx';
+import { PayPayrollSheet, PayPayrollRecord } from '@/types';
+
+const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN');
+
+/**
+ * Export bảng lương ra file Excel (.xlsx)
+ */
+export function exportPayrollToExcel(sheet: PayPayrollSheet, records: PayPayrollRecord[]) {
+  const rows: any[][] = [];
+
+  // ── Header ──
+  rows.push(['TD GAMES COMPANY LIMITED']);
+  rows.push([]);
+  rows.push([`BẢNG LƯƠNG THÁNG ${sheet.month}/${sheet.year}`]);
+  rows.push([]);
+
+  // ── Column headers ──
+  rows.push([
+    'STT',
+    'Mã NV',
+    'Họ và tên',
+    'Ngày công',
+    'Lương CB',
+    'PC ăn trưa',
+    'PC xăng xe, ĐT',
+    'PC trang phục',
+    'KPI',
+    'Tăng ca MĐ',
+    'Tăng ca PS (h)',
+    'Tăng ca PS (đ)',
+    'Gross TK',
+    'Gross thực tế',
+    'BH NV (10.5%)',
+    'Thu nhập chịu thuế',
+    'Số NPT',
+    'Thu nhập tính thuế',
+    'Thuế TNCN',
+    'NET thực lĩnh',
+    'BH công ty (21.5%)',
+    'Chi phí công ty',
+  ]);
+
+  // ── Data rows ──
+  records.forEach((rec, idx) => {
+    rows.push([
+      idx + 1,
+      rec.employee?.employee_code || '',
+      rec.employee?.full_name || '',
+      rec.work_days,
+      rec.base_salary,
+      rec.lunch_allowance,
+      rec.transport_allowance,
+      rec.clothing_allowance,
+      rec.kpi_allowance,
+      rec.default_ot,
+      rec.extra_ot_hours,
+      rec.extra_ot,
+      rec.gross_ref,
+      rec.gross_actual,
+      rec.employee_bhxh,
+      rec.taxable_income,
+      rec.dependents_count,
+      rec.assessable_income,
+      rec.pit,
+      rec.net_salary,
+      rec.company_bhxh,
+      rec.total_company_cost,
+    ]);
+  });
+
+  // ── Summary row ──
+  rows.push([]);
+  const sum = (field: keyof PayPayrollRecord) =>
+    records.reduce((s, r) => s + (typeof r[field] === 'number' ? (r[field] as number) : 0), 0);
+
+  rows.push([
+    '', '', 'TỔNG CỘNG', '',
+    sum('base_salary'),
+    sum('lunch_allowance'),
+    sum('transport_allowance'),
+    sum('clothing_allowance'),
+    sum('kpi_allowance'),
+    sum('default_ot'),
+    sum('extra_ot_hours'),
+    sum('extra_ot'),
+    sum('gross_ref'),
+    sum('gross_actual'),
+    sum('employee_bhxh'),
+    sum('taxable_income'),
+    '',
+    sum('assessable_income'),
+    sum('pit'),
+    sum('net_salary'),
+    sum('company_bhxh'),
+    sum('total_company_cost'),
+  ]);
+
+  // ── Create workbook ──
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  // Column widths
+  ws['!cols'] = [
+    { wch: 5 },   // STT
+    { wch: 10 },  // Mã NV
+    { wch: 25 },  // Họ tên
+    { wch: 10 },  // Ngày công
+    { wch: 14 },  // Lương CB
+    { wch: 14 },  // PC ăn trưa
+    { wch: 14 },  // PC xăng xe
+    { wch: 14 },  // PC trang phục
+    { wch: 14 },  // KPI
+    { wch: 14 },  // TC MĐ
+    { wch: 12 },  // TC PS (h)
+    { wch: 14 },  // TC PS (đ)
+    { wch: 14 },  // Gross TK
+    { wch: 14 },  // Gross thực
+    { wch: 14 },  // BH NV
+    { wch: 14 },  // TNCT
+    { wch: 8 },   // NPT
+    { wch: 14 },  // TNTT
+    { wch: 14 },  // Thuế
+    { wch: 16 },  // Net
+    { wch: 14 },  // BH CT
+    { wch: 16 },  // CPCT
+  ];
+
+  // Merge title rows
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },  // Company name
+    { s: { r: 2, c: 0 }, e: { r: 2, c: 10 } },  // Sheet title
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `T${sheet.month}_${sheet.year}`);
+
+  const fileName = `Bang_Luong_T${sheet.month}_${sheet.year}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+}
+
+/**
+ * Export phiếu lương cá nhân ra Excel
+ */
+export function exportPaySlipToExcel(sheet: PayPayrollSheet, rec: PayPayrollRecord) {
+  const STANDARD_DAYS = 22;
+  const ratio = rec.work_days / STANDARD_DAYS;
+  const empName = rec.employee?.full_name || 'N/A';
+  const empCode = rec.employee?.employee_code || '';
+
+  const rows: any[][] = [];
+
+  rows.push(['CÔNG TY TNHH TƯ VẤN TD (TD CONSULTING COMPANY LIMITED)']);
+  rows.push([]);
+  rows.push([`PHIẾU LƯƠNG THÁNG ${sheet.month}/${sheet.year}`]);
+  rows.push([]);
+  rows.push(['Mã nhân viên:', empCode]);
+  rows.push(['Họ và tên:', empName]);
+  rows.push(['Phòng ban:', rec.employee?.department?.name || '—']);
+  rows.push(['Chức vụ:', rec.employee?.position || '—']);
+  rows.push([]);
+
+  // Detail table
+  rows.push(['Khoản mục', 'Tham chiếu', 'Thực tế']);
+  rows.push(['Ngày công', `${STANDARD_DAYS} ngày`, `${rec.work_days} ngày`]);
+  rows.push(['Tỷ lệ ngày công', '', (ratio * 100).toFixed(2) + '%']);
+  rows.push([]);
+  rows.push(['— BƯỚC 1-2: LƯƠNG THỰC TẾ —']);
+  rows.push(['Lương cơ bản', rec.base_salary, Math.round(rec.base_salary * ratio)]);
+  rows.push(['Phụ cấp ăn trưa', rec.lunch_allowance, Math.round(rec.lunch_allowance * ratio)]);
+  rows.push(['Phụ cấp xăng xe, ĐT', rec.transport_allowance, Math.round(rec.transport_allowance * ratio)]);
+  rows.push(['Phụ cấp trang phục', rec.clothing_allowance, Math.round(rec.clothing_allowance * ratio)]);
+  rows.push(['Phụ cấp KPI', rec.kpi_allowance, Math.round(rec.kpi_allowance * ratio)]);
+  rows.push(['Tăng ca mặc định', rec.default_ot, Math.round(rec.default_ot * ratio)]);
+  rows.push(['Tăng ca phát sinh', `${rec.extra_ot_hours}h`, rec.extra_ot]);
+  rows.push([]);
+  rows.push(['Gross tham chiếu', '', rec.gross_ref]);
+  rows.push(['Gross thực tế', '', rec.gross_actual]);
+  rows.push([]);
+  rows.push(['— BƯỚC 3-8: BẢO HIỂM → THUẾ → NET —']);
+  rows.push(['BH nhân viên (10.5%)', '', rec.employee_bhxh]);
+  rows.push(['Thu nhập chịu thuế (CB + KPI)', '', rec.taxable_income]);
+  rows.push(['Giảm trừ bản thân', '', -15_500_000]);
+  rows.push(['Giảm trừ NPT (' + rec.dependents_count + ' người)', '', -(rec.dependents_count * 6_200_000)]);
+  rows.push(['Thu nhập tính thuế', '', rec.assessable_income]);
+  rows.push(['Thuế TNCN', '', rec.pit]);
+  rows.push([]);
+  rows.push(['NET THỰC LĨNH', '', rec.net_salary]);
+  rows.push([]);
+  rows.push(['BH công ty (21.5%)', '', rec.company_bhxh]);
+  rows.push(['Tổng chi phí công ty', '', rec.total_company_cost]);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 18 }];
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: 2 } },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Phiếu lương');
+
+  const fileName = `Phieu_Luong_${empCode}_T${sheet.month}_${sheet.year}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { LoginScreen } from './components/LoginScreen';
+import { SetPasswordScreen } from './components/SetPasswordScreen';
 import { AccountUser } from './types';
 import HomeScreen from './components/HomeScreen';
 import InvoiceApp from './apps/invoice/components/InvoiceApp';
@@ -9,8 +10,13 @@ import CrmApp from './apps/crm/components/CrmApp';
 import HrApp from './apps/hr/components/HrApp';
 import AttendanceApp from './apps/attendance/components/AttendanceApp';
 import PayrollApp from './apps/payroll/components/PayrollApp';
+import DashboardApp from './apps/dashboard/components/DashboardApp';
+import PortalApp from './apps/portal/components/PortalApp';
+import { supabase } from './services/supabaseClient';
 
-const VALID_APPS = ['invoice', 'expense', 'workforce', 'crm', 'hr', 'attendance', 'payroll'];
+const VALID_ROLES = ['admin', 'ke_toan', 'hr', 'member'] as const;
+const parseRole = (r: string) => (VALID_ROLES.includes(r as any) ? r : 'member') as AccountUser['role'];
+const VALID_APPS = ['dashboard', 'invoice', 'expense', 'workforce', 'crm', 'hr', 'attendance', 'payroll', 'portal'];
 
 /** Parse hash like #workforce/tasks → { app: 'workforce', tab: 'tasks' } */
 const parseHash = (): { app: string | null; tab: string | null } => {
@@ -31,25 +37,54 @@ export const setHashTab = (tab: string) => {
 };
 
 const App: React.FC = () => {
-  // ── Auth State ──
-  const [currentUser, _setCurrentUser] = useState<AccountUser | null>(() => {
-    try {
-      const saved = localStorage.getItem('invoice_user');
-      if (!saved) return null;
-      const { user, expiresAt } = JSON.parse(saved);
-      if (Date.now() > expiresAt) { localStorage.removeItem('invoice_user'); return null; }
-      return user as AccountUser;
-    } catch { return null; }
-  });
+  // ── Auth State (Supabase Auth managed) ──
+  const [currentUser, setCurrentUser] = useState<AccountUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [needsPasswordSet, setNeedsPasswordSet] = useState(false);
 
-  const setCurrentUser = (user: AccountUser | null) => {
-    _setCurrentUser(user);
-    if (user) {
-      localStorage.setItem('invoice_user', JSON.stringify({ user, expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 }));
-    } else {
-      localStorage.removeItem('invoice_user');
-    }
-  };
+  useEffect(() => {
+    // Restore session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        const meta = session.user.user_metadata;
+        setCurrentUser({
+          id: session.user.id,
+          username: meta.username || session.user.email?.split('@')[0] || 'unknown',
+          role: parseRole(meta.role || 'member'),
+          employee_id: meta.employee_id || undefined,
+        });
+      }
+      setAuthLoading(false);
+    });
+
+    // Listen for auth changes (login, logout, token refresh, invite)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        const meta = session.user.user_metadata;
+        setCurrentUser({
+          id: session.user.id,
+          username: meta.username || session.user.email?.split('@')[0] || 'unknown',
+          role: parseRole(meta.role || 'member'),
+          employee_id: meta.employee_id || undefined,
+        });
+
+        // Detect invite or password recovery flow
+        if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+          // Check URL hash for invite token type
+          const hash = window.location.hash;
+          if (hash.includes('type=invite') || hash.includes('type=recovery') || event === 'PASSWORD_RECOVERY') {
+            setNeedsPasswordSet(true);
+            // Clean URL hash after detecting token
+            history.replaceState(null, '', window.location.pathname);
+          }
+        }
+      } else {
+        setCurrentUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // ── App Router State (synced with URL hash) ──
   const [activeApp, _setActiveApp] = useState<string | null>(() => parseHash().app);
@@ -76,7 +111,8 @@ const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setCurrentUser(null);
     setActiveApp(null);
   };
@@ -85,10 +121,41 @@ const App: React.FC = () => {
     setActiveApp(null);
   };
 
+  // ── Loading state ──
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#0F0F0F' }}>
+        <div className="text-center">
+          <div className="w-12 h-12 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-4" style={{ borderColor: '#FF9500', borderTopColor: 'transparent' }} />
+          <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#9D9C9D' }}>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Invite flow: Set password ──
+  if (needsPasswordSet && currentUser) {
+    return (
+      <SetPasswordScreen
+        onComplete={() => {
+          setNeedsPasswordSet(false);
+          // For member role, auto-navigate to portal
+          if (currentUser.role === 'member') {
+            setActiveApp('portal');
+          }
+        }}
+      />
+    );
+  }
+
   // ── Not logged in ──
   if (!currentUser) return <LoginScreen onLogin={setCurrentUser} />;
 
   // ── App Router ──
+  if (activeApp === 'dashboard') {
+    return <DashboardApp currentUser={currentUser} onBack={handleBack} initialTab={initialTab} />;
+  }
+
   if (activeApp === 'invoice') {
     return <InvoiceApp currentUser={currentUser} onBack={handleBack} initialTab={initialTab} />;
   }
@@ -115,6 +182,10 @@ const App: React.FC = () => {
 
   if (activeApp === 'payroll') {
     return <PayrollApp currentUser={currentUser} onBack={handleBack} initialTab={initialTab} />;
+  }
+
+  if (activeApp === 'portal') {
+    return <PortalApp currentUser={currentUser} onBack={handleBack} />;
   }
 
   // ── Home Screen ──

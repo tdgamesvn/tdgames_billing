@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AppBackground from '@/components/AppBackground';
-import { AccountUser } from '@/types';
+import { AccountUser, CrmActivity } from '@/types';
 import { ToastNotification } from '@/components/ToastNotification';
 import { Navbar } from '@/apps/invoice/components/Navbar';
 import { useCrmState, CrmTab } from '../hooks/useCrmState';
@@ -9,6 +9,8 @@ import ClientForm from './ClientForm';
 import ProjectList from './ProjectList';
 import DocumentList from './DocumentList';
 import PaymentTracker from './PaymentTracker';
+import ActivityTimeline from './ActivityTimeline';
+import { fetchActivities } from '../services/crmService';
 
 interface CrmAppProps {
   currentUser: AccountUser;
@@ -17,11 +19,11 @@ interface CrmAppProps {
 }
 
 const TAB_MAP: Record<CrmTab, string> = {
-  clients:  'history',
-  projects: 'tasks',
-  documents:'settings',
-  payments: 'activity',
-  stats:    'board',
+  clients:    'history',
+  projects:   'tasks',
+  documents:  'settings',
+  payments:   'activity',
+  activities: 'board',
 };
 
 const TAB_LABELS: Record<string, string> = {
@@ -29,7 +31,7 @@ const TAB_LABELS: Record<string, string> = {
   tasks:    'Dự án',
   settings: 'Tài liệu',
   activity: 'Thanh toán',
-  board:    'Thống kê',
+  board:    'Hoạt động',
 };
 
 const REVERSE_TAB: Record<string, CrmTab> = {
@@ -37,7 +39,128 @@ const REVERSE_TAB: Record<string, CrmTab> = {
   tasks:    'projects',
   settings: 'documents',
   activity: 'payments',
-  board:    'stats',
+  board:    'activities',
+};
+
+const TYPE_ICON: Record<string, { icon: string; label: string; color: string }> = {
+  call:          { icon: '📞', label: 'Gọi điện',    color: '#34C759' },
+  email:         { icon: '📧', label: 'Email',       color: '#0A84FF' },
+  meeting:       { icon: '🤝', label: 'Meeting',     color: '#FF9500' },
+  note:          { icon: '📝', label: 'Ghi chú',     color: '#AF52DE' },
+  status_change: { icon: '🔄', label: 'Đổi trạng thái', color: '#FF3B30' },
+};
+
+const GlobalActivityFeed: React.FC<{ clients: any[]; actor: string }> = ({ clients, actor }) => {
+  const [activities, setActivities] = useState<CrmActivity[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [filterType, setFilterType] = useState('');
+
+  const clientMap = Object.fromEntries(clients.map(c => [c.id, c.name]));
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetchActivities(undefined, 100).then(data => { setActivities(data); setIsLoading(false); }).catch(() => setIsLoading(false));
+  }, []);
+
+  const filtered = filterType ? activities.filter(a => a.activity_type === filterType) : activities;
+
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const formatTime = (d: string) => new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <div className="animate-fadeInUp" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2 style={{ fontSize: '2rem', fontWeight: 900, color: '#FF9500', textTransform: 'uppercase', letterSpacing: '-0.03em' }}>
+          Hoạt động gần đây
+        </h2>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => setFilterType('')}
+            style={{
+              padding: '6px 14px', borderRadius: '8px', fontSize: '11px', fontWeight: 700,
+              background: !filterType ? 'rgba(255,149,0,0.15)' : 'transparent',
+              border: `1px solid ${!filterType ? 'rgba(255,149,0,0.3)' : 'rgba(255,255,255,0.08)'}`,
+              color: !filterType ? '#FF9500' : '#888', cursor: 'pointer',
+            }}
+          >Tất cả</button>
+          {Object.entries(TYPE_ICON).filter(([k]) => k !== 'status_change').map(([key, meta]) => (
+            <button
+              key={key}
+              onClick={() => setFilterType(filterType === key ? '' : key)}
+              style={{
+                padding: '6px 14px', borderRadius: '8px', fontSize: '11px', fontWeight: 700,
+                background: filterType === key ? meta.color + '15' : 'transparent',
+                border: `1px solid ${filterType === key ? meta.color + '30' : 'rgba(255,255,255,0.08)'}`,
+                color: filterType === key ? meta.color : '#888', cursor: 'pointer',
+              }}
+            >{meta.icon} {meta.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div style={{ textAlign: 'center', padding: '40px' }}>
+          <p style={{ color: '#888', fontSize: '13px' }} className="animate-pulse">Đang tải hoạt động...</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px', background: '#161616', border: '1px solid #222', borderRadius: '16px' }}>
+          <p style={{ fontSize: '48px', marginBottom: '12px' }}>📋</p>
+          <p style={{ fontSize: '15px', fontWeight: 700, color: 'rgba(255,255,255,0.4)' }}>Chưa có hoạt động nào</p>
+          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.2)', marginTop: '4px' }}>Mở chi tiết khách hàng để thêm ghi chú, cuộc gọi, meeting...</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {filtered.map(act => {
+            const meta = TYPE_ICON[act.activity_type] || TYPE_ICON.note;
+            return (
+              <div key={act.id} style={{
+                display: 'flex', gap: '16px', alignItems: 'flex-start',
+                padding: '16px 20px', background: '#161616', border: '1px solid #222',
+                borderRadius: '12px', transition: 'border-color 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = meta.color + '40')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = '#222')}
+              >
+                <div style={{
+                  width: '42px', height: '42px', borderRadius: '12px', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px',
+                  background: meta.color + '15', border: `1px solid ${meta.color}25`,
+                }}>
+                  {meta.icon}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <p style={{ fontSize: '14px', fontWeight: 700, color: '#F5F5F5' }}>{act.title}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px', flexWrap: 'wrap' }}>
+                        <span style={{
+                          fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px',
+                          background: '#FF950015', color: '#FF9500',
+                        }}>
+                          {clientMap[act.client_id] || 'Unknown'}
+                        </span>
+                        <span style={{
+                          fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px',
+                          background: meta.color + '15', color: meta.color,
+                        }}>{meta.label}</span>
+                        <span style={{ fontSize: '11px', color: '#666' }}>
+                          {formatDate(act.activity_date)} • {formatTime(act.activity_date)}
+                        </span>
+                        {act.actor && <span style={{ fontSize: '11px', color: '#555' }}>bởi {act.actor}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  {act.description && (
+                    <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', marginTop: '8px', lineHeight: '1.5' }}>{act.description}</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const CrmApp: React.FC<CrmAppProps> = ({ currentUser, onBack, initialTab }) => {
@@ -92,6 +215,7 @@ const CrmApp: React.FC<CrmAppProps> = ({ currentUser, onBack, initialTab }) => {
                 onCreateContact={state.handleCreateContact}
                 onUpdateContact={state.handleUpdateContact}
                 onDeleteContact={state.handleDeleteContact}
+                actor={currentUser.username}
               />
             ) : (
               <ClientList
@@ -127,116 +251,9 @@ const CrmApp: React.FC<CrmAppProps> = ({ currentUser, onBack, initialTab }) => {
           <PaymentTracker clients={state.clients} />
         )}
 
-        {/* ── Stats Tab ── */}
-        {state.activeTab === 'stats' && (
-          <div className="animate-fadeInUp" style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-            <h2 style={{ fontSize: '2rem', fontWeight: 900, color: '#FF9500', textTransform: 'uppercase', letterSpacing: '-0.03em' }}>
-              Thống kê khách hàng
-            </h2>
-
-            {/* Lead Source breakdown */}
-            <div style={{ background: '#161616', border: '1px solid #222', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#888', marginBottom: '16px' }}>
-                Nguồn khách hàng
-              </h3>
-              {(() => {
-                const sources = [...new Set(state.clients.map(c => c.lead_source).filter(Boolean))];
-                if (sources.length === 0) return <p style={{ color: '#666', fontSize: '14px' }}>Chưa có dữ liệu nguồn</p>;
-                return (
-                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    {sources.map(s => {
-                      const count = state.clients.filter(c => c.lead_source === s).length;
-                      return (
-                        <div key={s} style={{
-                          background: '#1A1A1A', border: '1px solid #333', borderRadius: '10px', padding: '14px 20px',
-                          textAlign: 'center', minWidth: '100px',
-                        }}>
-                          <p style={{ fontSize: '22px', fontWeight: 900, color: '#0A84FF' }}>{count}</p>
-                          <p style={{ fontSize: '12px', color: '#888', fontWeight: 600, marginTop: '2px' }}>{s}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Direction breakdown */}
-            <div style={{ background: '#161616', border: '1px solid #222', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#888', marginBottom: '16px' }}>
-                Hướng tiếp cận
-              </h3>
-              <div style={{ display: 'flex', gap: '16px' }}>
-                {[
-                  { key: 'inbound', label: '📥 Khách tìm mình', color: '#34C759' },
-                  { key: 'outbound', label: '📤 Mình tìm khách', color: '#FF9500' },
-                ].map(d => (
-                  <div key={d.key} style={{
-                    background: '#1A1A1A', border: '1px solid #333', borderRadius: '10px', padding: '20px 28px',
-                    textAlign: 'center', flex: 1,
-                  }}>
-                    <p style={{ fontSize: '28px', fontWeight: 900, color: d.color }}>
-                      {state.clients.filter(c => c.lead_direction === d.key).length}
-                    </p>
-                    <p style={{ fontSize: '12px', color: '#888', fontWeight: 600, marginTop: '4px' }}>{d.label}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Industry breakdown */}
-            <div style={{ background: '#161616', border: '1px solid #222', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#888', marginBottom: '16px' }}>
-                Theo ngành nghề
-              </h3>
-              {state.industries.length === 0 ? (
-                <p style={{ color: '#666', fontSize: '14px' }}>Chưa có dữ liệu ngành nghề</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {state.industries.map(ind => {
-                    const count = state.clients.filter(c => c.industry === ind).length;
-                    const pct = Math.round((count / state.clients.length) * 100);
-                    return (
-                      <div key={ind} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span style={{ width: '160px', fontSize: '13px', color: '#ccc', fontWeight: 600 }}>{ind}</span>
-                        <div style={{ flex: 1, height: '8px', background: '#222', borderRadius: '4px', overflow: 'hidden' }}>
-                          <div style={{ width: `${pct}%`, height: '100%', background: '#FF9500', borderRadius: '4px', transition: 'width 0.5s' }} />
-                        </div>
-                        <span style={{ fontSize: '13px', color: '#FF9500', fontWeight: 700, minWidth: '40px', textAlign: 'right' }}>{count}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Country breakdown */}
-            <div style={{ background: '#161616', border: '1px solid #222', borderRadius: '12px', padding: '24px' }}>
-              <h3 style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#888', marginBottom: '16px' }}>
-                Theo quốc gia
-              </h3>
-              {(() => {
-                const countries = [...new Set(state.clients.map(c => c.country).filter(Boolean))];
-                if (countries.length === 0) return <p style={{ color: '#666', fontSize: '14px' }}>Chưa có dữ liệu quốc gia</p>;
-                return (
-                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    {countries.map(c => {
-                      const count = state.clients.filter(cl => cl.country === c).length;
-                      return (
-                        <div key={c} style={{
-                          background: '#1A1A1A', border: '1px solid #333', borderRadius: '10px', padding: '14px 20px',
-                          textAlign: 'center', minWidth: '100px',
-                        }}>
-                          <p style={{ fontSize: '22px', fontWeight: 900, color: '#FF9500' }}>{count}</p>
-                          <p style={{ fontSize: '12px', color: '#888', fontWeight: 600, marginTop: '2px' }}>{c}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
+        {/* ── Activities Tab ── */}
+        {state.activeTab === 'activities' && (
+          <GlobalActivityFeed clients={state.clients} actor={currentUser.username} />
         )}
       </main>
 

@@ -74,7 +74,8 @@ export interface InvoiceData {
 export interface AccountUser {
   id: string;
   username: string;
-  role: 'admin' | 'member';
+  role: 'admin' | 'ke_toan' | 'hr' | 'member';
+  employee_id?: string; // Links to hr_employees.id for Employee Portal
 }
 
 // ── Expense Module Types ──────────────────────────────────────
@@ -276,6 +277,18 @@ export interface CrmProjectFile {
   created_at: string;
 }
 
+export interface CrmActivity {
+  id: string;
+  client_id: string;
+  activity_type: 'call' | 'email' | 'meeting' | 'note' | 'status_change';
+  title: string;
+  description: string;
+  outcome: 'positive' | 'neutral' | 'negative' | '';
+  activity_date: string;
+  actor: string;
+  created_at: string;
+}
+
 // ── HR Module Types ───────────────────────────────────────────
 
 export interface HrDepartment {
@@ -296,11 +309,13 @@ export interface HrEmployee {
   full_name: string;
   avatar_url: string;
   email: string;
+  work_email: string;
   phone: string;
   date_of_birth: string | null;
   gender: string;
   nationality: string;
   address: string;
+  temp_address: string;
 
   // Fulltime
   id_number: string;
@@ -539,6 +554,8 @@ export interface AttRequest {
   approved_by: string | null;
   approved_at: string | null;
   reviewer_note: string;
+  leave_type: 'annual' | 'unpaid' | 'sick';
+  leave_days: number;
   created_at: string;
   // joined
   employee?: HrEmployee;
@@ -625,3 +642,17 @@ export interface PayPayrollRecord {
   employee?: HrEmployee;
 }
 
+// ══════════════════════════════════════════════════════════
+// ── Leave Balance (Ngày phép) ─────────────────────────────
+// ══════════════════════════════════════════════════════════
+
+export interface LeaveBalance {
+  id: string;
+  employee_id: string;
+  year: number;
+  quarter: number;
+  accrued_days: number;
+  used_days: number;
+  expired_days: number;
+  created_at: string;
+}

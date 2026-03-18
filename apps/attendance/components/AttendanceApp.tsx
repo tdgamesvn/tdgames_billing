@@ -8,8 +8,9 @@ import Dashboard from './Dashboard';
 import ShiftManager from './ShiftManager';
 import AttendanceLog from './AttendanceLog';
 import MonthlySheet from './MonthlySheet';
-import RequestManager from './RequestManager';
+
 import AttendanceReport from './AttendanceReport';
+import LeaveApproval from './LeaveApproval';
 
 interface Props {
   currentUser: AccountUser;
@@ -21,31 +22,31 @@ const TAB_MAP: Record<AttTab, string> = {
   dashboard: 'dashboard',
   log: 'history',
   shifts: 'activity',
-  requests: 'edit',
   reports: 'recurring',
+  leaves: 'tasks',
 };
 
 const TAB_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   history: 'Bảng công',
   activity: 'Ca làm việc',
-  edit: 'Đơn từ',
   recurring: 'Báo cáo',
+  tasks: 'Nghỉ phép',
 };
 
 const REVERSE_TAB: Record<string, AttTab> = {
   dashboard: 'dashboard',
   history: 'log',
   activity: 'shifts',
-  edit: 'requests',
   recurring: 'reports',
+  tasks: 'leaves',
 };
 
 const AttendanceApp: React.FC<Props> = ({ currentUser, onBack, initialTab }) => {
   const state = useAttendanceState(initialTab);
 
   const navbarTab = TAB_MAP[state.activeTab];
-  const accessibleTabs = ['dashboard', 'history', 'activity', 'edit', 'recurring'];
+  const accessibleTabs = ['dashboard', 'history', 'activity', 'recurring', 'tasks'];
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden transition-colors duration-500" style={{ backgroundColor: '#0F0F0F' }}>
@@ -107,20 +108,19 @@ const AttendanceApp: React.FC<Props> = ({ currentUser, onBack, initialTab }) => 
           />
         )}
 
-        {state.activeTab === 'requests' && (
-          <RequestManager
-            requests={state.requests}
-            employees={state.employees}
-            onSave={state.handleSaveRequest}
-            onApprove={(id, note) => state.handleApproveRequest(id, currentUser.username, note)}
-            onReject={(id, note) => state.handleRejectRequest(id, currentUser.username, note)}
-          />
-        )}
+
 
         {state.activeTab === 'reports' && (
           <AttendanceReport
             employees={state.employees}
             shifts={state.shifts}
+          />
+        )}
+
+        {state.activeTab === 'leaves' && (
+          <LeaveApproval
+            currentUser={currentUser}
+            onToast={(msg, type) => state.setToast({ message: msg, type })}
           />
         )}
       </main>

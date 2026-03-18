@@ -1,5 +1,5 @@
 import { supabase } from '@/services/supabaseClient';
-import { CrmClient, CrmContact, CrmDocument, CrmProject, CrmProjectFile } from '@/types';
+import { CrmClient, CrmContact, CrmDocument, CrmProject, CrmProjectFile, CrmActivity } from '@/types';
 
 // ══════════════════════════════════════════════════════════════
 // ── Clients ───────────────────────────────────────────────────
@@ -165,4 +165,27 @@ export async function fetchInvoicesByClient(clientName?: string): Promise<Invoic
   const { data, error } = await q;
   if (error) throw error;
   return data || [];
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── Activities ────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+export async function fetchActivities(clientId?: string, limit = 50): Promise<CrmActivity[]> {
+  let q = supabase.from('crm_activities').select('*').order('activity_date', { ascending: false }).limit(limit);
+  if (clientId) q = q.eq('client_id', clientId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createActivity(activity: Omit<CrmActivity, 'id' | 'created_at'>): Promise<CrmActivity> {
+  const { data, error } = await supabase.from('crm_activities').insert(activity).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteActivity(id: string): Promise<void> {
+  const { error } = await supabase.from('crm_activities').delete().eq('id', id);
+  if (error) throw error;
 }

@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import AppBackground from '@/components/AppBackground';
 import { PayPayrollSheet, PayPayrollRecord } from '@/types';
+import { exportPayrollToExcel } from '../services/payrollExportService';
+import PaySlip from './PaySlip';
 
 interface Props {
   sheet: PayPayrollSheet;
@@ -10,16 +12,18 @@ interface Props {
   onUpdateRecord: (id: string, field: string, value: number) => void;
   onSaveRecord: (rec: PayPayrollRecord) => void;
   onConfirm: () => void;
+  onRollback?: () => void;
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN');
 const STANDARD_DAYS = 22;
 
 const PayrollSheet: React.FC<Props> = ({
-  sheet, records, loading, onBack, onUpdateRecord, onSaveRecord, onConfirm,
+  sheet, records, loading, onBack, onUpdateRecord, onSaveRecord, onConfirm, onRollback,
 }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
+  const [paySlipRecord, setPaySlipRecord] = useState<PayPayrollRecord | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -73,11 +77,23 @@ const PayrollSheet: React.FC<Props> = ({
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button onClick={() => exportPayrollToExcel(sheet, records)}
+              className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80"
+              style={{ background: 'linear-gradient(135deg, #059669, #34D399)' }}>
+              📥 Export Excel
+            </button>
             {isDraft && (
               <button onClick={onConfirm}
                 className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80"
                 style={{ background: 'linear-gradient(135deg, #34D399, #059669)' }}>
                 ✅ Xác nhận bảng lương
+              </button>
+            )}
+            {sheet.status === 'confirmed' && onRollback && (
+              <button onClick={onRollback}
+                className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80"
+                style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)' }}>
+                ↩️ Huỷ xác nhận
               </button>
             )}
           </div>
@@ -130,12 +146,19 @@ const PayrollSheet: React.FC<Props> = ({
                 <div key={rec.id}>
                   {/* Main row */}
                   <div
-                    className="grid grid-cols-[2fr,0.8fr,1fr,0.8fr,1fr,0.8fr,0.8fr,1.2fr] gap-0 px-4 py-3 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors cursor-pointer items-center"
+                    className="group/row grid grid-cols-[2fr,0.8fr,1fr,0.8fr,1fr,0.8fr,0.8fr,1.2fr] gap-0 px-4 py-3 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors cursor-pointer items-center"
                     onClick={() => setExpandedId(isExpanded ? null : rec.id)}
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-sm">{isExpanded ? '▼' : '▶'}</span>
                       <span className="text-white font-bold text-sm truncate">{empName}</span>
+                      <button
+                        onClick={e => { e.stopPropagation(); setPaySlipRecord(rec); }}
+                        className="ml-1 px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-400 text-[9px] font-bold uppercase tracking-wider hover:bg-indigo-500/25 transition-all"
+                        title="Xem phiếu lương"
+                      >
+                        📄 Phiếu lương
+                      </button>
                     </div>
 
                     {/* Work days - editable */}
@@ -242,6 +265,15 @@ const PayrollSheet: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {/* Pay Slip Overlay */}
+      {paySlipRecord && (
+        <PaySlip
+          sheet={sheet}
+          record={paySlipRecord}
+          onClose={() => setPaySlipRecord(null)}
+        />
+      )}
     </div>
   );
 };

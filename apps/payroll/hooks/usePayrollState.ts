@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PayPayrollSheet, PayPayrollRecord } from '@/types';
+import { supabase } from '@/services/supabaseClient';
 import * as svc from '../services/payrollService';
 
 export type PayrollView = 'sheets' | 'detail';
@@ -32,6 +33,26 @@ export function usePayrollState(initialTab?: string | null) {
   const createSheet = useCallback(async (month: number, year: number) => {
     setLoading(true);
     try {
+      // Check if attendance sheet for this month is finalized
+      const { data: attSheets } = await supabase
+        .from('att_monthly_sheets')
+        .select('id, status')
+        .eq('month', month)
+        .eq('year', year);
+
+      if (!attSheets || attSheets.length === 0) {
+        setToast({ message: `⚠️ Chưa có bảng chấm công Tháng ${month}/${year}. Vui lòng tạo bảng chấm công trước.`, type: 'error' });
+        setLoading(false);
+        return;
+      }
+
+      const attSheet = attSheets[0];
+      if (attSheet.status !== 'finalized') {
+        setToast({ message: `⚠️ Bảng chấm công Tháng ${month}/${year} chưa được chốt. Vui lòng chốt bảng công trước khi tính lương.`, type: 'error' });
+        setLoading(false);
+        return;
+      }
+
       const { sheet, records: recs } = await svc.createPayrollSheet(month, year);
       setSheets(prev => [sheet, ...prev]);
       setActiveSheet(sheet);
@@ -104,6 +125,18 @@ export function usePayrollState(initialTab?: string | null) {
     }
   }, [activeSheet]);
 
+  const rollbackSheet = useCallback(async () => {
+    if (!activeSheet) return;
+    try {
+      await svc.updateSheetStatus(activeSheet.id, 'draft');
+      setActiveSheet(prev => prev ? { ...prev, status: 'draft' } : null);
+      setSheets(prev => prev.map(s => s.id === activeSheet.id ? { ...s, status: 'draft' } : s));
+      setToast({ message: 'Đã huỷ xác nhận — bảng lương quay lại Nháp', type: 'success' });
+    } catch (err: any) {
+      setToast({ message: err.message, type: 'error' });
+    }
+  }, [activeSheet]);
+
   const backToSheets = useCallback(() => {
     setView('sheets');
     setActiveSheet(null);
@@ -113,6 +146,6 @@ export function usePayrollState(initialTab?: string | null) {
   return {
     view, sheets, records, activeSheet, loading, toast,
     setToast, createSheet, openSheet, deleteSheet,
-    updateRecord, saveRecord, confirmSheet, backToSheets,
+    updateRecord, saveRecord, confirmSheet, rollbackSheet, backToSheets,
   };
 }

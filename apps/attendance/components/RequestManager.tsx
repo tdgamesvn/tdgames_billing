@@ -24,26 +24,13 @@ const STATUS_CLS: Record<string, string> = {
 };
 
 const RequestManager: React.FC<Props> = ({ requests, employees, onSave, onApprove, onReject }) => {
-  const [showForm, setShowForm] = useState(false);
-  const [filter, setFilter] = useState<string>('all');
-  const [form, setForm] = useState({
-    employee_id: '', request_type: 'leave', date_from: new Date().toISOString().split('T')[0],
-    date_to: new Date().toISOString().split('T')[0], reason: '', status: 'pending' as const,
-    approved_by: null as string | null, reviewer_note: '',
-  });
+  const [filter, setFilter] = useState<string>('pending');
 
   const cardCls = 'rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-6 backdrop-blur-xl';
-  const inputCls = 'w-full px-4 py-3 rounded-xl bg-black/30 border border-primary/10 text-white text-sm focus:border-primary/40 outline-none transition-colors';
-  const labelCls = 'block text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1';
 
-  const filtered = filter === 'all' ? requests : requests.filter(r => r.status === filter);
-
-  const handleSubmit = () => {
-    if (!form.employee_id || !form.request_type) return;
-    onSave(form);
-    setForm({ employee_id: '', request_type: 'leave', date_from: new Date().toISOString().split('T')[0], date_to: new Date().toISOString().split('T')[0], reason: '', status: 'pending', approved_by: null, reviewer_note: '' });
-    setShowForm(false);
-  };
+  // Filter out leave requests (handled in dedicated Nghỉ phép tab)
+  const nonLeaveRequests = requests.filter(r => r.request_type !== 'leave');
+  const filtered = filter === 'all' ? nonLeaveRequests : nonLeaveRequests.filter(r => r.status === filter);
 
   return (
     <div className="space-y-8 animate-fadeIn">
@@ -53,68 +40,21 @@ const RequestManager: React.FC<Props> = ({ requests, employees, onSave, onApprov
           <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-orange-400 to-yellow-400 bg-clip-text text-transparent uppercase tracking-tight">
             📝 Đơn từ
           </h1>
-          <p className="text-neutral-medium text-sm mt-1">{filtered.length} đơn</p>
+          <p className="text-neutral-medium text-sm mt-1">
+            {filtered.length} đơn — Duyệt đơn từ nhân viên (đi muộn, về sớm, quên chấm, tăng ca)
+          </p>
         </div>
         <div className="flex gap-3">
           {/* Filter */}
           <select value={filter} onChange={e => setFilter(e.target.value)}
             className="px-4 py-2 rounded-xl bg-surface border border-primary/10 text-white text-sm">
-            <option value="all">Tất cả</option>
             <option value="pending">Chờ duyệt</option>
             <option value="approved">Đã duyệt</option>
             <option value="rejected">Từ chối</option>
+            <option value="all">Tất cả</option>
           </select>
-          <button onClick={() => setShowForm(!showForm)}
-            className="px-6 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-black text-sm uppercase tracking-wide hover:scale-105 transition-all">
-            + Tạo đơn
-          </button>
         </div>
       </div>
-
-      {/* Create form */}
-      {showForm && (
-        <div className={cardCls}>
-          <h3 className="text-lg font-black text-white uppercase mb-4">➕ Tạo đơn mới</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div>
-              <label className={labelCls}>Nhân viên *</label>
-              <select className={inputCls} value={form.employee_id} onChange={e => setForm(f => ({ ...f, employee_id: e.target.value }))}>
-                <option value="">-- Chọn --</option>
-                {employees.filter(e => e.status === 'active').map(e => (
-                  <option key={e.id} value={e.id}>{e.full_name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Loại đơn *</label>
-              <select className={inputCls} value={form.request_type} onChange={e => setForm(f => ({ ...f, request_type: e.target.value }))}>
-                {Object.entries(TYPE_MAP).map(([k, v]) => (
-                  <option key={k} value={k}>{v.icon} {v.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Từ ngày *</label>
-              <input type="date" className={inputCls} value={form.date_from} onChange={e => setForm(f => ({ ...f, date_from: e.target.value }))} />
-            </div>
-            <div>
-              <label className={labelCls}>Đến ngày *</label>
-              <input type="date" className={inputCls} value={form.date_to} onChange={e => setForm(f => ({ ...f, date_to: e.target.value }))} />
-            </div>
-            <div className="md:col-span-2">
-              <label className={labelCls}>Lý do</label>
-              <input className={inputCls} value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="Nhập lý do..." />
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={handleSubmit} disabled={!form.employee_id}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-black text-sm disabled:opacity-30">
-              📤 Gửi đơn
-            </button>
-            <button onClick={() => setShowForm(false)} className="px-6 py-3 rounded-xl bg-white/[0.05] text-neutral-medium font-bold text-sm">Hủy</button>
-          </div>
-        </div>
-      )}
 
       {/* Request list */}
       {filtered.length === 0 ? (

@@ -13,7 +13,7 @@ export interface SaveResponse {
 
 export const fetchClientsFromCloud = async (): Promise<ClientRecord[]> => {
     const { data, error } = await supabase
-        .from('invoice_clients')
+        .from('crm_clients')
         .select('*')
         .order('name');
     if (error) throw new Error(`Fetch clients failed: ${error.message}`);
@@ -30,7 +30,7 @@ export const fetchClientsFromCloud = async (): Promise<ClientRecord[]> => {
 
 export const saveClientToCloud = async (client: ClientInfo): Promise<ClientRecord> => {
     const { data, error } = await supabase
-        .from('invoice_clients')
+        .from('crm_clients')
         .insert({
             client_type: client.clientType || 'company',
             name: client.name,
@@ -38,6 +38,8 @@ export const saveClientToCloud = async (client: ClientInfo): Promise<ClientRecor
             email: client.email,
             address: client.address,
             tax_code: client.taxCode || '',
+            status: 'active',
+            updated_at: new Date().toISOString(),
         })
         .select()
         .single();
@@ -47,7 +49,7 @@ export const saveClientToCloud = async (client: ClientInfo): Promise<ClientRecor
 
 export const updateClientInCloud = async (id: string, client: ClientInfo): Promise<void> => {
     const { error } = await supabase
-        .from('invoice_clients')
+        .from('crm_clients')
         .update({
             client_type: client.clientType || 'company',
             name: client.name,
@@ -55,6 +57,7 @@ export const updateClientInCloud = async (id: string, client: ClientInfo): Promi
             email: client.email,
             address: client.address,
             tax_code: client.taxCode || '',
+            updated_at: new Date().toISOString(),
         })
         .eq('id', id);
     if (error) throw new Error(`Update client failed: ${error.message}`);
@@ -389,16 +392,37 @@ export const deleteStudioFromCloud = async (id: string) => {
 // ACCOUNT / AUTH METHODS
 // ────────────────────────────────────────────────────────────────
 
+const VALID_ROLES = ['admin', 'ke_toan', 'hr', 'member'] as const;
+type ValidRole = typeof VALID_ROLES[number];
+const parseRole = (r: string): ValidRole => VALID_ROLES.includes(r as ValidRole) ? r as ValidRole : 'member';
+
 export const loginWithCredentials = async (username: string, password: string): Promise<AccountUser> => {
-    const { data, error } = await supabase
-        .rpc('invoice_verify_login', { p_username: username, p_password: password });
-    if (error) throw new Error('Đăng nhập thất bại.');
-    if (!data || data.length === 0) throw new Error('Tài khoản hoặc mật khẩu không đúng.');
-    const account = data[0];
+    // Support both username (admin) and email (user@gmail.com) login
+    const email = username.includes('@') ? username : `${username}@tdgames.local`;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error('Tài khoản hoặc mật khẩu không đúng.');
+    const meta = data.user.user_metadata;
     return {
-        id: account.id,
-        username: account.username,
-        role: account.role === 'admin' ? 'admin' : 'member',
+        id: data.user.id,
+        username: meta.username || data.user.email?.split('@')[0] || username,
+        role: parseRole(meta.role || 'member'),
+        employee_id: meta.employee_id || undefined,
+    };
+};
+
+export const logoutFromAuth = async (): Promise<void> => {
+    await supabase.auth.signOut();
+};
+
+export const getAuthUser = async (): Promise<AccountUser | null> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return null;
+    const meta = session.user.user_metadata;
+    return {
+        id: session.user.id,
+        username: meta.username || session.user.email?.split('@')[0] || 'unknown',
+        role: parseRole(meta.role || 'member'),
+        employee_id: meta.employee_id || undefined,
     };
 };
 

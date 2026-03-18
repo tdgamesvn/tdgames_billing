@@ -28,6 +28,37 @@ export async function saveEmployee(
     .select('*, department:hr_departments!hr_employees_department_id_fkey(*)')
     .single();
   if (error) throw error;
+
+  // Auto-create Supabase Auth account for fulltime/parttime employees using work_email
+  if (data.work_email && (data.type === 'fulltime' || data.type === 'parttime')) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-employee-auth`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ email: data.work_email, full_name: data.full_name, employee_id: data.id }),
+        }
+      );
+      const result = await res.json();
+      if (result.success) {
+        if (result.invited) {
+          console.log(`[Auth] Invite email sent to ${data.work_email}`);
+        } else {
+          console.log(`[Auth] Account already exists for ${data.work_email}, metadata updated`);
+        }
+      } else if (result.error) {
+        console.warn(`[Auth] Failed to invite ${data.work_email}:`, result.error);
+      }
+    } catch (authErr) {
+      console.warn('[Auth] Failed to auto-create auth account:', authErr);
+    }
+  }
+
   return data;
 }
 

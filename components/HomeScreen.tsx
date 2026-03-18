@@ -53,7 +53,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ currentUser, onSelectApp, onLog
 
         {/* App Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 max-w-3xl w-full">
-          {APPS.map((app) => (
+          {APPS.filter(app => !app.roles || app.roles.includes(currentUser.role)).map((app) => (
             <AppCard
               key={app.id}
               app={app}

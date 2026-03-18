@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { HrEmployee, HrDepartment, HrContract, HrSalaryComponent, HrEmployeeSalary, HrDependent, HrDependentDocument } from '@/types';
 import { uploadFileToR2, toPublicUrl } from '../services/hrService';
 import * as svc from '../services/hrService';
+import { supabase } from '@/services/supabaseClient';
 
 interface Props {
   editingEmployee: HrEmployee | null;
@@ -25,8 +26,8 @@ const SPECIALIZATION_OPTIONS = ['2D', '3D', 'VFX', 'Concept Art', 'Animation', '
 const emptyEmployee = {
   type: 'fulltime' as const,
   status: 'active' as const,
-  full_name: '', avatar_url: '', email: '', phone: '',
-  date_of_birth: null as string | null, gender: '', nationality: 'Vietnam', address: '',
+  full_name: '', avatar_url: '', email: '', work_email: '', phone: '',
+  date_of_birth: null as string | null, gender: '', nationality: 'Vietnam', address: '', temp_address: '',
   // FT
   id_number: '', id_issue_date: null as string | null, id_issue_place: '',
   id_card_front_url: '', id_card_back_url: '',
@@ -62,15 +63,20 @@ const EmployeeForm: React.FC<Props> = ({
   const [showContractForm, setShowContractForm] = useState(false);
   const isEdit = !!editingEmployee;
   const [showValidation, setShowValidation] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [workEmailError, setWorkEmailError] = useState('');
 
   // Required fields definition per employee type
   const requiredFields: { key: string; label: string }[] = [
     { key: 'full_name', label: 'Họ tên' },
-    { key: 'email', label: 'Email' },
+    { key: 'email', label: 'Email cá nhân' },
+    { key: 'work_email', label: 'Email công việc' },
     { key: 'phone', label: 'SĐT' },
     { key: 'date_of_birth', label: 'Ngày sinh' },
     { key: 'gender', label: 'Giới tính' },
-    { key: 'address', label: 'Địa chỉ' },
+    { key: 'address', label: 'Địa chỉ thường trú' },
+    { key: 'temp_address', label: 'Địa chỉ tạm trú' },
     { key: 'id_number', label: 'CMND/CCCD' },
     ...(form.type === 'fulltime' ? [
       { key: 'id_issue_date', label: 'Ngày cấp CMND' },
@@ -203,34 +209,56 @@ const EmployeeForm: React.FC<Props> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return; // Prevent double-click
     setShowValidation(true);
+    setEmailError('');
+    setWorkEmailError('');
     if (missingRequired.length > 0) return;
 
-    // Calculate total gross from salary components
-    const totalGross = (Object.values(salaryAmounts) as number[]).reduce((s, v) => s + (v || 0), 0);
-    const formWithSalary = { ...form, salary: totalGross };
-
-    if (isEdit) {
-      onUpdate(editingEmployee!.id, formWithSalary);
-      // Upsert salary records
-      for (const comp of salaryComponents) {
-        const amt = salaryAmounts[comp.id] || 0;
-        const existingId = existingSalaryIds[comp.id];
-        try {
-          if (existingId) {
-            await svc.updateEmployeeSalary(existingId, { amount: amt });
-          } else if (amt > 0) {
-            await svc.saveEmployeeSalary({
-              employee_id: editingEmployee!.id, component_id: comp.id,
-              amount: amt, note: '', effective_from: new Date().toISOString().split('T')[0], effective_to: null,
-            });
-          }
-        } catch {}
+    // Check duplicate work_email (only for new employees or if work_email changed)
+    if (!isEdit || (isEdit && editingEmployee!.work_email !== form.work_email)) {
+      const { data: existing } = await supabase
+        .from('hr_employees')
+        .select('id, full_name')
+        .eq('work_email', form.work_email.trim().toLowerCase())
+        .neq('work_email', '')
+        .maybeSingle();
+      if (existing && (!isEdit || existing.id !== editingEmployee!.id)) {
+        setWorkEmailError(`Email công việc "${form.work_email}" đã tồn tại (${existing.full_name}). Vui lòng dùng email khác.`);
+        return;
       }
-    } else {
-      // For new employee, pass salary amounts so parent can save after employee is created
-      (formWithSalary as any)._salaryAmounts = salaryAmounts;
-      onSave(formWithSalary);
+    }
+
+    setSaving(true);
+    try {
+      // Calculate total gross from salary components
+      const totalGross = (Object.values(salaryAmounts) as number[]).reduce((s, v) => s + (v || 0), 0);
+      const formWithSalary = { ...form, salary: totalGross };
+
+      if (isEdit) {
+        onUpdate(editingEmployee!.id, formWithSalary);
+        // Upsert salary records
+        for (const comp of salaryComponents) {
+          const amt = salaryAmounts[comp.id] || 0;
+          const existingId = existingSalaryIds[comp.id];
+          try {
+            if (existingId) {
+              await svc.updateEmployeeSalary(existingId, { amount: amt });
+            } else if (amt > 0) {
+              await svc.saveEmployeeSalary({
+                employee_id: editingEmployee!.id, component_id: comp.id,
+                amount: amt, note: '', effective_from: new Date().toISOString().split('T')[0], effective_to: null,
+              });
+            }
+          } catch {}
+        }
+      } else {
+        // For new employee, pass salary amounts so parent can save after employee is created
+        (formWithSalary as any)._salaryAmounts = salaryAmounts;
+        onSave(formWithSalary);
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -297,8 +325,14 @@ const EmployeeForm: React.FC<Props> = ({
               </select>
             </div>
             <div>
-              <label className={labelCls}>Email{reqStar('email')}</label>
-              <input className={inputCls} style={isFieldMissing('email') ? { borderColor: '#FF453A' } : {}} value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
+              <label className={labelCls}>Email cá nhân{reqStar('email')}</label>
+              <input className={inputCls} style={isFieldMissing('email') || emailError ? { borderColor: '#FF453A' } : {}} value={form.email} onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setEmailError(''); }} placeholder="email.canhan@gmail.com" />
+              {emailError && <p className="text-red-400 text-xs mt-1 font-bold">⚠️ {emailError}</p>}
+            </div>
+            <div>
+              <label className={labelCls}>Email công việc{reqStar('work_email')}</label>
+              <input className={inputCls} style={isFieldMissing('work_email') || workEmailError ? { borderColor: '#FF453A' } : {}} value={form.work_email} onChange={e => { setForm(f => ({ ...f, work_email: e.target.value })); setWorkEmailError(''); }} placeholder="ten@tdgamestudio.com" />
+              {workEmailError && <p className="text-red-400 text-xs mt-1 font-bold">⚠️ {workEmailError}</p>}
             </div>
             <div>
               <label className={labelCls}>Số điện thoại{reqStar('phone')}</label>
@@ -322,8 +356,12 @@ const EmployeeForm: React.FC<Props> = ({
               <input className={inputCls} value={form.nationality} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))} />
             </div>
             <div className="md:col-span-3">
-              <label className={labelCls}>Địa chỉ{reqStar('address')}</label>
+              <label className={labelCls}>Địa chỉ thường trú{reqStar('address')}</label>
               <input className={inputCls} style={isFieldMissing('address') ? { borderColor: '#FF453A' } : {}} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Số nhà, đường, quận, TP..." />
+            </div>
+            <div className="md:col-span-3">
+              <label className={labelCls}>Địa chỉ tạm trú{reqStar('temp_address')}</label>
+              <input className={inputCls} style={isFieldMissing('temp_address') ? { borderColor: '#FF453A' } : {}} value={form.temp_address} onChange={e => setForm(f => ({ ...f, temp_address: e.target.value }))} placeholder="Nếu giống thường trú, điền lại" />
             </div>
           </div>
         </div>
@@ -837,9 +875,14 @@ const EmployeeForm: React.FC<Props> = ({
         )}
 
         <div className="flex gap-4">
-          <button type="button" onClick={onCancel} className="flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest border border-primary/10 text-neutral-medium hover:text-white hover:border-primary/30 transition-all">Huỷ</button>
-          <button type="submit" className="flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest text-white shadow-btn-glow hover:shadow-btn-glow-hover transition-all hover:scale-[1.02] active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)' }}>
-            {isEdit ? '💾 Cập nhật' : '✚ Thêm nhân sự'}
+          <button type="button" onClick={onCancel} disabled={saving} className="flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest border border-primary/10 text-neutral-medium hover:text-white hover:border-primary/30 transition-all disabled:opacity-30">Huỷ</button>
+          <button type="submit" disabled={saving} className="flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest text-white shadow-btn-glow hover:shadow-btn-glow-hover transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100" style={{ background: saving ? '#555' : 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)' }}>
+            {saving ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Đang xử lý...
+              </span>
+            ) : isEdit ? '💾 Cập nhật' : '✚ Thêm nhân sự'}
           </button>
         </div>
       </form>

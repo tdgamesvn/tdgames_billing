@@ -15,7 +15,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!username || !password) {
-            setError('Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.');
+            setError('Vui lòng nhập đầy đủ tên đăng nhập/email và mật khẩu.');
             return;
         }
         setIsLoading(true);

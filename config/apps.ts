@@ -6,9 +6,19 @@ export interface AppConfig {
   description: string;
   color: string;
   gradient: string;
+  roles?: string[]; // If set, only these roles can see the app. If unset, all roles can see it.
 }
 
 export const APPS: AppConfig[] = [
+  {
+    id: 'dashboard',
+    name: 'Dashboard',
+    icon: '📊',
+    description: 'Tổng quan cho CEO',
+    color: '#8B5CF6',
+    gradient: 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%)',
+    roles: ['admin'],
+  },
   {
     id: 'invoice',
     name: 'Invoice',
@@ -16,6 +26,7 @@ export const APPS: AppConfig[] = [
     description: 'Quản lý hoá đơn & doanh thu',
     color: '#FF9500',
     gradient: 'linear-gradient(135deg, #FF9500 0%, #FF5E3A 100%)',
+    roles: ['admin', 'ke_toan'],
   },
   {
     id: 'expense',
@@ -24,6 +35,7 @@ export const APPS: AppConfig[] = [
     description: 'Quản lý chi phí & thanh toán',
     color: '#34C759',
     gradient: 'linear-gradient(135deg, #34C759 0%, #30D158 100%)',
+    roles: ['admin', 'ke_toan'],
   },
   {
     id: 'workforce',
@@ -32,6 +44,7 @@ export const APPS: AppConfig[] = [
     description: 'Quản lý Task và nghiệm thu',
     color: '#5856D6',
     gradient: 'linear-gradient(135deg, #5856D6 0%, #AF52DE 100%)',
+    roles: ['admin', 'ke_toan'],
   },
   {
     id: 'crm',
@@ -40,6 +53,7 @@ export const APPS: AppConfig[] = [
     description: 'Quản lý khách hàng tập trung',
     color: '#0A84FF',
     gradient: 'linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%)',
+    roles: ['admin', 'ke_toan'],
   },
   {
     id: 'hr',
@@ -48,6 +62,7 @@ export const APPS: AppConfig[] = [
     description: 'Quản lý nhân sự toàn diện',
     color: '#FF375F',
     gradient: 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)',
+    roles: ['admin', 'hr'],
   },
   {
     id: 'attendance',
@@ -56,6 +71,7 @@ export const APPS: AppConfig[] = [
     description: 'Chấm công & quản lý ca làm việc',
     color: '#FF6B35',
     gradient: 'linear-gradient(135deg, #FF6B35 0%, #F7C948 100%)',
+    roles: ['admin', 'hr'],
   },
   {
     id: 'payroll',
@@ -64,6 +80,15 @@ export const APPS: AppConfig[] = [
     description: 'Tính lương & thuế TNCN',
     color: '#10B981',
     gradient: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+    roles: ['admin', 'ke_toan', 'hr'],
+  },
+  {
+    id: 'portal',
+    name: 'Employee Portal',
+    icon: '🏠',
+    description: 'Thông tin cá nhân & bảng lương',
+    color: '#06B6D4',
+    gradient: 'linear-gradient(135deg, #06B6D4 0%, #0891B2 100%)',
+    roles: ['member'],
   },
 ];
-

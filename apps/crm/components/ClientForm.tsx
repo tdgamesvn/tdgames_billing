@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CrmClient, CrmContact } from '@/types';
+import ActivityTimeline from './ActivityTimeline';
 
 interface Props {
   editingClient: CrmClient | null;
@@ -9,6 +10,7 @@ interface Props {
   onCreateContact: (contact: Omit<CrmContact, 'id' | 'created_at'>) => void;
   onUpdateContact: (id: string, updates: Partial<CrmContact>) => void;
   onDeleteContact: (id: string) => void;
+  actor?: string;
 }
 
 const INDUSTRIES = [
@@ -18,7 +20,7 @@ const INDUSTRIES = [
 
 const emptyContact = { name: '', role: '', email: '', phone: '', is_primary: false, notes: '' };
 
-const ClientForm: React.FC<Props> = ({ editingClient, onSave, onUpdate, onCancel, onCreateContact, onUpdateContact, onDeleteContact }) => {
+const ClientForm: React.FC<Props> = ({ editingClient, onSave, onUpdate, onCancel, onCreateContact, onUpdateContact, onDeleteContact, actor = '' }) => {
   const [form, setForm] = useState({
     name: '',
     client_type: 'company' as 'company' | 'individual',
@@ -411,6 +413,13 @@ const ClientForm: React.FC<Props> = ({ editingClient, onSave, onUpdate, onCancel
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ── Activity Timeline (only when editing) ──────────── */}
+      {editingClient && (
+        <div style={{ background: '#161616', border: '1px solid #222', borderRadius: '16px', padding: '32px', marginTop: '24px' }}>
+          <ActivityTimeline clientId={editingClient.id} clientName={editingClient.name} actor={actor} />
         </div>
       )}
     </div>

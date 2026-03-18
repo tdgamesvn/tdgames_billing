@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { CrmClient, CrmContact } from '@/types';
 import * as svc from '../services/crmService';
 
-export type CrmTab = 'clients' | 'projects' | 'documents' | 'payments' | 'stats';
+export type CrmTab = 'clients' | 'projects' | 'documents' | 'payments' | 'activities';
 
 export function useCrmState(initialTab?: string | null) {
   const [clients, setClients] = useState<CrmClient[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<CrmTab>(() => {
-    if (initialTab === 'stats') return 'stats';
+    if (initialTab === 'activities') return 'activities';
     return 'clients';
   });
   const [editingClient, setEditingClient] = useState<CrmClient | null>(null);
