@@ -19,6 +19,7 @@ interface Props {
   onEdit: (e: HrEmployee) => void;
   onDelete: (id: string) => void;
   onAdd: () => void;
+  onQuickAdd: () => void;
   onRefresh: () => void;
   pendingReminders: number;
 }
@@ -40,7 +41,7 @@ const EmployeeList: React.FC<Props> = ({
   employees, departments, isLoading, searchQuery, setSearchQuery,
   filterType, setFilterType, filterStatus, setFilterStatus,
   filterDepartment, setFilterDepartment, totalCount,
-  onView, onEdit, onDelete, onAdd, onRefresh, pendingReminders,
+  onView, onEdit, onDelete, onAdd, onQuickAdd, onRefresh, pendingReminders,
 }) => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -66,6 +67,10 @@ const EmployeeList: React.FC<Props> = ({
               🔔 {pendingReminders} nhắc việc
             </span>
           )}
+          <button onClick={onQuickAdd} className="flex items-center gap-2 px-5 py-3 rounded-2xl text-white font-black text-xs uppercase tracking-widest hover:opacity-90 transition-all hover:scale-105" style={{ background: 'linear-gradient(135deg, #34C759 0%, #059669 100%)' }}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            Thêm nhanh
+          </button>
           <button onClick={onAdd} className="flex items-center gap-2 px-5 py-3 rounded-2xl text-white font-black text-xs uppercase tracking-widest hover:opacity-90 transition-all hover:scale-105" style={{ background: 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)' }}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
             Thêm nhân sự

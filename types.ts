@@ -190,6 +190,14 @@ export interface Settlement {
   currency: string;
   status: 'draft' | 'sent' | 'accepted' | 'paid';
   expense_id: string | null;
+  // Bonus trên tổng hoá đơn
+  bonus_type: 'percent' | 'amount';
+  bonus_value: number;
+  bonus_amount: number;
+  // Thuế TNCN
+  tax_rate: number;
+  tax_amount: number;
+  net_amount: number;
   notes: string;
   created_at?: string;
   tasks?: WorkforceTask[];

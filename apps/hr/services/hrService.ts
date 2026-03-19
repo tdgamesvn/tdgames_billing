@@ -40,6 +40,7 @@ export async function saveEmployee(
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session?.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({ email: data.work_email, full_name: data.full_name, employee_id: data.id }),
         }

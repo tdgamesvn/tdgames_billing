@@ -104,14 +104,34 @@ export async function fetchSettlements(): Promise<Settlement[]> {
   return data || [];
 }
 
+export function computeSettlementTotals(
+  totalAmount: number,
+  bonusType: 'percent' | 'amount',
+  bonusValue: number,
+  taxRate: number
+) {
+  const bonusAmount = bonusType === 'percent'
+    ? Math.round(totalAmount * bonusValue / 100)
+    : bonusValue;
+  const beforeTax = totalAmount + bonusAmount;
+  const taxAmount = Math.round(beforeTax * taxRate / 100);
+  const netAmount = beforeTax - taxAmount;
+  return { bonusAmount, taxAmount, netAmount };
+}
+
 export async function createSettlement(
   workerId: string,
   period: string,
   taskIds: string[],
   totalAmount: number,
   currency: string,
-  notes: string
+  notes: string,
+  bonusType: 'percent' | 'amount' = 'amount',
+  bonusValue: number = 0,
+  taxRate: number = 10
 ): Promise<Settlement> {
+  const { bonusAmount, taxAmount, netAmount } = computeSettlementTotals(totalAmount, bonusType, bonusValue, taxRate);
+
   // 1. Create settlement
   const { data: settlement, error: sErr } = await supabase
     .from('wf_settlements')
@@ -122,6 +142,12 @@ export async function createSettlement(
       total_amount: totalAmount,
       currency,
       notes,
+      bonus_type: bonusType,
+      bonus_value: bonusValue,
+      bonus_amount: bonusAmount,
+      tax_rate: taxRate,
+      tax_amount: taxAmount,
+      net_amount: netAmount,
     })
     .select('*, worker:wf_workers(*)')
     .single();

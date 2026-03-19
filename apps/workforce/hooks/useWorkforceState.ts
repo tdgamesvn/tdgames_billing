@@ -198,10 +198,13 @@ export function useWorkforceState(currentUsername: string, initialTab?: string |
     taskIds: string[],
     totalAmount: number,
     currency: string,
-    notes: string
+    notes: string,
+    bonusType: 'percent' | 'amount' = 'amount',
+    bonusValue: number = 0,
+    taxRate: number = 10
   ) => {
     try {
-      const saved = await svc.createSettlement(workerId, period, taskIds, totalAmount, currency, notes);
+      const saved = await svc.createSettlement(workerId, period, taskIds, totalAmount, currency, notes, bonusType, bonusValue, taxRate);
       setSettlements(prev => [saved, ...prev]);
       // Refresh tasks since they've been marked approved
       const updatedTasks = await svc.fetchTasks();

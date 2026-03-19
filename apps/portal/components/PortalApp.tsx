@@ -6,8 +6,9 @@ import { Navbar } from '@/apps/invoice/components/Navbar';
 import { fetchEmployeeDirectory, fetchDepartments, fetchMyPayslips, fetchMyAttendance } from '../services/portalService';
 import { toPublicUrl } from '@/apps/hr/services/hrService';
 import LeaveTab from './LeaveTab';
+import ProfileTab from './ProfileTab';
 
-type PortalTab = 'directory' | 'payslip' | 'attendance' | 'leave';
+type PortalTab = 'directory' | 'payslip' | 'attendance' | 'leave' | 'profile';
 
 interface PortalAppProps {
   currentUser: AccountUser;
@@ -19,18 +20,21 @@ const TAB_MAP: Record<PortalTab, string> = {
   payslip:    'activity',
   attendance: 'tasks',
   leave:      'recurring',
+  profile:    'edit',
 };
 const TAB_LABELS: Record<string, string> = {
   history:  'Thông tin công ty',
   activity: 'Bảng lương',
   tasks:    'Chấm công',
   recurring: 'Nghỉ phép',
+  edit:     'Hồ sơ',
 };
 const REVERSE_TAB: Record<string, PortalTab> = {
   history:  'directory',
   activity: 'payslip',
   tasks:    'attendance',
   recurring: 'leave',
+  edit:     'profile',
 };
 
 const PortalApp: React.FC<PortalAppProps> = ({ currentUser, onBack }) => {
@@ -43,7 +47,7 @@ const PortalApp: React.FC<PortalAppProps> = ({ currentUser, onBack }) => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const navbarTab = TAB_MAP[activeTab];
-  const accessibleTabs = ['history', 'activity', 'tasks', 'recurring'];
+  const accessibleTabs = ['history', 'activity', 'tasks', 'recurring', 'edit'];
 
   const handleNavChange = (tab: string) => {
     const mapped = REVERSE_TAB[tab];
@@ -458,9 +462,17 @@ const PortalApp: React.FC<PortalAppProps> = ({ currentUser, onBack }) => {
               onToast={(msg, type) => setToast({ message: msg, type })}
             />
           )}
+
+          {/* ── Profile Tab ── */}
+          {activeTab === 'profile' && (
+            <ProfileTab
+              currentUser={currentUser}
+              onToast={(msg, type) => setToast({ message: msg, type })}
+            />
+          )}
         </main>
 
-        {toast && <ToastNotification message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+        {toast && <ToastNotification message={{ text: toast.message, type: toast.type }} onDismiss={() => setToast(null)} />}
       </div>
     </div>
   );

@@ -70,3 +70,38 @@ export async function fetchMyAttendance(employeeId: string) {
   if (error && error.code !== '42P01') throw error;
   return data || [];
 }
+
+// Fetch full profile for the logged-in employee
+export async function fetchMyProfile(employeeId: string) {
+  const { data, error } = await supabase
+    .from('hr_employees')
+    .select('*, department:hr_departments!hr_employees_department_id_fkey(*)')
+    .eq('id', employeeId)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Update profile — only allow employee-editable fields
+const EMPLOYEE_EDITABLE_FIELDS = [
+  'full_name', 'email', 'phone', 'date_of_birth', 'gender', 'nationality',
+  'address', 'temp_address', 'id_number', 'id_issue_date', 'id_issue_place',
+  'avatar_url', 'id_card_front_url', 'id_card_back_url',
+  'tax_code', 'insurance_number',
+  'bank_name', 'bank_account', 'bank_branch',
+];
+
+export async function updateMyProfile(employeeId: string, updates: Record<string, any>) {
+  // Filter to only allow editable fields
+  const safeUpdates: Record<string, any> = {};
+  for (const key of EMPLOYEE_EDITABLE_FIELDS) {
+    if (key in updates) safeUpdates[key] = updates[key];
+  }
+  safeUpdates.updated_at = new Date().toISOString();
+
+  const { error } = await supabase
+    .from('hr_employees')
+    .update(safeUpdates)
+    .eq('id', employeeId);
+  if (error) throw error;
+}

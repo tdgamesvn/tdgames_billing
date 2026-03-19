@@ -9,6 +9,7 @@ import EmployeeForm from './EmployeeForm';
 import EmployeeDetail from './EmployeeDetail';
 import DepartmentManager from './DepartmentManager';
 import ReminderDashboard from './ReminderDashboard';
+import QuickAddEmployee from './QuickAddEmployee';
 
 interface HrAppProps {
   currentUser: AccountUser;
@@ -22,6 +23,7 @@ const TAB_MAP: Record<HrTab, string> = {
   employeeDetail: 'recurring',
   departments: 'activity',
   reminders: 'dashboard',
+  quickAdd: 'edit',
 };
 
 const TAB_LABELS: Record<string, string> = {
@@ -94,6 +96,7 @@ const HrApp: React.FC<HrAppProps> = ({ currentUser, onBack, initialTab }) => {
             onEdit={(e) => { state.setEditingEmployee(e); state.setActiveTab('employeeForm'); }}
             onDelete={state.handleDeleteEmployee}
             onAdd={() => { state.setEditingEmployee(null); state.setActiveTab('employeeForm'); }}
+            onQuickAdd={() => state.setActiveTab('quickAdd')}
             onRefresh={state.loadAll}
             pendingReminders={state.pendingReminders.length}
           />
@@ -138,6 +141,14 @@ const HrApp: React.FC<HrAppProps> = ({ currentUser, onBack, initialTab }) => {
             reminders={state.pendingReminders}
             onGenerate={state.handleGenerateReminders}
             onDismiss={state.handleDismissReminder}
+          />
+        )}
+
+        {state.activeTab === 'quickAdd' && (
+          <QuickAddEmployee
+            departments={state.departments}
+            onSave={state.handleSaveEmployee}
+            onCancel={() => state.setActiveTab('employees')}
           />
         )}
       </main>

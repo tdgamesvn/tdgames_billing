@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Worker, WorkforceTask, Settlement } from '@/types';
 import * as svc from '../services/workforceService';
+import { computeSettlementTotals } from '../services/workforceService';
 
 interface SettlementManagerProps {
   settlements: Settlement[];
   workers: Worker[];
   tasks: WorkforceTask[];
   vcbSellRate: number;
-  onCreateSettlement: (workerId: string, period: string, taskIds: string[], totalAmount: number, currency: string, notes: string) => void;
+  onCreateSettlement: (workerId: string, period: string, taskIds: string[], totalAmount: number, currency: string, notes: string, bonusType: 'percent' | 'amount', bonusValue: number, taxRate: number) => void;
   onUpdateSettlement: (id: string, updates: Partial<Settlement>) => void;
   onDeleteSettlement: (id: string) => void;
 }
@@ -56,6 +57,13 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
   const [loadingTasks, setLoadingTasks] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
+  // Custom confirmation modal state (replaces native confirm() which is blocked by some browsers)
+  const [confirmModal, setConfirmModal] = useState<{
+    message: string;
+    subMessage?: string;
+    onConfirm: () => void;
+  } | null>(null);
+
   // Create form state
   const [selWorkerId, setSelWorkerId] = useState('');
   const [selPeriod, setSelPeriod] = useState(() => {
@@ -64,6 +72,9 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
   });
   const [selNotes, setSelNotes] = useState('');
   const [selTaskIds, setSelTaskIds] = useState<string[]>([]);
+  const [selBonusType, setSelBonusType] = useState<'percent' | 'amount'>('amount');
+  const [selBonusValue, setSelBonusValue] = useState(0);
+  const [selTaxRate] = useState(10); // fixed 10% TNCN
 
   // Eligible tasks for creation
   const periodEnd = selPeriod ? new Date(selPeriod + '-01') : null;
@@ -83,14 +94,19 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
   const selectedTotal = selectedTasksData.reduce((s, t) => s + (t.price || 0), 0);
   const selectedBonusTotal = selectedTasksData.reduce((s, t) => s + (t.bonus || 0), 0);
 
+  // Preview settlement-level bonus + tax
+  const previewCalc = computeSettlementTotals(selectedTotal, selBonusType, selBonusValue, selTaxRate);
+
   const handleCreate = () => {
     if (!selWorkerId || selTaskIds.length === 0) return;
     const currency = eligibleTasks[0]?.currency || 'VND';
-    onCreateSettlement(selWorkerId, selPeriod, selTaskIds, selectedTotal, currency, selNotes);
+    onCreateSettlement(selWorkerId, selPeriod, selTaskIds, selectedTotal, currency, selNotes, selBonusType, selBonusValue, selTaxRate);
     setView('list');
     setSelWorkerId('');
     setSelTaskIds([]);
     setSelNotes('');
+    setSelBonusType('amount');
+    setSelBonusValue(0);
   };
 
   const toggleTask = (tid: string) =>
@@ -202,10 +218,12 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
       <tbody>${taskRows}</tbody>
     </table>
     <div class="totals">
-      <div class="row"><span>Tổng giá:</span><b>${totalPrice.toLocaleString()} ${selectedSettlement.currency}</b></div>
-      <div class="row"><span>Tổng bonus:</span><b>${totalBonus.toLocaleString()} ${selectedSettlement.currency}</b></div>
+      <div class="row"><span>Tổng giá tasks:</span><b>${totalPrice.toLocaleString()} ${selectedSettlement.currency}</b></div>
+      <div class="row"><span>Tổng bonus task:</span><b>${totalBonus.toLocaleString()} ${selectedSettlement.currency}</b></div>
+      ${(selectedSettlement.bonus_amount || 0) > 0 ? `<div class="row" style="color:#d97706"><span>+ Bonus nghiệm thu (${selectedSettlement.bonus_type === 'percent' ? selectedSettlement.bonus_value + '%' : 'cố định'}):</span><b>+${(selectedSettlement.bonus_amount || 0).toLocaleString()} ${selectedSettlement.currency}</b></div>` : ''}
       ${totalVND > 0 ? `<div class="row"><span>Tổng quy đổi VNĐ:</span><b>${(totalVND + totalBonusVND).toLocaleString()} VNĐ</b></div>` : ''}
-      <div class="row grand"><span>TỔNG CỘNG:</span><span>${(totalPrice + totalBonus).toLocaleString()} ${selectedSettlement.currency}</span></div>
+      <div class="row" style="color:#dc2626"><span>− Thuế TNCN (${selectedSettlement.tax_rate || 10}%):</span><b>-${(selectedSettlement.tax_amount || 0).toLocaleString()} ${selectedSettlement.currency}</b></div>
+      <div class="row grand" style="color:#059669"><span>THỰC NHẬN:</span><span>${(selectedSettlement.net_amount || 0).toLocaleString()} ${selectedSettlement.currency}</span></div>
     </div>
     <div class="footer">
       <div class="sig"><div style="font-size:11px;color:#666">Người lập</div><div class="line">TD Games</div></div>
@@ -237,6 +255,8 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
     }, 0);
 
     return (
+      <>
+      {confirmModal && <ConfirmModal message={confirmModal.message} subMessage={confirmModal.subMessage} onConfirm={confirmModal.onConfirm} onCancel={() => setConfirmModal(null)} />}
       <div className="animate-fadeInUp space-y-6">
         {/* Back + Title */}
         <div className="flex items-center gap-4">
@@ -257,7 +277,18 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
           {nextStatus && (
             <button
               onClick={() => {
-                if (nextStatus === 'paid' && !confirm('Xác nhận đã thanh toán? Tất cả task sẽ được đánh dấu ĐÃ THANH TOÁN.')) return;
+                if (nextStatus === 'paid') {
+                  setConfirmModal({
+                    message: 'Xác nhận đã thanh toán?',
+                    subMessage: 'Tất cả task sẽ được đánh dấu ĐÃ THANH TOÁN.',
+                    onConfirm: () => {
+                      onUpdateSettlement(s.id!, { status: nextStatus as any });
+                      setSelectedSettlement({ ...s, status: nextStatus as any });
+                      setConfirmModal(null);
+                    },
+                  });
+                  return;
+                }
                 onUpdateSettlement(s.id!, { status: nextStatus as any });
                 setSelectedSettlement({ ...s, status: nextStatus as any });
               }}
@@ -270,31 +301,45 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
           </button>
           <button
             onClick={() => {
-              if (!confirm('Xóa nghiệm thu này? Task sẽ được rollback về CHƯA THANH TOÁN.')) return;
-              onDeleteSettlement(s.id!);
-              setView('list');
+              setConfirmModal({
+                message: 'Xóa nghiệm thu này?',
+                subMessage: 'Task sẽ được rollback về CHƯA THANH TOÁN.',
+                onConfirm: () => {
+                  onDeleteSettlement(s.id!);
+                  setView('list');
+                  setConfirmModal(null);
+                },
+              });
             }}
             className="px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-all ml-auto"
           >🗑 Xóa</button>
         </div>
 
         {/* Summary cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="p-4 rounded-[16px] border border-primary/10 bg-surface">
             <p className="text-[9px] font-black uppercase tracking-widest text-neutral-medium mb-1">Số task</p>
             <p className="text-2xl font-black text-white">{detailTasks.length}</p>
           </div>
           <div className="p-4 rounded-[16px] border border-primary/10 bg-surface">
-            <p className="text-[9px] font-black uppercase tracking-widest text-neutral-medium mb-1">Tổng giá</p>
+            <p className="text-[9px] font-black uppercase tracking-widest text-neutral-medium mb-1">Tổng giá tasks</p>
             <p className="text-2xl font-black text-primary">{fmt(totalPrice)}</p>
           </div>
           <div className="p-4 rounded-[16px] border border-primary/10 bg-surface">
-            <p className="text-[9px] font-black uppercase tracking-widest text-neutral-medium mb-1">Tổng Bonus</p>
-            <p className="text-2xl font-black text-yellow-400">{fmt(totalBonus)}</p>
+            <p className="text-[9px] font-black uppercase tracking-widest text-neutral-medium mb-1">Bonus ({s.bonus_type === 'percent' ? `${s.bonus_value}%` : 'Cố định'})</p>
+            <p className="text-2xl font-black text-yellow-400">+{fmt(s.bonus_amount || 0)}</p>
+          </div>
+          <div className="p-4 rounded-[16px] border border-primary/10 bg-surface">
+            <p className="text-[9px] font-black uppercase tracking-widest text-neutral-medium mb-1">Thuế TNCN ({s.tax_rate || 10}%)</p>
+            <p className="text-2xl font-black text-red-400">-{fmt(s.tax_amount || 0)}</p>
+          </div>
+          <div className="p-4 rounded-[16px] border border-primary/10 bg-surface border-emerald-500/30">
+            <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400 mb-1">THỰC NHẬN</p>
+            <p className="text-2xl font-black text-emerald-400">{fmt(s.net_amount || 0)}</p>
           </div>
           <div className="p-4 rounded-[16px] border border-primary/10 bg-surface">
             <p className="text-[9px] font-black uppercase tracking-widest text-neutral-medium mb-1">Quy đổi VNĐ</p>
-            <p className="text-xl font-black text-emerald-400">{fmt(totalVND)}</p>
+            <p className="text-xl font-black text-neutral-medium">{fmt(totalVND)}</p>
           </div>
         </div>
 
@@ -348,16 +393,28 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
               {detailTasks.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-primary/20">
-                    <td colSpan={4} className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-neutral-medium">TỔNG CỘNG</td>
+                    <td colSpan={4} className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-neutral-medium">Tổng giá tasks</td>
                     <td className="px-4 py-3 text-right text-primary font-black text-base">{fmt(totalPrice)}</td>
                     <td></td>
                     <td className="px-4 py-3 text-right text-emerald-400 font-bold text-xs">{totalVND > 0 ? fmt(totalVND) : ''}</td>
                     <td className="px-4 py-3 text-right text-yellow-400 font-black">{totalBonus > 0 ? fmt(totalBonus) : ''}</td>
                     <td colSpan={2}></td>
                   </tr>
+                  {(s.bonus_amount || 0) > 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-2 text-right text-[10px] font-black uppercase tracking-widest text-yellow-400">+ Bonus ({s.bonus_type === 'percent' ? `${s.bonus_value}%` : 'Cố định'})</td>
+                      <td colSpan={2} className="px-4 py-2 text-right text-yellow-400 font-bold">+{fmt(s.bonus_amount || 0)} <span className="text-xs text-neutral-medium">{s.currency}</span></td>
+                      <td colSpan={4}></td>
+                    </tr>
+                  )}
                   <tr>
-                    <td colSpan={4} className="px-4 py-2 text-right text-[10px] font-black uppercase tracking-widest text-primary">GRAND TOTAL (Giá + Bonus)</td>
-                    <td colSpan={2} className="px-4 py-2 text-right text-primary font-black text-xl">{fmt(totalPrice + totalBonus)} <span className="text-xs text-neutral-medium">{detailTasks[0]?.currency || 'VND'}</span></td>
+                    <td colSpan={4} className="px-4 py-2 text-right text-[10px] font-black uppercase tracking-widest text-red-400">− Thuế TNCN ({s.tax_rate || 10}%)</td>
+                    <td colSpan={2} className="px-4 py-2 text-right text-red-400 font-bold">-{fmt(s.tax_amount || 0)} <span className="text-xs text-neutral-medium">{s.currency}</span></td>
+                    <td colSpan={4}></td>
+                  </tr>
+                  <tr className="border-t-2 border-emerald-500/30">
+                    <td colSpan={4} className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-emerald-400">💰 THỰC NHẬN</td>
+                    <td colSpan={2} className="px-4 py-3 text-right text-emerald-400 font-black text-xl">{fmt(s.net_amount || 0)} <span className="text-xs text-neutral-medium">{s.currency}</span></td>
                     <td colSpan={4}></td>
                   </tr>
                 </tfoot>
@@ -368,12 +425,15 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
 
         <p className="text-neutral-medium/30 text-[10px] text-right">Tạo lúc: {s.created_at ? new Date(s.created_at).toLocaleString('vi-VN') : '—'}</p>
       </div>
+      </>
     );
   }
 
   // === CREATE VIEW ===
   if (view === 'create') {
     return (
+      <>
+      {confirmModal && <ConfirmModal message={confirmModal.message} subMessage={confirmModal.subMessage} onConfirm={confirmModal.onConfirm} onCancel={() => setConfirmModal(null)} />}
       <div className="animate-fadeInUp space-y-6">
         <div className="flex items-center gap-4">
           <button onClick={() => setView('list')} className="p-2 rounded-xl hover:bg-white/5 text-neutral-medium hover:text-white transition-all">
@@ -452,13 +512,59 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
                 </div>
               )}
 
-              {/* Total + Submit */}
+              {/* Bonus + Tax Settings */}
+              <div className="mt-4 p-4 rounded-xl border border-primary/10 bg-white/[0.02] space-y-4">
+                <p className="text-xs font-black uppercase tracking-widest text-neutral-medium">💰 Bonus & Thuế TNCN</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className={labelCls}>Loại Bonus</label>
+                    <select className={inputCls} value={selBonusType} onChange={e => setSelBonusType(e.target.value as any)}>
+                      <option value="amount">Số tiền cụ thể</option>
+                      <option value="percent">Theo %</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>{selBonusType === 'percent' ? 'Bonus (%)' : 'Bonus (số tiền)'}</label>
+                    <input type="number" className={inputCls} value={selBonusValue || ''} onChange={e => setSelBonusValue(Number(e.target.value) || 0)} placeholder={selBonusType === 'percent' ? 'VD: 5' : 'VD: 500000'} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Thuế TNCN (%)</label>
+                    <input type="number" className={inputCls} value={selTaxRate} disabled title="Mặc định 10%" />
+                  </div>
+                </div>
+
+                {/* Preview Calculation */}
+                {selTaskIds.length > 0 && (
+                  <div className="mt-3 p-4 rounded-xl bg-black/30 space-y-2 text-sm">
+                    <div className="flex justify-between text-neutral-medium">
+                      <span>Tổng giá tasks ({selTaskIds.length} tasks)</span>
+                      <span className="text-primary font-bold">{fmt(selectedTotal)} {eligibleTasks[0]?.currency || 'VND'}</span>
+                    </div>
+                    {previewCalc.bonusAmount > 0 && (
+                      <div className="flex justify-between text-yellow-400">
+                        <span>+ Bonus {selBonusType === 'percent' ? `(${selBonusValue}%)` : '(cố định)'}</span>
+                        <span className="font-bold">+{fmt(previewCalc.bonusAmount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-red-400">
+                      <span>− Thuế TNCN ({selTaxRate}%)</span>
+                      <span className="font-bold">-{fmt(previewCalc.taxAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-400 font-black text-base pt-2 border-t border-white/10">
+                      <span>💰 THỰC NHẬN</span>
+                      <span>{fmt(previewCalc.netAmount)} {eligibleTasks[0]?.currency || 'VND'}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Submit */}
               <div className="flex items-center justify-between pt-4 border-t border-primary/10">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium">Tổng nghiệm thu</p>
-                  <p className="text-2xl font-black text-primary">{fmt(selectedTotal)} <span className="text-xs text-neutral-medium">{eligibleTasks[0]?.currency || 'VND'}</span></p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium">Thực nhận</p>
+                  <p className="text-2xl font-black text-emerald-400">{fmt(previewCalc.netAmount)} <span className="text-xs text-neutral-medium">{eligibleTasks[0]?.currency || 'VND'}</span></p>
                   {selectedBonusTotal > 0 && (
-                    <p className="text-yellow-400 text-xs font-bold">+ Bonus: {fmt(selectedBonusTotal)}</p>
+                    <p className="text-yellow-400/60 text-[10px]">+ Bonus task: {fmt(selectedBonusTotal)}</p>
                   )}
                 </div>
                 <button
@@ -473,11 +579,14 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
           )}
         </div>
       </div>
+      </>
     );
   }
 
   // === LIST VIEW (default) ===
   return (
+    <>
+    {confirmModal && <ConfirmModal message={confirmModal.message} subMessage={confirmModal.subMessage} onConfirm={confirmModal.onConfirm} onCancel={() => setConfirmModal(null)} />}
     <div className="animate-fadeInUp space-y-8">
       {/* Header */}
       <div className="flex justify-between items-end">
@@ -542,7 +651,8 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
                     </span>
                   </div>
                   <p className="text-neutral-medium text-xs">{s.total_tasks} tasks</p>
-                  <p className="text-primary font-black text-2xl mt-3">{fmt(s.total_amount)} <span className="text-xs text-neutral-medium">{s.currency}</span></p>
+                  <p className="text-emerald-400 font-black text-2xl mt-3">{fmt(s.net_amount || s.total_amount)} <span className="text-xs text-neutral-medium">{s.currency}</span></p>
+                  {(s.tax_amount || 0) > 0 && <p className="text-neutral-medium/50 text-[10px] line-through">{fmt(s.total_amount + (s.bonus_amount || 0))} (trước thuế)</p>}
                   {s.notes && <p className="text-neutral-medium/60 text-[11px] mt-2 line-clamp-1 italic">📝 {s.notes}</p>}
                   <p className="text-neutral-medium/30 text-[9px] mt-2">🔄 {s.created_at ? new Date(s.created_at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</p>
                 </div>
@@ -552,8 +662,14 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
                   onClick={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
-                    if (!confirm('Xóa nghiệm thu? Task sẽ rollback về CHƯA THANH TOÁN.')) return;
-                    onDeleteSettlement(s.id!);
+                    setConfirmModal({
+                      message: 'Xóa nghiệm thu?',
+                      subMessage: 'Task sẽ rollback về CHƯA THANH TOÁN.',
+                      onConfirm: () => {
+                        onDeleteSettlement(s.id!);
+                        setConfirmModal(null);
+                      },
+                    });
                   }}
                   className="absolute bottom-4 right-4 z-20 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400/60 hover:text-red-400 text-[10px] font-bold uppercase tracking-wider transition-all opacity-0 group-hover:opacity-100 flex items-center gap-1.5"
                 >
@@ -566,7 +682,45 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
         </div>
       )}
     </div>
+    </>
   );
 };
+
+// Custom Confirmation Modal component
+const ConfirmModal: React.FC<{
+  message: string;
+  subMessage?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}> = ({ message, subMessage, onConfirm, onCancel }) => (
+  <div className="fixed inset-0 z-[9999] flex items-center justify-center" onClick={onCancel}>
+    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+    <div
+      className="relative z-10 rounded-[20px] border border-red-500/30 bg-[#1a1a1a] p-8 max-w-sm w-full mx-4 shadow-2xl"
+      onClick={e => e.stopPropagation()}
+      style={{ animation: 'fadeInUp 0.2s ease-out' }}
+    >
+      <div className="flex flex-col items-center text-center gap-4">
+        <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center">
+          <svg className="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+        </div>
+        <p className="text-white font-bold text-base">{message}</p>
+        {subMessage && <p className="text-neutral-medium text-sm -mt-2">{subMessage}</p>}
+        <div className="flex gap-3 w-full mt-2">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-3 rounded-xl border border-primary/20 text-neutral-medium font-black text-xs uppercase tracking-widest hover:text-white hover:border-primary/40 transition-all"
+          >Hủy</button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-3 rounded-xl bg-red-500 text-white font-black text-xs uppercase tracking-widest hover:bg-red-600 transition-all"
+          >Xác nhận</button>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 export default SettlementManager;
