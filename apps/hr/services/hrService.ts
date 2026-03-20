@@ -77,6 +77,46 @@ export async function deleteEmployee(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Resend invite email to an employee's work_email */
+export async function resendInvite(employee: { work_email: string; full_name: string; id: string }): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-employee-auth`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ action: 'resend_invite', email: employee.work_email, full_name: employee.full_name, employee_id: employee.id }),
+    }
+  );
+  const result = await res.json();
+  if (result.error) throw new Error(result.error);
+  return result.message || 'Đã gửi lại invite thành công';
+}
+
+/** Send password reset email to an employee's work_email */
+export async function resetEmployeePassword(work_email: string): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-employee-auth`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ action: 'reset_password', email: work_email }),
+    }
+  );
+  const result = await res.json();
+  if (result.error) throw new Error(result.error);
+  return result.message || 'Đã gửi email reset password';
+}
+
 // ══════════════════════════════════════════════════════════════
 // ── Departments ───────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════

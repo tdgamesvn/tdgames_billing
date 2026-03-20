@@ -76,9 +76,10 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
   const completionPct = Math.round(((REQUIRED_FIELDS.length - missingFields.length) / REQUIRED_FIELDS.length) * 100);
 
   const handleSubmit = async () => {
-    // Validate minimum required fields
-    if (!form.full_name?.trim() || !form.phone?.trim()) {
-      setError('Vui lòng điền tối thiểu Họ tên và Số điện thoại.');
+    // Validate ALL required fields
+    if (missingFields.length > 0) {
+      const names = missingFields.map(f => f.label).join(', ');
+      setError(`Vui lòng điền đầy đủ: ${names}`);
       return;
     }
 
@@ -343,14 +344,6 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
             )}
           </button>
 
-          {/* Skip option */}
-          <button
-            onClick={onComplete}
-            className="w-full py-3 mt-3 text-xs font-bold uppercase tracking-widest transition-all hover:opacity-100 font-montserrat"
-            style={{ color: 'rgba(157,156,157,0.5)' }}
-          >
-            Bỏ qua, điền sau →
-          </button>
 
           {/* Footer */}
           <p
