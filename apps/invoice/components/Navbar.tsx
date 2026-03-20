@@ -6,8 +6,8 @@ interface NavbarProps {
   theme: string;
   currentUser: AccountUser;
   activeTab: string;
-  accessibleTabs: Array<'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring'>;
-  onTabChange: (tab: 'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring') => void;
+  accessibleTabs: Array<'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring' | 'tasks' | 'overview' | 'settings' | 'board' | string>;
+  onTabChange: (tab: string) => void;
   onLogout: () => void;
   vcbRate?: ExchangeRateData | null;
   vcbRateLoading?: boolean;
@@ -63,12 +63,12 @@ export const Navbar: React.FC<NavbarProps> = ({ theme, currentUser, activeTab, a
     </div>
 
     <div className="flex items-center gap-3">
-      <div className={`flex gap-1 p-1 rounded-full border ${theme === 'dark' ? 'bg-surface border-white/5' : 'bg-gray-100 border-gray-200'}`}>
+      <div className={`flex gap-1 p-1 rounded-full border overflow-x-auto scrollbar-hide ${theme === 'dark' ? 'bg-surface border-white/5' : 'bg-gray-100 border-gray-200'}`}>
         {accessibleTabs.map((tab) => (
           <button
             key={tab}
             onClick={() => onTabChange(tab)}
-            className={`px-4 md:px-6 py-2 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-primary text-black shadow-btn-glow' : theme === 'dark' ? 'text-neutral-medium hover:text-white' : 'text-gray-500 hover:text-black'}`}
+            className={`flex-shrink-0 px-4 md:px-6 py-2 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === tab ? 'bg-primary text-black shadow-btn-glow' : theme === 'dark' ? 'text-neutral-medium hover:text-white' : 'text-gray-500 hover:text-black'}`}
           >
              {tabLabels?.[tab] || tab}
           </button>

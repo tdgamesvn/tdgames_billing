@@ -42,6 +42,58 @@ const App: React.FC = () => {
   const [authLoading, setAuthLoading] = useState(true);
   const [needsPasswordSet, setNeedsPasswordSet] = useState(false);
 
+  // Detect if we arrived via invite/recovery link (PKCE: ?code= in URL)
+  const [hasAuthCode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('code');
+  });
+
+  /** Check if this is an invited user who needs to set their password */
+  const checkInviteFlow = (session: any, event: string) => {
+    if (!session) return;
+    const user = session.user;
+
+    // Case 1: PASSWORD_RECOVERY event (password reset link)
+    if (event === 'PASSWORD_RECOVERY') {
+      setNeedsPasswordSet(true);
+      history.replaceState(null, '', window.location.pathname);
+      return;
+    }
+
+    // Case 2: SIGNED_IN via invite link (PKCE flow)
+    // Check if user arrived via auth code AND was invited (has invited_at)
+    if (event === 'SIGNED_IN' && hasAuthCode) {
+      const invitedAt = user.invited_at;
+      const lastSignIn = user.last_sign_in_at;
+      // If user was invited and this is their first or second sign-in
+      // (invited_at exists, and last_sign_in_at is very recent = just now)
+      if (invitedAt) {
+        const invitedMs = new Date(invitedAt).getTime();
+        const lastSignMs = lastSignIn ? new Date(lastSignIn).getTime() : 0;
+        // If this sign-in is within 5 minutes of invited_at, or if user
+        // has never signed in before, they need to set a password
+        const timeSinceInvite = lastSignMs - invitedMs;
+        if (timeSinceInvite < 5 * 60 * 1000 || !lastSignIn) {
+          setNeedsPasswordSet(true);
+          // Clean URL params
+          history.replaceState(null, '', window.location.pathname);
+          return;
+        }
+      }
+
+      // Also check URL hash for legacy implicit flow support
+      const hash = window.location.hash;
+      if (hash.includes('type=invite') || hash.includes('type=recovery')) {
+        setNeedsPasswordSet(true);
+        history.replaceState(null, '', window.location.pathname);
+        return;
+      }
+
+      // Clean URL code param even if not invite
+      history.replaceState(null, '', window.location.pathname);
+    }
+  };
+
   useEffect(() => {
     // Restore session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -69,15 +121,7 @@ const App: React.FC = () => {
         });
 
         // Detect invite or password recovery flow
-        if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
-          // Check URL hash for invite token type
-          const hash = window.location.hash;
-          if (hash.includes('type=invite') || hash.includes('type=recovery') || event === 'PASSWORD_RECOVERY') {
-            setNeedsPasswordSet(true);
-            // Clean URL hash after detecting token
-            history.replaceState(null, '', window.location.pathname);
-          }
-        }
+        checkInviteFlow(session, event);
       } else {
         setCurrentUser(null);
       }
