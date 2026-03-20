@@ -170,29 +170,36 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
                 </div>
               </div>
 
-              {/* Avatar */}
-              <div className="flex items-center gap-3 flex-shrink-0">
+              {/* Avatar — large square */}
+              <div className="flex items-center gap-4 flex-shrink-0">
                 <input type="file" ref={avatarRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); }} />
-                <div className="cursor-pointer relative group" onClick={() => avatarRef.current?.click()} style={{ width: '56px', height: '56px' }}>
+                <div className="cursor-pointer relative group" onClick={() => avatarRef.current?.click()} style={{ width: '120px', height: '120px' }}>
                   {form.avatar_url ? (
-                    <div className="w-full h-full rounded-full overflow-hidden border-2" style={{ borderColor: '#34C759' }}>
+                    <div className="w-full h-full rounded-2xl overflow-hidden border-2" style={{ borderColor: '#34C759' }}>
                       <img src={toPublicUrl(form.avatar_url)} alt="" className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                        <span className="text-white text-[10px] font-bold">📷</span>
+                      <div className="absolute inset-0 rounded-2xl bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-all gap-1">
+                        <span style={{ fontSize: '24px' }}>📷</span>
+                        <span className="text-white text-[10px] font-bold uppercase tracking-wider">Đổi ảnh</span>
                       </div>
                     </div>
                   ) : (
-                    <div className="w-full h-full rounded-full flex flex-col items-center justify-center border-2 border-dashed transition-all group-hover:border-cyan-500/50"
+                    <div className="w-full h-full rounded-2xl flex flex-col items-center justify-center border-2 border-dashed transition-all group-hover:border-cyan-500/50 gap-1"
                       style={{ borderColor: 'rgba(255,59,48,0.4)', background: 'rgba(6,182,212,0.05)' }}>
-                      {uploadingAvatar ? <div className="w-5 h-5 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
-                        : <span className="text-xl">👤</span>}
+                      {uploadingAvatar ? <div className="w-7 h-7 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
+                        : <>
+                            <span style={{ fontSize: '28px' }}>👤</span>
+                            <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#FF3B30' }}>Upload ảnh</span>
+                          </>}
                     </div>
                   )}
                 </div>
                 <div>
-                  <span style={{ ...lS, marginBottom: 0 }}>Ảnh đại diện</span>
-                  {missingAvatar && <span style={{ color: '#FF3B30', fontSize: '9px', fontWeight: 800 }}> * bắt buộc</span>}
+                  <span style={{ ...lS, marginBottom: '2px', fontSize: '11px' }}>Ảnh đại diện</span>
+                  {missingAvatar
+                    ? <span style={{ color: '#FF3B30', fontSize: '10px', fontWeight: 800, display: 'block' }}>* Bắt buộc</span>
+                    : <span style={{ color: '#34C759', fontSize: '10px', fontWeight: 700, display: 'block' }}>✓ Đã upload</span>}
+                  <span style={{ color: '#555', fontSize: '9px', display: 'block', marginTop: '4px' }}>Click ảnh để đổi</span>
                 </div>
               </div>
 
