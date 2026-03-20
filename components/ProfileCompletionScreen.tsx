@@ -105,8 +105,8 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
     </div>
   );
 
-  const iS: React.CSSProperties = { background: 'rgba(255,255,255,0.04)', border: '1.5px solid rgba(6,182,212,0.12)', color: '#F2F2F2', caretColor: '#06B6D4', fontSize: '13px', padding: '8px 12px', borderRadius: '10px', outline: 'none', width: '100%', transition: 'all 0.2s' };
-  const lS: React.CSSProperties = { color: '#777', fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '4px', display: 'block' };
+  const iS: React.CSSProperties = { background: 'rgba(255,255,255,0.04)', border: '1.5px solid rgba(6,182,212,0.12)', color: '#F2F2F2', caretColor: '#06B6D4', fontSize: '14px', padding: '10px 14px', borderRadius: '12px', outline: 'none', width: '100%', transition: 'all 0.2s' };
+  const lS: React.CSSProperties = { color: '#888', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '6px', display: 'block' };
   const onF = (e: any) => { e.target.style.borderColor = 'rgba(6,182,212,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(6,182,212,0.06)'; };
   const onB = (e: any) => { e.target.style.borderColor = 'rgba(6,182,212,0.12)'; e.target.style.boxShadow = 'none'; };
 
@@ -135,21 +135,21 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
       </div>
 
       {/* Desktop: flex center, no scroll | Mobile: scrollable */}
-      <div className="relative z-10 md:h-screen md:flex md:items-center md:justify-center p-4 md:p-6">
-        <div className="w-full max-w-[1100px]">
+      <div className="relative z-10 md:h-screen md:flex md:items-center md:justify-center p-4 md:p-8">
+        <div className="w-full max-w-[1400px]">
           {/* Card */}
-          <div className="rounded-[24px] border p-5 md:p-7" style={{ background: 'rgba(22,22,22,0.9)', backdropFilter: 'blur(24px)', borderColor: 'rgba(6,182,212,0.15)', boxShadow: '0 32px 64px rgba(0,0,0,0.5)' }}>
+          <div className="rounded-[24px] border p-6 md:p-10" style={{ background: 'rgba(22,22,22,0.9)', backdropFilter: 'blur(24px)', borderColor: 'rgba(6,182,212,0.15)', boxShadow: '0 32px 64px rgba(0,0,0,0.5)' }}>
 
             {/* ── Top bar: branding + avatar + progress ── */}
-            <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-6 mb-5">
+            <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-8 mb-6">
               {/* Branding */}
               <div className="flex items-center gap-3 flex-1">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.3)' }}>
-                  <span style={{ fontSize: '20px' }}>📋</span>
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.3)' }}>
+                  <span style={{ fontSize: '24px' }}>📋</span>
                 </div>
                 <div>
-                  <h1 className="text-lg font-black uppercase tracking-wide" style={{ color: '#06B6D4', lineHeight: 1.1 }}>Hoàn Thiện Hồ Sơ</h1>
-                  <p style={{ color: '#555', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Bắt buộc điền đầy đủ</p>
+                  <h1 className="text-xl font-black uppercase tracking-wide" style={{ color: '#06B6D4', lineHeight: 1.1 }}>Hoàn Thiện Hồ Sơ</h1>
+                  <p style={{ color: '#555', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Bắt buộc điền đầy đủ</p>
                 </div>
               </div>
 
@@ -157,7 +157,7 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
               <div className="flex items-center gap-3 flex-shrink-0">
                 <input type="file" ref={avatarRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); }} />
-                <div className="cursor-pointer relative group" onClick={() => avatarRef.current?.click()} style={{ width: '52px', height: '52px' }}>
+                <div className="cursor-pointer relative group" onClick={() => avatarRef.current?.click()} style={{ width: '64px', height: '64px' }}>
                   {form.avatar_url ? (
                     <div className="w-full h-full rounded-full overflow-hidden border-2" style={{ borderColor: '#34C759' }}>
                       <img src={toPublicUrl(form.avatar_url)} alt="" className="w-full h-full object-cover" />
@@ -180,7 +180,7 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
               </div>
 
               {/* Progress */}
-              <div className="md:w-[180px] flex-shrink-0">
+              <div className="md:w-[220px] flex-shrink-0">
                 <div className="flex items-center justify-between mb-1">
                   <span style={{ color: '#666', fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Hoàn thiện</span>
                   <span style={{ color: pctColor, fontSize: '13px', fontWeight: 900 }}>{pct}%</span>
@@ -192,25 +192,25 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
             </div>
 
             {/* ── Divider ── */}
-            <div className="h-px mb-4" style={{ background: 'linear-gradient(90deg, transparent, rgba(6,182,212,0.2), transparent)' }} />
+            <div className="h-px mb-5" style={{ background: 'linear-gradient(90deg, transparent, rgba(6,182,212,0.2), transparent)' }} />
 
             {/* ── Required fields — 3 columns on desktop ── */}
-            <div className="mb-4">
+            <div className="mb-5">
               <div className="flex items-center gap-2 mb-3">
-                <span style={{ color: '#06B6D4', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>📝 Thông tin bắt buộc</span>
+                <span style={{ color: '#06B6D4', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>📝 Thông tin bắt buộc</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-4">
                 {REQUIRED_FIELDS.map(renderField)}
               </div>
             </div>
 
             {/* ── Optional fields — inline ── */}
-            <div className="mb-4">
+            <div className="mb-5">
               <div className="flex items-center gap-2 mb-3">
-                <span style={{ color: '#666', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>📄 Không bắt buộc</span>
-                <span style={{ color: '#444', fontSize: '9px' }}>(nếu có)</span>
+                <span style={{ color: '#666', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>📄 Không bắt buộc</span>
+                <span style={{ color: '#444', fontSize: '10px' }}>(nếu có)</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-4">
                 {OPTIONAL_FIELDS.map(renderField)}
               </div>
             </div>
