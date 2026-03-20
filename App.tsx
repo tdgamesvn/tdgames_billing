@@ -4,6 +4,7 @@ import { SetPasswordScreen } from './components/SetPasswordScreen';
 import { ProfileCompletionScreen } from './components/ProfileCompletionScreen';
 import { AccountUser } from './types';
 import HomeScreen from './components/HomeScreen';
+import { fetchMyProfile } from './apps/portal/services/portalService';
 import InvoiceApp from './apps/invoice/components/InvoiceApp';
 import ExpenseApp from './apps/expense/components/ExpenseApp';
 import WorkforceApp from './apps/workforce/components/WorkforceApp';
@@ -44,46 +45,68 @@ const App: React.FC = () => {
   const [needsPasswordSet, setNeedsPasswordSet] = useState(false);
   const [needsProfileCompletion, setNeedsProfileCompletion] = useState(false);
 
+  // Required profile fields — must match ProfileCompletionScreen
+  const REQUIRED_PROFILE_KEYS = [
+    'full_name', 'email', 'phone', 'date_of_birth', 'gender',
+    'address', 'temp_address', 'id_number', 'id_issue_date', 'id_issue_place',
+    'bank_name', 'bank_account', 'bank_branch', 'avatar_url',
+  ];
+
+  /** Check employee profile completeness from DB */
+  const checkProfileCompletion = async (employeeId: string) => {
+    try {
+      const profile = await fetchMyProfile(employeeId);
+      const missing = REQUIRED_PROFILE_KEYS.filter(key => {
+        const v = profile?.[key];
+        return !v || (typeof v === 'string' && v.trim().length === 0);
+      });
+      if (missing.length > 0) {
+        setNeedsProfileCompletion(true);
+      }
+    } catch {
+      // If profile fetch fails, don't block
+    }
+  };
+
   /** Check if this user was invited and still needs to set a password.
    *  Uses metadata-driven detection (reliable, no URL dependency):
    *  - user.invited_at exists → user was invited
    *  - user_metadata.password_set !== true → hasn't set password yet
    */
-  const checkNeedsOnboarding = (session: any, event?: string) => {
+  const checkNeedsOnboarding = async (session: any, event?: string) => {
     if (!session) return;
     const user = session.user;
     const meta = user.user_metadata || {};
 
+    // Clean URL params
+    if (window.location.search) {
+      const cleanUrl = window.location.pathname + window.location.hash;
+      history.replaceState(null, '', cleanUrl);
+    }
+
     // Case 1: PASSWORD_RECOVERY event (password reset link)
     if (event === 'PASSWORD_RECOVERY') {
       setNeedsPasswordSet(true);
-      // Clean URL params
-      const cleanUrl = window.location.pathname + window.location.hash;
-      history.replaceState(null, '', cleanUrl);
       return;
     }
 
     // Case 2: Invited user who hasn't set password yet
     if (user.invited_at && meta.password_set !== true) {
       setNeedsPasswordSet(true);
-      // Clean URL params (remove ?code= etc. if present)
-      const cleanUrl = window.location.pathname + window.location.hash;
-      history.replaceState(null, '', cleanUrl);
       return;
     }
 
-    // Case 3: Password is set, but check if profile needs completion
-    // This will be handled after SetPasswordScreen completes
-    // Clean any remaining URL params
-    if (window.location.search) {
-      const cleanUrl = window.location.pathname + window.location.hash;
-      history.replaceState(null, '', cleanUrl);
+    // Case 3: Password is set — check profile completion from DB
+    const role = parseRole(meta.role || 'member');
+    const employeeId = meta.employee_id;
+    if (role === 'member' && employeeId) {
+      await checkProfileCompletion(employeeId);
     }
   };
 
   useEffect(() => {
     // Restore session on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
         const meta = session.user.user_metadata;
         setCurrentUser({
@@ -92,8 +115,8 @@ const App: React.FC = () => {
           role: parseRole(meta.role || 'member'),
           employee_id: meta.employee_id || undefined,
         });
-        // Check onboarding state on initial load too
-        checkNeedsOnboarding(session);
+        // Check onboarding state on initial load (including profile completion from DB)
+        await checkNeedsOnboarding(session);
       }
       setAuthLoading(false);
     });
