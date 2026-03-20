@@ -14,35 +14,33 @@ interface FieldDef {
   type: 'text' | 'date' | 'select' | 'email';
   placeholder?: string;
   required: boolean;
-  fullWidth?: boolean;
   options?: { value: string; label: string }[];
 }
 
-// All profile fields with required/optional flags
-const PROFILE_FIELDS: FieldDef[] = [
+const REQUIRED_FIELDS: FieldDef[] = [
   { key: 'full_name', label: 'Họ tên', type: 'text', placeholder: 'Nguyễn Văn A', required: true },
   { key: 'email', label: 'Email cá nhân', type: 'email', placeholder: 'email@gmail.com', required: true },
   { key: 'phone', label: 'Số điện thoại', type: 'text', placeholder: '0912 345 678', required: true },
   { key: 'date_of_birth', label: 'Ngày sinh', type: 'date', placeholder: '', required: true },
   { key: 'gender', label: 'Giới tính', type: 'select', required: true, options: [
-    { value: 'male', label: 'Nam' },
-    { value: 'female', label: 'Nữ' },
-    { value: 'other', label: 'Khác' },
+    { value: 'male', label: 'Nam' }, { value: 'female', label: 'Nữ' }, { value: 'other', label: 'Khác' },
   ]},
-  { key: 'address', label: 'Địa chỉ thường trú', type: 'text', placeholder: 'Số nhà, đường, quận, TP...', required: true, fullWidth: true },
-  { key: 'temp_address', label: 'Địa chỉ tạm trú', type: 'text', placeholder: 'Nếu giống thường trú, điền lại', required: true, fullWidth: true },
+  { key: 'address', label: 'Địa chỉ thường trú', type: 'text', placeholder: 'Số nhà, đường, quận, TP...', required: true },
+  { key: 'temp_address', label: 'Địa chỉ tạm trú', type: 'text', placeholder: 'Nếu giống thường trú, điền lại', required: true },
   { key: 'id_number', label: 'Số CMND/CCCD', type: 'text', placeholder: '012345678901', required: true },
   { key: 'id_issue_date', label: 'Ngày cấp CCCD', type: 'date', placeholder: '', required: true },
   { key: 'id_issue_place', label: 'Nơi cấp CCCD', type: 'text', placeholder: 'Cục CS QLHC...', required: true },
   { key: 'bank_name', label: 'Tên ngân hàng', type: 'text', placeholder: 'VCB, ACB, MB...', required: true },
   { key: 'bank_account', label: 'Số tài khoản', type: 'text', placeholder: '1234567890', required: true },
   { key: 'bank_branch', label: 'Tên chủ tài khoản', type: 'text', placeholder: 'NGUYEN VAN A', required: true },
-  // Optional
-  { key: 'tax_code', label: 'Mã số thuế cá nhân', type: 'text', placeholder: 'Nếu có', required: false },
+];
+
+const OPTIONAL_FIELDS: FieldDef[] = [
+  { key: 'tax_code', label: 'Mã số thuế', type: 'text', placeholder: 'Nếu có', required: false },
   { key: 'insurance_number', label: 'Số sổ bảo hiểm', type: 'text', placeholder: 'Nếu có', required: false },
 ];
 
-const ALL_SAVEABLE_KEYS = [...PROFILE_FIELDS.map(f => f.key), 'avatar_url'];
+const ALL_KEYS = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS].map(f => f.key).concat('avatar_url');
 
 export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComplete }) => {
   const [profile, setProfile] = useState<any>(null);
@@ -54,25 +52,15 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
   const avatarRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!currentUser.employee_id) {
-      onComplete();
-      return;
-    }
+    if (!currentUser.employee_id) { onComplete(); return; }
     setIsLoading(true);
     fetchMyProfile(currentUser.employee_id)
-      .then(data => {
-        setProfile(data);
-        setForm({ ...data });
-      })
-      .catch(() => {
-        onComplete();
-      })
+      .then(data => { setProfile(data); setForm({ ...data }); })
+      .catch(() => onComplete())
       .finally(() => setIsLoading(false));
   }, [currentUser.employee_id]);
 
-  const updateField = (key: string, value: any) => {
-    setForm(f => ({ ...f, [key]: value }));
-  };
+  const updateField = (key: string, value: any) => setForm(f => ({ ...f, [key]: value }));
 
   const handleAvatarUpload = async (file: File) => {
     setUploadingAvatar(true);
@@ -86,247 +74,173 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
     }
   };
 
-  // Required fields check (text fields + avatar)
-  const requiredFields = PROFILE_FIELDS.filter(f => f.required);
-  const missingTextFields = requiredFields.filter(f => {
-    const v = form[f.key];
-    return !v || (typeof v === 'string' && v.trim().length === 0);
+  const missingRequired = REQUIRED_FIELDS.filter(f => {
+    const v = form[f.key]; return !v || (typeof v === 'string' && !v.trim());
   });
   const missingAvatar = !form.avatar_url;
-  const allMissingLabels = [
-    ...(missingAvatar ? ['Ảnh đại diện'] : []),
-    ...missingTextFields.map(f => f.label),
-  ];
-  const totalRequired = requiredFields.length + 1; // +1 for avatar
-  const filledCount = totalRequired - allMissingLabels.length;
-  const completionPct = Math.round((filledCount / totalRequired) * 100);
+  const allMissing = [...(missingAvatar ? ['Ảnh đại diện'] : []), ...missingRequired.map(f => f.label)];
+  const total = REQUIRED_FIELDS.length + 1;
+  const pct = Math.round(((total - allMissing.length) / total) * 100);
 
   const handleSubmit = async () => {
-    if (allMissingLabels.length > 0) {
-      setError(`Vui lòng điền đầy đủ: ${allMissingLabels.join(', ')}`);
-      return;
-    }
-
-    setSaving(true);
-    setError('');
+    if (allMissing.length > 0) { setError(`Vui lòng điền đầy đủ: ${allMissing.join(', ')}`); return; }
+    setSaving(true); setError('');
     try {
       if (currentUser.employee_id) {
         const updates: Record<string, any> = {};
-        for (const key of ALL_SAVEABLE_KEYS) {
-          if (form[key] !== profile?.[key]) {
-            updates[key] = form[key];
-          }
-        }
-        if (Object.keys(updates).length > 0) {
-          await updateMyProfile(currentUser.employee_id, updates);
-        }
+        for (const key of ALL_KEYS) { if (form[key] !== profile?.[key]) updates[key] = form[key]; }
+        if (Object.keys(updates).length > 0) await updateMyProfile(currentUser.employee_id, updates);
       }
       onComplete();
-    } catch (err: any) {
-      setError(err.message || 'Lỗi cập nhật hồ sơ');
-    } finally {
-      setSaving(false);
-    }
+    } catch (err: any) { setError(err.message || 'Lỗi cập nhật'); }
+    finally { setSaving(false); }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#0F0F0F' }}>
-        <div className="text-center">
-          <div className="w-12 h-12 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-4" style={{ borderColor: '#06B6D4', borderTopColor: 'transparent' }} />
-          <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#9D9C9D' }}>Đang tải hồ sơ...</p>
-        </div>
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#0F0F0F' }}>
+      <div className="text-center">
+        <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3" style={{ borderColor: '#06B6D4', borderTopColor: 'transparent' }} />
+        <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: '#666' }}>Đang tải hồ sơ...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
-  const inputStyle = {
-    background: 'rgba(255,255,255,0.04)',
-    border: '1.5px solid rgba(6,182,212,0.15)',
-    color: '#F2F2F2',
-    caretColor: '#06B6D4',
-  };
+  const iS: React.CSSProperties = { background: 'rgba(255,255,255,0.04)', border: '1.5px solid rgba(6,182,212,0.12)', color: '#F2F2F2', caretColor: '#06B6D4', fontSize: '13px', padding: '8px 12px', borderRadius: '10px', outline: 'none', width: '100%', transition: 'all 0.2s' };
+  const lS: React.CSSProperties = { color: '#777', fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '4px', display: 'block' };
+  const onF = (e: any) => { e.target.style.borderColor = 'rgba(6,182,212,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(6,182,212,0.06)'; };
+  const onB = (e: any) => { e.target.style.borderColor = 'rgba(6,182,212,0.12)'; e.target.style.boxShadow = 'none'; };
 
-  const focusStyle = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => {
-    e.target.style.borderColor = 'rgba(6,182,212,0.55)';
-    e.target.style.boxShadow = '0 0 0 4px rgba(6,182,212,0.07)';
-  };
-  const blurStyle = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => {
-    e.target.style.borderColor = 'rgba(6,182,212,0.15)';
-    e.target.style.boxShadow = 'none';
-  };
+  const renderField = (f: FieldDef) => (
+    <div key={f.key}>
+      <label style={lS}>{f.label} {f.required && !form[f.key] && <span style={{ color: '#FF3B30' }}>*</span>}</label>
+      {f.type === 'select' ? (
+        <select value={form[f.key] || ''} onChange={e => updateField(f.key, e.target.value)} style={iS} onFocus={onF} onBlur={onB}>
+          <option value="">-- Chọn --</option>
+          {f.options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      ) : (
+        <input type={f.type} value={form[f.key] || ''} onChange={e => updateField(f.key, e.target.value)} placeholder={f.placeholder} style={iS} onFocus={onF} onBlur={onB} />
+      )}
+    </div>
+  );
+
+  const pctColor = pct >= 90 ? '#34C759' : pct >= 60 ? '#FF9500' : '#FF3B30';
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden"
-      style={{ backgroundColor: '#0F0F0F' }}>
-      {/* Background */}
+    <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: '#0F0F0F' }}>
+      {/* BG */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute rounded-full blur-[120px] opacity-20"
-          style={{ width: '700px', height: '700px', background: 'radial-gradient(circle, #06B6D4 0%, transparent 70%)', top: '-250px', right: '-200px' }} />
-        <div className="absolute rounded-full blur-[100px] opacity-10"
-          style={{ width: '500px', height: '500px', background: 'radial-gradient(circle, #8B5CF6 0%, transparent 70%)', bottom: '-150px', left: '-150px' }} />
-        <div className="absolute inset-0 opacity-[0.025]"
-          style={{ backgroundImage: 'linear-gradient(#06B6D4 1px, transparent 1px), linear-gradient(90deg, #06B6D4 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
+        <div className="absolute rounded-full blur-[120px] opacity-15" style={{ width: '600px', height: '600px', background: 'radial-gradient(circle, #06B6D4 0%, transparent 70%)', top: '-200px', right: '-150px' }} />
+        <div className="absolute rounded-full blur-[100px] opacity-10" style={{ width: '400px', height: '400px', background: 'radial-gradient(circle, #8B5CF6 0%, transparent 70%)', bottom: '-100px', left: '-100px' }} />
       </div>
 
-      {/* Card */}
-      <div className="relative z-10 w-full max-w-2xl mx-4 my-8 max-h-[90vh] overflow-y-auto" style={{ animation: 'fadeInUp 0.5s ease-out' }}>
-        <div className="rounded-[28px] border p-8 md:p-10"
-          style={{ background: 'rgba(26,26,26,0.85)', backdropFilter: 'blur(32px)', borderColor: 'rgba(6,182,212,0.18)', boxShadow: '0 40px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+      {/* Desktop: flex center, no scroll | Mobile: scrollable */}
+      <div className="relative z-10 md:h-screen md:flex md:items-center md:justify-center p-4 md:p-6">
+        <div className="w-full max-w-[1100px]">
+          {/* Card */}
+          <div className="rounded-[24px] border p-5 md:p-7" style={{ background: 'rgba(22,22,22,0.9)', backdropFilter: 'blur(24px)', borderColor: 'rgba(6,182,212,0.15)', boxShadow: '0 32px 64px rgba(0,0,0,0.5)' }}>
 
-          {/* Header */}
-          <div className="flex flex-col items-center mb-6">
-            <div className="w-[72px] h-[72px] rounded-2xl flex items-center justify-center mb-4"
-              style={{ background: 'rgba(6,182,212,0.1)', border: '1.5px solid rgba(6,182,212,0.35)', boxShadow: '0 0 40px rgba(6,182,212,0.2)' }}>
-              <span style={{ fontSize: '32px' }}>📋</span>
-            </div>
-            <h1 className="text-2xl font-black uppercase tracking-[0.08em] font-montserrat" style={{ color: '#06B6D4' }}>
-              Hoàn Thiện Hồ Sơ
-            </h1>
-            <p className="text-[11px] font-bold uppercase tracking-[0.15em] mt-2 text-center"
-              style={{ color: 'rgba(157,156,157,0.7)' }}>
-              Bắt buộc điền đầy đủ thông tin để sử dụng hệ thống
-            </p>
-          </div>
-
-          {/* Progress */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: '#9D9C9D' }}>Hoàn thiện hồ sơ</span>
-              <span className="text-sm font-black" style={{ color: completionPct >= 90 ? '#34C759' : completionPct >= 60 ? '#FF9500' : '#FF3B30' }}>
-                {completionPct}%
-              </span>
-            </div>
-            <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-              <div className="h-full rounded-full transition-all duration-700"
-                style={{
-                  width: `${completionPct}%`,
-                  background: completionPct >= 90 ? 'linear-gradient(90deg, #34C759, #059669)'
-                    : completionPct >= 60 ? 'linear-gradient(90deg, #FF9500, #F59E0B)'
-                    : 'linear-gradient(90deg, #FF3B30, #EF4444)',
-                }} />
-            </div>
-          </div>
-
-          <div className="w-full h-px mb-6" style={{ background: 'linear-gradient(90deg, transparent, rgba(6,182,212,0.25), transparent)' }} />
-
-          {/* Avatar (required) */}
-          <div className="flex flex-col items-center mb-6">
-            <label className="block text-[10px] font-black uppercase tracking-[0.15em] mb-2 font-montserrat" style={{ color: '#9D9C9D' }}>
-              Ảnh đại diện {!form.avatar_url && <span style={{ color: '#FF3B30' }}>* bắt buộc</span>}
-            </label>
-            <input type="file" ref={avatarRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); }} />
-            <div className="cursor-pointer relative group" onClick={() => avatarRef.current?.click()} style={{ width: '100px', height: '100px' }}>
-              {form.avatar_url ? (
-                <div className="w-full h-full rounded-full overflow-hidden border-2" style={{ borderColor: 'rgba(52,199,89,0.6)' }}>
-                  <img src={toPublicUrl(form.avatar_url)} alt="Avatar" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                    <span className="text-white text-xs font-bold">📷 Đổi</span>
-                  </div>
+            {/* ── Top bar: branding + avatar + progress ── */}
+            <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-6 mb-5">
+              {/* Branding */}
+              <div className="flex items-center gap-3 flex-1">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.3)' }}>
+                  <span style={{ fontSize: '20px' }}>📋</span>
                 </div>
-              ) : (
-                <div className="w-full h-full rounded-full flex flex-col items-center justify-center border-2 border-dashed transition-all group-hover:border-cyan-500/50"
-                  style={{ borderColor: missingAvatar ? 'rgba(255,59,48,0.4)' : 'rgba(6,182,212,0.2)', background: 'rgba(6,182,212,0.05)' }}>
-                  {uploadingAvatar ? (
-                    <div className="w-6 h-6 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
+                <div>
+                  <h1 className="text-lg font-black uppercase tracking-wide" style={{ color: '#06B6D4', lineHeight: 1.1 }}>Hoàn Thiện Hồ Sơ</h1>
+                  <p style={{ color: '#555', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Bắt buộc điền đầy đủ</p>
+                </div>
+              </div>
+
+              {/* Avatar */}
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <input type="file" ref={avatarRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); }} />
+                <div className="cursor-pointer relative group" onClick={() => avatarRef.current?.click()} style={{ width: '52px', height: '52px' }}>
+                  {form.avatar_url ? (
+                    <div className="w-full h-full rounded-full overflow-hidden border-2" style={{ borderColor: '#34C759' }}>
+                      <img src={toPublicUrl(form.avatar_url)} alt="" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                        <span className="text-white text-[10px] font-bold">📷</span>
+                      </div>
+                    </div>
                   ) : (
-                    <>
-                      <span className="text-2xl">👤</span>
-                      <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: '#FF3B30' }}>Upload ảnh</span>
-                    </>
+                    <div className="w-full h-full rounded-full flex flex-col items-center justify-center border-2 border-dashed transition-all group-hover:border-cyan-500/50"
+                      style={{ borderColor: 'rgba(255,59,48,0.4)', background: 'rgba(6,182,212,0.05)' }}>
+                      {uploadingAvatar ? <div className="w-5 h-5 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
+                        : <span className="text-lg">👤</span>}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Required fields section ── */}
-          <div className="mb-4">
-            <h3 className="text-xs font-black uppercase tracking-widest mb-4 flex items-center gap-2" style={{ color: '#06B6D4' }}>
-              📝 Thông tin bắt buộc
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {requiredFields.map(field => (
-                <div key={field.key} className={field.fullWidth ? 'md:col-span-2' : ''}>
-                  <label className="block text-[10px] font-black uppercase tracking-[0.15em] mb-2 font-montserrat" style={{ color: '#9D9C9D' }}>
-                    {field.label} {!form[field.key] && <span style={{ color: '#FF3B30' }}>*</span>}
-                  </label>
-                  {field.type === 'select' ? (
-                    <select value={form[field.key] || ''} onChange={e => updateField(field.key, e.target.value)}
-                      className="w-full rounded-xl px-4 py-3 text-sm font-medium font-montserrat outline-none transition-all"
-                      style={inputStyle} onFocus={focusStyle} onBlur={blurStyle}>
-                      <option value="">-- Chọn --</option>
-                      {field.options?.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                    </select>
-                  ) : (
-                    <input type={field.type} value={form[field.key] || ''} onChange={e => updateField(field.key, e.target.value)}
-                      placeholder={field.placeholder}
-                      className="w-full rounded-xl px-4 py-3 text-sm font-medium font-montserrat outline-none transition-all"
-                      style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
-                  )}
+                <div>
+                  <span style={{ ...lS, marginBottom: 0 }}>Ảnh đại diện</span>
+                  {missingAvatar && <span style={{ color: '#FF3B30', fontSize: '9px', fontWeight: 800 }}> * bắt buộc</span>}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          {/* ── Optional fields section ── */}
-          <div className="mb-6">
-            <h3 className="text-xs font-black uppercase tracking-widest mb-4 flex items-center gap-2" style={{ color: '#9D9C9D' }}>
-              📄 Thông tin không bắt buộc <span className="text-[9px] font-bold opacity-50">(nếu có)</span>
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {PROFILE_FIELDS.filter(f => !f.required).map(field => (
-                <div key={field.key}>
-                  <label className="block text-[10px] font-black uppercase tracking-[0.15em] mb-2 font-montserrat" style={{ color: '#9D9C9D' }}>
-                    {field.label}
-                  </label>
-                  <input type={field.type} value={form[field.key] || ''} onChange={e => updateField(field.key, e.target.value)}
-                    placeholder={field.placeholder}
-                    className="w-full rounded-xl px-4 py-3 text-sm font-medium font-montserrat outline-none transition-all"
-                    style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+              {/* Progress */}
+              <div className="md:w-[180px] flex-shrink-0">
+                <div className="flex items-center justify-between mb-1">
+                  <span style={{ color: '#666', fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Hoàn thiện</span>
+                  <span style={{ color: pctColor, fontSize: '13px', fontWeight: 900 }}>{pct}%</span>
                 </div>
-              ))}
+                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${pctColor}, ${pctColor}80)` }} />
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Error */}
-          {error && (
-            <div className="rounded-xl px-4 py-3 text-xs font-bold flex items-center gap-2 font-montserrat mb-4"
-              style={{ background: 'rgba(244,67,54,0.1)', border: '1px solid rgba(244,67,54,0.3)', color: '#F44336' }}>
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {error}
+            {/* ── Divider ── */}
+            <div className="h-px mb-4" style={{ background: 'linear-gradient(90deg, transparent, rgba(6,182,212,0.2), transparent)' }} />
+
+            {/* ── Required fields — 3 columns on desktop ── */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span style={{ color: '#06B6D4', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>📝 Thông tin bắt buộc</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-3">
+                {REQUIRED_FIELDS.map(renderField)}
+              </div>
             </div>
-          )}
 
-          {/* Submit — NO skip button */}
-          <button onClick={handleSubmit} disabled={saving}
-            className="w-full rounded-xl py-4 text-sm font-black uppercase tracking-[0.12em] font-montserrat transition-all"
-            style={{
-              background: saving ? 'rgba(6,182,212,0.5)' : 'linear-gradient(135deg, #06B6D4 0%, #0891B2 100%)',
-              color: '#0F0F0F',
-              boxShadow: saving ? 'none' : '0 8px 24px rgba(6,182,212,0.4)',
-              cursor: saving ? 'not-allowed' : 'pointer',
-            }}>
-            {saving ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            {/* ── Optional fields — inline ── */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span style={{ color: '#666', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>📄 Không bắt buộc</span>
+                <span style={{ color: '#444', fontSize: '9px' }}>(nếu có)</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-3">
+                {OPTIONAL_FIELDS.map(renderField)}
+              </div>
+            </div>
+
+            {/* ── Error ── */}
+            {error && (
+              <div className="rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-2 mb-3"
+                style={{ background: 'rgba(244,67,54,0.1)', border: '1px solid rgba(244,67,54,0.25)', color: '#F44336' }}>
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Đang lưu...
-              </span>
-            ) : (
-              '✅ Lưu hồ sơ & Bắt đầu sử dụng'
+                <span className="truncate">{error}</span>
+              </div>
             )}
-          </button>
 
-          <p className="text-center text-[9px] font-bold uppercase tracking-[0.2em] mt-6 font-montserrat"
-            style={{ color: 'rgba(157,156,157,0.35)' }}>
-            TD Games Employee Portal · 2026
-          </p>
+            {/* ── Submit ── */}
+            <button onClick={handleSubmit} disabled={saving}
+              className="w-full rounded-xl py-3 text-sm font-black uppercase tracking-widest transition-all"
+              style={{
+                background: saving ? 'rgba(6,182,212,0.4)' : 'linear-gradient(135deg, #06B6D4 0%, #0891B2 100%)',
+                color: '#0F0F0F', boxShadow: saving ? 'none' : '0 6px 20px rgba(6,182,212,0.35)', cursor: saving ? 'not-allowed' : 'pointer',
+              }}>
+              {saving ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  Đang lưu...
+                </span>
+              ) : '✅ Lưu hồ sơ & Bắt đầu sử dụng'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
