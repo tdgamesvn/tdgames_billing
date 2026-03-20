@@ -30,7 +30,10 @@ export const SetPasswordScreen: React.FC<SetPasswordScreenProps> = ({ onComplete
     setIsLoading(true);
     setError('');
     try {
-      const { error: updateError } = await supabase.auth.updateUser({ password });
+      const { error: updateError } = await supabase.auth.updateUser({
+        password,
+        data: { password_set: true },
+      });
       if (updateError) throw updateError;
       onComplete();
     } catch (e: any) {

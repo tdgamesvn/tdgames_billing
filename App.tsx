@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { LoginScreen } from './components/LoginScreen';
 import { SetPasswordScreen } from './components/SetPasswordScreen';
+import { ProfileCompletionScreen } from './components/ProfileCompletionScreen';
 import { AccountUser } from './types';
 import HomeScreen from './components/HomeScreen';
 import InvoiceApp from './apps/invoice/components/InvoiceApp';
@@ -41,56 +42,42 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<AccountUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [needsPasswordSet, setNeedsPasswordSet] = useState(false);
+  const [needsProfileCompletion, setNeedsProfileCompletion] = useState(false);
 
-  // Detect if we arrived via invite/recovery link (PKCE: ?code= in URL)
-  const [hasAuthCode] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.has('code');
-  });
-
-  /** Check if this is an invited user who needs to set their password */
-  const checkInviteFlow = (session: any, event: string) => {
+  /** Check if this user was invited and still needs to set a password.
+   *  Uses metadata-driven detection (reliable, no URL dependency):
+   *  - user.invited_at exists → user was invited
+   *  - user_metadata.password_set !== true → hasn't set password yet
+   */
+  const checkNeedsOnboarding = (session: any, event?: string) => {
     if (!session) return;
     const user = session.user;
+    const meta = user.user_metadata || {};
 
     // Case 1: PASSWORD_RECOVERY event (password reset link)
     if (event === 'PASSWORD_RECOVERY') {
       setNeedsPasswordSet(true);
-      history.replaceState(null, '', window.location.pathname);
+      // Clean URL params
+      const cleanUrl = window.location.pathname + window.location.hash;
+      history.replaceState(null, '', cleanUrl);
       return;
     }
 
-    // Case 2: SIGNED_IN via invite link (PKCE flow)
-    // Check if user arrived via auth code AND was invited (has invited_at)
-    if (event === 'SIGNED_IN' && hasAuthCode) {
-      const invitedAt = user.invited_at;
-      const lastSignIn = user.last_sign_in_at;
-      // If user was invited and this is their first or second sign-in
-      // (invited_at exists, and last_sign_in_at is very recent = just now)
-      if (invitedAt) {
-        const invitedMs = new Date(invitedAt).getTime();
-        const lastSignMs = lastSignIn ? new Date(lastSignIn).getTime() : 0;
-        // If this sign-in is within 5 minutes of invited_at, or if user
-        // has never signed in before, they need to set a password
-        const timeSinceInvite = lastSignMs - invitedMs;
-        if (timeSinceInvite < 5 * 60 * 1000 || !lastSignIn) {
-          setNeedsPasswordSet(true);
-          // Clean URL params
-          history.replaceState(null, '', window.location.pathname);
-          return;
-        }
-      }
+    // Case 2: Invited user who hasn't set password yet
+    if (user.invited_at && meta.password_set !== true) {
+      setNeedsPasswordSet(true);
+      // Clean URL params (remove ?code= etc. if present)
+      const cleanUrl = window.location.pathname + window.location.hash;
+      history.replaceState(null, '', cleanUrl);
+      return;
+    }
 
-      // Also check URL hash for legacy implicit flow support
-      const hash = window.location.hash;
-      if (hash.includes('type=invite') || hash.includes('type=recovery')) {
-        setNeedsPasswordSet(true);
-        history.replaceState(null, '', window.location.pathname);
-        return;
-      }
-
-      // Clean URL code param even if not invite
-      history.replaceState(null, '', window.location.pathname);
+    // Case 3: Password is set, but check if profile needs completion
+    // This will be handled after SetPasswordScreen completes
+    // Clean any remaining URL params
+    if (window.location.search) {
+      const cleanUrl = window.location.pathname + window.location.hash;
+      history.replaceState(null, '', cleanUrl);
     }
   };
 
@@ -105,6 +92,8 @@ const App: React.FC = () => {
           role: parseRole(meta.role || 'member'),
           employee_id: meta.employee_id || undefined,
         });
+        // Check onboarding state on initial load too
+        checkNeedsOnboarding(session);
       }
       setAuthLoading(false);
     });
@@ -121,7 +110,7 @@ const App: React.FC = () => {
         });
 
         // Detect invite or password recovery flow
-        checkInviteFlow(session, event);
+        checkNeedsOnboarding(session, event);
       } else {
         setCurrentUser(null);
       }
@@ -177,16 +166,31 @@ const App: React.FC = () => {
     );
   }
 
-  // ── Invite flow: Set password ──
+  // ── Invite flow: Step 1 — Set password ──
   if (needsPasswordSet && currentUser) {
     return (
       <SetPasswordScreen
         onComplete={() => {
           setNeedsPasswordSet(false);
-          // For member role, auto-navigate to portal
-          if (currentUser.role === 'member') {
+          // After setting password, check if profile needs completion
+          if (currentUser.employee_id && currentUser.role === 'member') {
+            setNeedsProfileCompletion(true);
+          } else if (currentUser.role === 'member') {
             setActiveApp('portal');
           }
+        }}
+      />
+    );
+  }
+
+  // ── Invite flow: Step 2 — Profile completion ──
+  if (needsProfileCompletion && currentUser && currentUser.employee_id) {
+    return (
+      <ProfileCompletionScreen
+        currentUser={currentUser}
+        onComplete={() => {
+          setNeedsProfileCompletion(false);
+          setActiveApp('portal');
         }}
       />
     );
