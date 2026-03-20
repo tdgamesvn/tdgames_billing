@@ -19,14 +19,28 @@ jobs:
           script: |
             set -e
             cd /opt/td-games-invoice-app
+
+            echo "💾 Backing up .env..."
+            cp .env /tmp/.env.bak 2>/dev/null || true
+
+            echo "🧹 Cleaning git state..."
+            git checkout -- . 2>/dev/null || true
+            git clean -fd 2>/dev/null || true
+            git stash drop 2>/dev/null || true
+
             echo "📥 Pulling latest code..."
-            git stash push -m "auto-stash-deploy" 2>/dev/null || true
-            git pull origin main
-            git stash pop 2>/dev/null || true
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "💾 Restoring .env..."
+            cp /tmp/.env.bak .env 2>/dev/null || true
+
             echo "📦 Installing dependencies..."
             npm install --production=false
+
             echo "🔨 Building..."
             npm run build
+
             echo "🔄 Reloading nginx..."
             sudo systemctl reload nginx 2>/dev/null || true
             echo "✅ Deploy completed at $(date)"
