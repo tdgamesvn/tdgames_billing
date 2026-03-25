@@ -103,8 +103,18 @@ export function useHrState(initialTab?: string | null) {
   const handleDeleteEmployee = async (id: string) => {
     try {
       await svc.deleteEmployee(id);
-      setEmployees(prev => prev.filter(e => e.id !== id));
-      setToast({ message: 'Đã xóa nhân sự', type: 'success' });
+      setEmployees(prev => prev.map(e => e.id === id ? { ...e, status: 'terminated' } : e));
+      setToast({ message: 'Đã cho nghỉ việc (soft delete) — dữ liệu lịch sử được giữ lại', type: 'success' });
+    } catch (e: any) {
+      setToast({ message: e.message, type: 'error' });
+    }
+  };
+
+  const handleReactivateEmployee = async (id: string) => {
+    try {
+      await svc.reactivateEmployee(id);
+      setEmployees(prev => prev.map(e => e.id === id ? { ...e, status: 'active' } : e));
+      setToast({ message: 'Đã kích hoạt lại nhân sự', type: 'success' });
     } catch (e: any) {
       setToast({ message: e.message, type: 'error' });
     }
@@ -118,6 +128,7 @@ export function useHrState(initialTab?: string | null) {
       setToast({ message: 'Đã thêm phòng ban', type: 'success' });
     } catch (e: any) {
       setToast({ message: e.message, type: 'error' });
+
     }
   };
 
@@ -237,7 +248,7 @@ export function useHrState(initialTab?: string | null) {
     filterType, setFilterType,
     filterStatus, setFilterStatus,
     filterDepartment, setFilterDepartment,
-    handleSaveEmployee, handleUpdateEmployee, handleDeleteEmployee,
+    handleSaveEmployee, handleUpdateEmployee, handleDeleteEmployee, handleReactivateEmployee,
     handleSaveDepartment, handleUpdateDepartment, handleDeleteDepartment,
     loadContracts,
     handleSaveContract, handleUpdateContract, handleDeleteContract,

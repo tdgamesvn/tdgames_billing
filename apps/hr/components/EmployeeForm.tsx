@@ -71,20 +71,32 @@ const EmployeeForm: React.FC<Props> = ({
   const requiredFields: { key: string; label: string }[] = [
     { key: 'full_name', label: 'Họ tên' },
     { key: 'email', label: 'Email cá nhân' },
-    { key: 'work_email', label: 'Email công việc' },
     { key: 'phone', label: 'SĐT' },
     { key: 'date_of_birth', label: 'Ngày sinh' },
     { key: 'gender', label: 'Giới tính' },
     { key: 'address', label: 'Địa chỉ thường trú' },
-    { key: 'temp_address', label: 'Địa chỉ tạm trú' },
     { key: 'id_number', label: 'CMND/CCCD' },
     ...(form.type === 'fulltime' ? [
+      { key: 'work_email', label: 'Email công việc' },
+      { key: 'temp_address', label: 'Địa chỉ tạm trú' },
       { key: 'id_issue_date', label: 'Ngày cấp CMND' },
       { key: 'id_issue_place', label: 'Nơi cấp' },
       { key: 'department_id', label: 'Phòng ban' },
       { key: 'position', label: 'Chức danh' },
       { key: 'start_date', label: 'Ngày bắt đầu' },
-    ] : []),
+    ] : form.type === 'freelancer' ? [
+      { key: 'id_issue_date', label: 'Ngày cấp CMND' },
+      { key: 'id_issue_place', label: 'Nơi cấp' },
+    ] : [
+      // parttime
+      { key: 'work_email', label: 'Email công việc' },
+      { key: 'temp_address', label: 'Địa chỉ tạm trú' },
+      { key: 'id_issue_date', label: 'Ngày cấp CMND' },
+      { key: 'id_issue_place', label: 'Nơi cấp' },
+      { key: 'department_id', label: 'Phòng ban' },
+      { key: 'position', label: 'Chức danh' },
+      { key: 'start_date', label: 'Ngày bắt đầu' },
+    ]),
   ];
   const missingRequired = requiredFields.filter(f => {
     const val = (form as any)[f.key];
@@ -330,7 +342,7 @@ const EmployeeForm: React.FC<Props> = ({
               {emailError && <p className="text-red-400 text-xs mt-1 font-bold">⚠️ {emailError}</p>}
             </div>
             <div>
-              <label className={labelCls}>Email công việc{reqStar('work_email')}</label>
+              <label className={labelCls}>Email công việc{reqStar('work_email')}{form.type === 'freelancer' ? ' (tuỳ chọn)' : ''}</label>
               <input className={inputCls} style={isFieldMissing('work_email') || workEmailError ? { borderColor: '#FF453A' } : {}} value={form.work_email} onChange={e => { setForm(f => ({ ...f, work_email: e.target.value })); setWorkEmailError(''); }} placeholder="ten@tdgamestudio.com" />
               {workEmailError && <p className="text-red-400 text-xs mt-1 font-bold">⚠️ {workEmailError}</p>}
             </div>
@@ -351,24 +363,30 @@ const EmployeeForm: React.FC<Props> = ({
                 <option value="other">Khác</option>
               </select>
             </div>
-            <div>
-              <label className={labelCls}>Quốc tịch</label>
-              <input className={inputCls} value={form.nationality} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))} />
-            </div>
+            {form.type !== 'freelancer' && (
+              <div>
+                <label className={labelCls}>Quốc tịch</label>
+                <input className={inputCls} value={form.nationality} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))} />
+              </div>
+            )}
             <div className="md:col-span-3">
               <label className={labelCls}>Địa chỉ thường trú{reqStar('address')}</label>
               <input className={inputCls} style={isFieldMissing('address') ? { borderColor: '#FF453A' } : {}} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Số nhà, đường, quận, TP..." />
             </div>
-            <div className="md:col-span-3">
-              <label className={labelCls}>Địa chỉ tạm trú{reqStar('temp_address')}</label>
-              <input className={inputCls} style={isFieldMissing('temp_address') ? { borderColor: '#FF453A' } : {}} value={form.temp_address} onChange={e => setForm(f => ({ ...f, temp_address: e.target.value }))} placeholder="Nếu giống thường trú, điền lại" />
-            </div>
+            {form.type !== 'freelancer' && (
+              <div className="md:col-span-3">
+                <label className={labelCls}>Địa chỉ tạm trú{reqStar('temp_address')}</label>
+                <input className={inputCls} style={isFieldMissing('temp_address') ? { borderColor: '#FF453A' } : {}} value={form.temp_address} onChange={e => setForm(f => ({ ...f, temp_address: e.target.value }))} placeholder="Nếu giống thường trú, điền lại" />
+              </div>
+            )}
           </div>
         </div>
 
         {/* ── Section: CCCD & Photos ── */}
         <div className={sectionCls}>
-          <h3 className="text-lg font-black text-white uppercase tracking-tight">🪪 CMND / CCCD & Ảnh nhân sự</h3>
+          <h3 className="text-lg font-black text-white uppercase tracking-tight">
+            {form.type === 'freelancer' ? '🪪 CMND / CCCD' : '🪪 CMND / CCCD & Ảnh nhân sự'}
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <label className={labelCls}>Số CMND/CCCD{reqStar('id_number')}</label>
@@ -383,99 +401,105 @@ const EmployeeForm: React.FC<Props> = ({
               <input className={inputCls} style={isFieldMissing('id_issue_place') ? { borderColor: '#FF453A' } : {}} value={form.id_issue_place} onChange={e => setForm(f => ({ ...f, id_issue_place: e.target.value }))} />
             </div>
           </div>
-          {/* Photo uploads */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
-            {/* Avatar */}
-            <div>
-              <label className={labelCls}>Ảnh nhân sự</label>
-              <input type="file" ref={avatarFileRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload('avatar_url', f); }} />
-              {form.avatar_url ? (
-                <div className="relative group rounded-xl overflow-hidden border border-primary/10 cursor-pointer" style={{ aspectRatio: '1/1' }}
-                  onClick={() => avatarFileRef.current?.click()}>
-                  <img src={toPublicUrl(form.avatar_url)} alt="Avatar" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                    <span className="text-white text-xs font-bold">📷 Đổi ảnh</span>
+          {/* Photo uploads — only for fulltime/parttime */}
+          {form.type !== 'freelancer' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+              {/* Avatar */}
+              <div>
+                <label className={labelCls}>Ảnh nhân sự</label>
+                <input type="file" ref={avatarFileRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload('avatar_url', f); }} />
+                {form.avatar_url ? (
+                  <div className="relative group rounded-xl overflow-hidden border border-primary/10 cursor-pointer" style={{ aspectRatio: '1/1' }}
+                    onClick={() => avatarFileRef.current?.click()}>
+                    <img src={toPublicUrl(form.avatar_url)} alt="Avatar" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                      <span className="text-white text-xs font-bold">📷 Đổi ảnh</span>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div onClick={() => avatarFileRef.current?.click()}
-                  className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all hover:border-primary/40 ${uploadingAvatar ? 'border-primary/30 bg-primary/5' : 'border-primary/10 bg-white/[0.02]'}`}
-                  style={{ aspectRatio: '1/1' }}>
-                  {uploadingAvatar ? (
-                    <><div className="w-6 h-6 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /><span className="text-xs font-bold text-primary">Đang upload...</span></>
-                  ) : (
-                    <><span className="text-3xl">👤</span><span className="text-xs text-neutral-medium">Upload ảnh nhân sự</span></>
-                  )}
-                </div>
-              )}
-            </div>
-            {/* CCCD Front */}
-            <div>
-              <label className={labelCls}>CCCD Mặt trước</label>
-              <input type="file" ref={frontFileRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload('id_card_front_url', f); }} />
-              {form.id_card_front_url ? (
-                <div className="relative group rounded-xl overflow-hidden border border-primary/10 cursor-pointer" style={{ aspectRatio: '1.6/1' }}
-                  onClick={() => frontFileRef.current?.click()}>
-                  <img src={toPublicUrl(form.id_card_front_url)} alt="CCCD Mặt trước" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                    <span className="text-white text-xs font-bold">🔄 Thay ảnh</span>
+                ) : (
+                  <div onClick={() => avatarFileRef.current?.click()}
+                    className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all hover:border-primary/40 ${uploadingAvatar ? 'border-primary/30 bg-primary/5' : 'border-primary/10 bg-white/[0.02]'}`}
+                    style={{ aspectRatio: '1/1' }}>
+                    {uploadingAvatar ? (
+                      <><div className="w-6 h-6 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /><span className="text-xs font-bold text-primary">Đang upload...</span></>
+                    ) : (
+                      <><span className="text-3xl">👤</span><span className="text-xs text-neutral-medium">Upload ảnh nhân sự</span></>
+                    )}
                   </div>
-                </div>
-              ) : (
-                <div onClick={() => frontFileRef.current?.click()}
-                  className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all hover:border-primary/40 ${uploadingFront ? 'border-primary/30 bg-primary/5' : 'border-primary/10 bg-white/[0.02]'}`}
-                  style={{ aspectRatio: '1.6/1' }}>
-                  {uploadingFront ? (
-                    <><div className="w-6 h-6 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /><span className="text-xs font-bold text-primary">Đang upload...</span></>
-                  ) : (
-                    <><span className="text-3xl">📷</span><span className="text-xs text-neutral-medium">Upload mặt trước</span></>
-                  )}
-                </div>
-              )}
-            </div>
-            {/* CCCD Back */}
-            <div>
-              <label className={labelCls}>CCCD Mặt sau</label>
-              <input type="file" ref={backFileRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload('id_card_back_url', f); }} />
-              {form.id_card_back_url ? (
-                <div className="relative group rounded-xl overflow-hidden border border-primary/10 cursor-pointer" style={{ aspectRatio: '1.6/1' }}
-                  onClick={() => backFileRef.current?.click()}>
-                  <img src={toPublicUrl(form.id_card_back_url)} alt="CCCD Mặt sau" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                    <span className="text-white text-xs font-bold">🔄 Thay ảnh</span>
+                )}
+              </div>
+              {/* CCCD Front */}
+              <div>
+                <label className={labelCls}>CCCD Mặt trước</label>
+                <input type="file" ref={frontFileRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload('id_card_front_url', f); }} />
+                {form.id_card_front_url ? (
+                  <div className="relative group rounded-xl overflow-hidden border border-primary/10 cursor-pointer" style={{ aspectRatio: '1.6/1' }}
+                    onClick={() => frontFileRef.current?.click()}>
+                    <img src={toPublicUrl(form.id_card_front_url)} alt="CCCD Mặt trước" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                      <span className="text-white text-xs font-bold">🔄 Thay ảnh</span>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div onClick={() => backFileRef.current?.click()}
-                  className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all hover:border-primary/40 ${uploadingBack ? 'border-primary/30 bg-primary/5' : 'border-primary/10 bg-white/[0.02]'}`}
-                  style={{ aspectRatio: '1.6/1' }}>
-                  {uploadingBack ? (
-                    <><div className="w-6 h-6 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /><span className="text-xs font-bold text-primary">Đang upload...</span></>
-                  ) : (
-                    <><span className="text-3xl">📷</span><span className="text-xs text-neutral-medium">Upload mặt sau</span></>
-                  )}
-                </div>
-              )}
+                ) : (
+                  <div onClick={() => frontFileRef.current?.click()}
+                    className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all hover:border-primary/40 ${uploadingFront ? 'border-primary/30 bg-primary/5' : 'border-primary/10 bg-white/[0.02]'}`}
+                    style={{ aspectRatio: '1.6/1' }}>
+                    {uploadingFront ? (
+                      <><div className="w-6 h-6 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /><span className="text-xs font-bold text-primary">Đang upload...</span></>
+                    ) : (
+                      <><span className="text-3xl">📷</span><span className="text-xs text-neutral-medium">Upload mặt trước</span></>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* CCCD Back */}
+              <div>
+                <label className={labelCls}>CCCD Mặt sau</label>
+                <input type="file" ref={backFileRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload('id_card_back_url', f); }} />
+                {form.id_card_back_url ? (
+                  <div className="relative group rounded-xl overflow-hidden border border-primary/10 cursor-pointer" style={{ aspectRatio: '1.6/1' }}
+                    onClick={() => backFileRef.current?.click()}>
+                    <img src={toPublicUrl(form.id_card_back_url)} alt="CCCD Mặt sau" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                      <span className="text-white text-xs font-bold">🔄 Thay ảnh</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div onClick={() => backFileRef.current?.click()}
+                    className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all hover:border-primary/40 ${uploadingBack ? 'border-primary/30 bg-primary/5' : 'border-primary/10 bg-white/[0.02]'}`}
+                    style={{ aspectRatio: '1.6/1' }}>
+                    {uploadingBack ? (
+                      <><div className="w-6 h-6 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /><span className="text-xs font-bold text-primary">Đang upload...</span></>
+                    ) : (
+                      <><span className="text-3xl">📷</span><span className="text-xs text-neutral-medium">Upload mặt sau</span></>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* ── Section: Fulltime-specific ── */}
-        {form.type === 'fulltime' && (
+        {/* ── Section: Fulltime/Parttime-specific ── */}
+        {(form.type === 'fulltime' || form.type === 'parttime') && (
           <div className={sectionCls}>
-            <h3 className="text-lg font-black text-white uppercase tracking-tight">🏢 Thông tin Fulltime</h3>
+            <h3 className="text-lg font-black text-white uppercase tracking-tight">
+              {form.type === 'fulltime' ? '🏢 Thông tin Fulltime' : '🏢 Thông tin Part-time'}
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className={labelCls}>Mã số thuế cá nhân</label>
                 <input className={inputCls} value={form.tax_code} onChange={e => setForm(f => ({ ...f, tax_code: e.target.value }))} />
               </div>
-              <div>
-                <label className={labelCls}>Số sổ bảo hiểm</label>
-                <input className={inputCls} value={form.insurance_number} onChange={e => setForm(f => ({ ...f, insurance_number: e.target.value }))} />
-              </div>
+              {form.type === 'fulltime' && (
+                <div>
+                  <label className={labelCls}>Số sổ bảo hiểm</label>
+                  <input className={inputCls} value={form.insurance_number} onChange={e => setForm(f => ({ ...f, insurance_number: e.target.value }))} />
+                </div>
+              )}
               <div>
                 <label className={labelCls}>Phòng ban{reqStar('department_id')}</label>
               <select className={inputCls} style={isFieldMissing('department_id') ? { borderColor: '#FF453A' } : {}} value={form.department_id || ''} onChange={e => setForm(f => ({ ...f, department_id: e.target.value || null }))}>
@@ -524,8 +548,8 @@ const EmployeeForm: React.FC<Props> = ({
           </div>
         )}
 
-        {/* ── Section: Salary Structure (Fulltime only) ── */}
-        {form.type === 'fulltime' && (
+        {/* ── Section: Salary Structure (Fulltime/Parttime only) ── */}
+        {(form.type === 'fulltime' || form.type === 'parttime') && (
           <div className={sectionCls}>
             <h3 className="text-lg font-black text-white uppercase tracking-tight">💰 Cấu trúc lương</h3>
             {loadingSalary ? (
@@ -758,21 +782,21 @@ const EmployeeForm: React.FC<Props> = ({
         )}
 
         {/* ── Section: Freelancer-specific ── */}
-        {(form.type === 'freelancer' || form.type === 'parttime') && (
+        {form.type === 'freelancer' && (
           <div className={sectionCls}>
             <h3 className="text-lg font-black text-white uppercase tracking-tight">🌍 Thông tin Freelancer</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div>
-                <label className={labelCls}>Portfolio URL</label>
-                <input className={inputCls} value={form.portfolio_url} onChange={e => setForm(f => ({ ...f, portfolio_url: e.target.value }))} placeholder="https://artstation.com/..." />
-              </div>
               <div>
                 <label className={labelCls}>Chức danh</label>
                 <input className={inputCls} value={form.position} onChange={e => setForm(f => ({ ...f, position: e.target.value }))} placeholder="VFX Artist, Concept Artist..." />
               </div>
               <div>
-                <label className={labelCls}>Múi giờ</label>
-                <input className={inputCls} value={form.timezone} onChange={e => setForm(f => ({ ...f, timezone: e.target.value }))} placeholder="UTC+7" />
+                <label className={labelCls}>Portfolio URL</label>
+                <input className={inputCls} value={form.portfolio_url} onChange={e => setForm(f => ({ ...f, portfolio_url: e.target.value }))} placeholder="https://artstation.com/..." />
+              </div>
+              <div>
+                <label className={labelCls}>Mã số thuế cá nhân</label>
+                <input className={inputCls} value={form.tax_code} onChange={e => setForm(f => ({ ...f, tax_code: e.target.value }))} placeholder="Để kê khai thuế TNCN khoán" />
               </div>
               <div>
                 <label className={labelCls}>Loại rate</label>
@@ -794,16 +818,6 @@ const EmployeeForm: React.FC<Props> = ({
                     <option value="EUR">EUR</option>
                   </select>
                 </div>
-              </div>
-              <div>
-                <label className={labelCls}>Thanh toán</label>
-                <select className={inputCls} value={form.payment_method} onChange={e => setForm(f => ({ ...f, payment_method: e.target.value }))}>
-                  <option value="">-- Chọn --</option>
-                  <option value="bank_transfer">Bank Transfer</option>
-                  <option value="paypal">PayPal</option>
-                  <option value="wise">Wise</option>
-                  <option value="other">Khác</option>
-                </select>
               </div>
             </div>
             {/* Specializations */}

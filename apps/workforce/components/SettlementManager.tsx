@@ -46,6 +46,12 @@ const inputCls = "w-full bg-transparent border border-primary/10 rounded-xl px-4
 const labelCls = "text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2 block";
 
 type View = 'list' | 'create' | 'detail';
+type CompanyId = 'tdgames' | 'tdconsulting';
+
+const COMPANY_CONFIG: Record<CompanyId, { name: string; logo: string; subtitle: string }> = {
+  tdgames: { name: 'TD Games Studio', logo: '/logo_td_notext.png', subtitle: 'CÔNG TY TNHH TD GAMES' },
+  tdconsulting: { name: 'TD Consulting', logo: '/logo_tdc.png', subtitle: 'CÔNG TY TNHH TD CONSULTING' },
+};
 
 const SettlementManager: React.FC<SettlementManagerProps> = ({
   settlements, workers, tasks, vcbSellRate,
@@ -55,6 +61,7 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
   const [selectedSettlement, setSelectedSettlement] = useState<Settlement | null>(null);
   const [detailTasks, setDetailTasks] = useState<WorkforceTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  const [selCompany, setSelCompany] = useState<CompanyId>('tdgames');
   const printRef = useRef<HTMLDivElement>(null);
 
   // Custom confirmation modal state (replaces native confirm() which is blocked by some browsers)
@@ -133,10 +140,13 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
+    // Get selected company config
+    const company = COMPANY_CONFIG[selCompany];
+
     // Convert logo to base64
     let logoBase64 = '';
     try {
-      const resp = await fetch('/logo_td_notext.png');
+      const resp = await fetch(company.logo);
       const blob = await resp.blob();
       logoBase64 = await new Promise<string>((resolve) => {
         const reader = new FileReader();
@@ -197,7 +207,7 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
       @media print{@page{margin:10mm 12mm}body{margin:0}}
     </style></head><body>
     <div class="header">
-      <div class="logo-row">${logoBase64 ? `<img src="${logoBase64}" alt="Logo" />` : ''}<div><h1>NGHIỆM THU CÔNG VIỆC</h1><h2>TD Games Studio</h2></div></div>
+      <div class="logo-row">${logoBase64 ? `<img src="${logoBase64}" alt="Logo" />` : ''}<div><h1>NGHIỆM THU CÔNG VIỆC</h1><h2>${company.name}</h2></div></div>
       <div style="text-align:right"><div style="font-size:11px;color:#666">Kỳ nghiệm thu</div>
         <div style="font-size:20px;font-weight:700">${selectedSettlement.period}</div>
         <div style="font-size:11px;color:#666;margin-top:4px">Ngày xuất: ${new Date().toLocaleDateString('vi-VN')}</div>
@@ -209,6 +219,18 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
       <div>Số lượng task: <span>${detailTasks.length}</span></div>
       ${selectedSettlement.notes ? `<div>Ghi chú: <span>${selectedSettlement.notes}</span></div>` : ''}
     </div>
+    ${(() => {
+      const w = selectedSettlement.worker || workers.find(wk => wk.id === selectedSettlement.worker_id);
+      return (w?.bank_name || w?.bank_account) ? `
+    <div style="margin:15px 0;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:8px;font-weight:700">Thông tin thanh toán</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:13px">
+        <div>Ngân hàng: <b>${w.bank_name || '—'}</b></div>
+        <div>Số tài khoản: <b>${w.bank_account || '—'}</b></div>
+        <div>Chủ tài khoản: <b>${w.full_name || '—'}</b></div>
+      </div>
+    </div>` : '';
+    })()}
     <table>
       <thead><tr>
         <th style="text-align:center">#</th><th>Task</th><th>Project</th><th>Ngày đóng</th>
@@ -226,7 +248,7 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
       <div class="row grand" style="color:#059669"><span>THỰC NHẬN:</span><span>${(selectedSettlement.net_amount || 0).toLocaleString()} ${selectedSettlement.currency}</span></div>
     </div>
     <div class="footer">
-      <div class="sig"><div style="font-size:11px;color:#666">Người lập</div><div class="line">TD Games</div></div>
+      <div class="sig"><div style="font-size:11px;color:#666">Người lập</div><div class="line">${company.name}</div></div>
       <div class="sig"><div style="font-size:11px;color:#666">Nhân sự xác nhận</div><div class="line">${workerName}</div></div>
     </div>
     </body></html>`);
@@ -244,7 +266,8 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
   // === DETAIL VIEW ===
   if (view === 'detail' && selectedSettlement) {
     const s = selectedSettlement;
-    const workerName = s.worker?.full_name || workers.find(w => w.id === s.worker_id)?.full_name || '???';
+    const workerObj = s.worker || workers.find(w => w.id === s.worker_id);
+    const workerName = workerObj?.full_name || '???';
     const nextStatus = STATUS_FLOW[s.status];
     const totalPrice = detailTasks.reduce((sum, t) => sum + (t.price || 0), 0);
     const totalBonus = detailTasks.reduce((sum, t) => sum + (t.bonus || 0), 0);
@@ -295,6 +318,31 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
               className="px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest bg-gradient-primary text-white shadow-btn-glow hover:shadow-btn-glow-hover transition-all hover:scale-[1.02]"
             >{STATUS_NEXT_LABEL[s.status]}</button>
           )}
+          {/* Company Selector */}
+          <div className="flex items-center rounded-xl border border-primary/10 overflow-hidden">
+            <button
+              onClick={() => setSelCompany('tdgames')}
+              className={`px-4 py-2.5 text-xs font-bold tracking-wider transition-all flex items-center gap-2 ${
+                selCompany === 'tdgames'
+                  ? 'bg-primary/20 text-primary border-r border-primary/20'
+                  : 'text-neutral-medium hover:text-white hover:bg-white/5 border-r border-primary/10'
+              }`}
+            >
+              <img src="/logo_td_notext.png" alt="" className="w-5 h-5 object-contain" />
+              TD Games
+            </button>
+            <button
+              onClick={() => setSelCompany('tdconsulting')}
+              className={`px-4 py-2.5 text-xs font-bold tracking-wider transition-all flex items-center gap-2 ${
+                selCompany === 'tdconsulting'
+                  ? 'bg-pink-500/20 text-pink-400'
+                  : 'text-neutral-medium hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <img src="/logo_tdc.png" alt="" className="w-5 h-5 object-contain" />
+              TD Consulting
+            </button>
+          </div>
           <button onClick={handleExportPDF}
             className="px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest border border-primary/20 text-primary hover:bg-primary/10 transition-all">
             📄 Export PDF
@@ -346,6 +394,27 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
         {s.notes && (
           <div className="px-4 py-3 rounded-xl border border-primary/10 bg-surface text-neutral-medium text-sm">
             📝 <span className="italic">{s.notes}</span>
+          </div>
+        )}
+
+        {/* Bank info */}
+        {(workerObj?.bank_name || workerObj?.bank_account) && (
+          <div className="px-5 py-4 rounded-[16px] border border-primary/10 bg-surface">
+            <p className="text-[9px] font-black uppercase tracking-widest text-neutral-medium mb-3">🏦 Thông tin thanh toán</p>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-[10px] text-neutral-medium/60 uppercase tracking-wider">Ngân hàng</p>
+                <p className="text-white font-bold text-sm mt-0.5">{workerObj.bank_name || '—'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-neutral-medium/60 uppercase tracking-wider">Số tài khoản</p>
+                <p className="text-white font-bold text-sm mt-0.5 font-mono">{workerObj.bank_account || '—'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-neutral-medium/60 uppercase tracking-wider">Chủ tài khoản</p>
+                <p className="text-white font-bold text-sm mt-0.5">{workerObj.full_name || '—'}</p>
+              </div>
+            </div>
           </div>
         )}
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AccountUser } from '@/types';
 import { fetchMyProfile, updateMyProfile } from '@/apps/portal/services/portalService';
 import { uploadFileToR2, toPublicUrl } from '@/apps/hr/services/hrService';
+import { supabase } from '@/services/supabaseClient';
 
 interface Props {
   currentUser: AccountUser;
@@ -19,7 +20,8 @@ interface Section {
   fields: FieldDef[];
 }
 
-const SECTIONS: Section[] = [
+// ── Fulltime/Parttime profile sections ──
+const EMPLOYEE_SECTIONS: Section[] = [
   {
     icon: '👤', title: 'Thông tin cá nhân', required: true,
     fields: [
@@ -59,8 +61,45 @@ const SECTIONS: Section[] = [
   },
 ];
 
-const ALL_FIELDS = SECTIONS.flatMap(s => s.fields);
-const ALL_KEYS = ALL_FIELDS.map(f => f.key).concat('avatar_url');
+// ── Freelancer profile sections (simplified) ──
+const FREELANCER_SECTIONS: Section[] = [
+  {
+    icon: '👤', title: 'Thông tin cá nhân', required: true,
+    fields: [
+      { key: 'full_name', label: 'Họ tên', type: 'text', placeholder: 'Nguyễn Văn A', required: true },
+      { key: 'phone', label: 'Số điện thoại', type: 'text', placeholder: '0912 345 678', required: true },
+      { key: 'date_of_birth', label: 'Ngày sinh', type: 'date', placeholder: '', required: true },
+      { key: 'gender', label: 'Giới tính', type: 'select', required: true, options: [
+        { value: 'male', label: 'Nam' }, { value: 'female', label: 'Nữ' }, { value: 'other', label: 'Khác' },
+      ]},
+      { key: 'address', label: 'Địa chỉ', type: 'text', placeholder: 'Số nhà, đường, quận, TP...', required: true },
+    ],
+  },
+  {
+    icon: '🪪', title: 'Thông tin CCCD', required: true,
+    fields: [
+      { key: 'id_number', label: 'Số CMND/CCCD', type: 'text', placeholder: '012345678901', required: true },
+      { key: 'id_issue_date', label: 'Ngày cấp', type: 'date', placeholder: '', required: true },
+      { key: 'id_issue_place', label: 'Nơi cấp', type: 'text', placeholder: 'Cục CS QLHC...', required: true },
+    ],
+  },
+  {
+    icon: '🏦', title: 'Ngân hàng', required: true,
+    fields: [
+      { key: 'bank_name', label: 'Tên ngân hàng', type: 'text', placeholder: 'VCB, ACB, MB...', required: true },
+      { key: 'bank_account', label: 'Số tài khoản', type: 'text', placeholder: '1234567890', required: true },
+      { key: 'bank_branch', label: 'Tên chủ tài khoản', type: 'text', placeholder: 'NGUYEN VAN A', required: true },
+    ],
+  },
+  {
+    icon: '📄', title: 'Thuế', required: true,
+    fields: [
+      { key: 'tax_code', label: 'Mã số thuế (MST)', type: 'text', placeholder: 'MST cá nhân', required: true },
+    ],
+  },
+];
+
+// Will be dynamically selected based on role inside the component
 
 export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComplete }) => {
   const [profile, setProfile] = useState<any>(null);
@@ -70,6 +109,18 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
   const [error, setError] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const avatarRef = useRef<HTMLInputElement>(null);
+  const [isFreelancer, setIsFreelancer] = useState(false);
+
+  // Detect role from Supabase user metadata
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.user_metadata?.role === 'freelancer') setIsFreelancer(true);
+    });
+  }, []);
+
+  const SECTIONS = isFreelancer ? FREELANCER_SECTIONS : EMPLOYEE_SECTIONS;
+  const ALL_FIELDS = SECTIONS.flatMap(s => s.fields);
+  const ALL_KEYS = ALL_FIELDS.map(f => f.key).concat(isFreelancer ? [] : ['avatar_url']);
 
   useEffect(() => {
     if (!currentUser.employee_id) { onComplete(); return; }
@@ -91,9 +142,9 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
 
   const requiredFields = ALL_FIELDS.filter(f => f.required);
   const missingRequired = requiredFields.filter(f => { const v = form[f.key]; return !v || (typeof v === 'string' && !v.trim()); });
-  const missingAvatar = !form.avatar_url;
+  const missingAvatar = isFreelancer ? false : !form.avatar_url;
   const allMissing = [...(missingAvatar ? ['Ảnh đại diện'] : []), ...missingRequired.map(f => f.label)];
-  const total = requiredFields.length + 1;
+  const total = requiredFields.length + (isFreelancer ? 0 : 1);
   const pct = Math.round(((total - allMissing.length) / total) * 100);
 
   const handleSubmit = async () => {
@@ -165,12 +216,13 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
                   <span style={{ fontSize: '22px' }}>📋</span>
                 </div>
                 <div>
-                  <h1 className="text-xl font-black uppercase tracking-wide" style={{ color: '#06B6D4', lineHeight: 1.1 }}>Hoàn Thiện Hồ Sơ</h1>
-                  <p style={{ color: '#555', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Bắt buộc điền đầy đủ để sử dụng hệ thống</p>
+                  <h1 className="text-xl font-black uppercase tracking-wide" style={{ color: isFreelancer ? '#F59E0B' : '#06B6D4', lineHeight: 1.1 }}>{isFreelancer ? 'Hoàn Thiện Hồ Sơ CTV' : 'Hoàn Thiện Hồ Sơ'}</h1>
+                  <p style={{ color: '#555', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{isFreelancer ? 'Điền đầy đủ thông tin để bắt đầu nhận việc' : 'Bắt buộc điền đầy đủ để sử dụng hệ thống'}</p>
                 </div>
               </div>
 
-              {/* Avatar — large square */}
+              {/* Avatar — large square (hidden for freelancers) */}
+              {!isFreelancer && (
               <div className="flex items-center gap-4 flex-shrink-0">
                 <input type="file" ref={avatarRef} accept=".jpg,.jpeg,.png,.webp" style={{ display: 'none' }}
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); }} />
@@ -202,6 +254,7 @@ export const ProfileCompletionScreen: React.FC<Props> = ({ currentUser, onComple
                   <span style={{ color: '#555', fontSize: '9px', display: 'block', marginTop: '4px' }}>Click ảnh để đổi</span>
                 </div>
               </div>
+              )}
 
               {/* Progress */}
               <div className="md:w-[200px] flex-shrink-0">

@@ -7,6 +7,97 @@ import {
 } from '@/types';
 
 // ══════════════════════════════════════════════════════════════
+// ── Helpers ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+/** Cross-check email: ensure email doesn't conflict between fulltime work_email and freelancer personal email */
+export async function checkEmailConflict(email: string, excludeId?: string): Promise<string | null> {
+  // Check if email is used as work_email by a fulltime/parttime employee
+  const { data: workEmailMatch } = await supabase
+    .from('hr_employees')
+    .select('id, full_name, type')
+    .eq('work_email', email)
+    .limit(1);
+
+  if (workEmailMatch?.length) {
+    const match = workEmailMatch[0];
+    if (match.id !== excludeId) {
+      return `Email này đã được sử dụng làm email công việc bởi ${match.full_name} (${match.type})`;
+    }
+  }
+
+  // Check if email is used as personal email by a freelancer
+  const { data: personalEmailMatch } = await supabase
+    .from('hr_employees')
+    .select('id, full_name, type')
+    .eq('email', email)
+    .limit(1);
+
+  if (personalEmailMatch?.length) {
+    const match = personalEmailMatch[0];
+    if (match.id !== excludeId) {
+      return `Email này đã được sử dụng làm email cá nhân bởi ${match.full_name} (${match.type})`;
+    }
+  }
+
+  return null; // No conflict
+}
+
+/** Disable Auth user via edge function (ban - prevents login but keeps account) */
+async function disableAuthUser(email: string): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-employee-auth`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ action: 'disable', email }),
+      }
+    );
+    const result = await res.json();
+    if (result.success) {
+      console.log(`[Auth] ${result.disabled ? 'Disabled' : 'No'} auth user for ${email}`);
+    } else {
+      console.warn(`[Auth] Failed to disable auth user for ${email}:`, result.error);
+    }
+  } catch (err) {
+    console.warn('[Auth] Failed to disable auth user:', err);
+  }
+}
+
+/** Re-enable Auth user via edge function (unban) */
+async function enableAuthUser(email: string): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-employee-auth`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ action: 'enable', email }),
+      }
+    );
+    const result = await res.json();
+    if (result.success) {
+      console.log(`[Auth] ${result.enabled ? 'Re-enabled' : 'No'} auth user for ${email}`);
+    } else {
+      console.warn(`[Auth] Failed to enable auth user for ${email}:`, result.error);
+    }
+  } catch (err) {
+    console.warn('[Auth] Failed to enable auth user:', err);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
 // ── Employees ─────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
 
@@ -60,6 +151,43 @@ export async function saveEmployee(
     }
   }
 
+  // Auto-create Supabase Auth account for freelancers using personal email
+  if (data.email && data.type === 'freelancer') {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-employee-auth`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            email: data.email,
+            full_name: data.full_name,
+            employee_id: data.id,
+            role: 'freelancer',
+            worker_id: data.worker_id || undefined,
+          }),
+        }
+      );
+      const result = await res.json();
+      if (result.success) {
+        if (result.invited) {
+          console.log(`[Auth] Freelancer invite sent to ${data.email}`);
+        } else {
+          console.log(`[Auth] Account already exists for ${data.email}, metadata updated`);
+        }
+      } else if (result.error) {
+        console.warn(`[Auth] Failed to invite freelancer ${data.email}:`, result.error);
+      }
+    } catch (authErr) {
+      console.warn('[Auth] Failed to auto-create freelancer auth account:', authErr);
+    }
+  }
+
   return data;
 }
 
@@ -72,9 +200,52 @@ export async function updateEmployee(id: string, updates: Partial<HrEmployee>): 
   if (error) throw error;
 }
 
+/** Soft-delete: set status to 'terminated' and disable Auth account */
 export async function deleteEmployee(id: string): Promise<void> {
-  const { error } = await supabase.from('hr_employees').delete().eq('id', id);
+  // Fetch employee first to get email
+  const { data: emp } = await supabase
+    .from('hr_employees')
+    .select('work_email, email, type')
+    .eq('id', id)
+    .single();
+
+  // Soft delete: set status to 'terminated'
+  const { error } = await supabase
+    .from('hr_employees')
+    .update({ status: 'terminated', updated_at: new Date().toISOString() })
+    .eq('id', id);
   if (error) throw error;
+
+  // Disable Auth user (ban, not delete)
+  if (emp) {
+    const authEmail = emp.type === 'freelancer' ? emp.email : emp.work_email;
+    if (authEmail) {
+      await disableAuthUser(authEmail);
+    }
+  }
+}
+
+/** Reactivate a terminated employee */
+export async function reactivateEmployee(id: string): Promise<void> {
+  const { data: emp } = await supabase
+    .from('hr_employees')
+    .select('work_email, email, type')
+    .eq('id', id)
+    .single();
+
+  const { error } = await supabase
+    .from('hr_employees')
+    .update({ status: 'active', updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+
+  // Re-enable Auth user
+  if (emp) {
+    const authEmail = emp.type === 'freelancer' ? emp.email : emp.work_email;
+    if (authEmail) {
+      await enableAuthUser(authEmail);
+    }
+  }
 }
 
 /** Resend invite email to an employee's work_email */

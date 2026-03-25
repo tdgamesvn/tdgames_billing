@@ -91,4 +91,13 @@ export const APPS: AppConfig[] = [
     gradient: 'linear-gradient(135deg, #06B6D4 0%, #0891B2 100%)',
     roles: ['member'],
   },
+  {
+    id: 'freelancer-portal',
+    name: 'Freelancer Portal',
+    icon: '🎨',
+    description: 'Tasks, nghiệm thu & thu nhập',
+    color: '#F59E0B',
+    gradient: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+    roles: ['freelancer'],
+  },
 ];

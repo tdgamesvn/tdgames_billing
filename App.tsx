@@ -14,11 +14,12 @@ import AttendanceApp from './apps/attendance/components/AttendanceApp';
 import PayrollApp from './apps/payroll/components/PayrollApp';
 import DashboardApp from './apps/dashboard/components/DashboardApp';
 import PortalApp from './apps/portal/components/PortalApp';
+import FreelancerPortalApp from './apps/freelancer-portal/components/FreelancerPortalApp';
 import { supabase } from './services/supabaseClient';
 
-const VALID_ROLES = ['admin', 'ke_toan', 'hr', 'member'] as const;
+const VALID_ROLES = ['admin', 'ke_toan', 'hr', 'member', 'freelancer'] as const;
 const parseRole = (r: string) => (VALID_ROLES.includes(r as any) ? r : 'member') as AccountUser['role'];
-const VALID_APPS = ['dashboard', 'invoice', 'expense', 'workforce', 'crm', 'hr', 'attendance', 'payroll', 'portal'];
+const VALID_APPS = ['dashboard', 'invoice', 'expense', 'workforce', 'crm', 'hr', 'attendance', 'payroll', 'portal', 'freelancer-portal'];
 
 /** Parse hash like #workforce/tasks → { app: 'workforce', tab: 'tasks' } */
 const parseHash = (): { app: string | null; tab: string | null } => {
@@ -46,17 +47,23 @@ const App: React.FC = () => {
   const [needsProfileCompletion, setNeedsProfileCompletion] = useState(false);
 
   // Required profile fields — must match ProfileCompletionScreen
-  const REQUIRED_PROFILE_KEYS = [
+  const EMPLOYEE_REQUIRED_KEYS = [
     'full_name', 'email', 'phone', 'date_of_birth', 'gender',
     'address', 'temp_address', 'id_number', 'id_issue_date', 'id_issue_place',
     'bank_name', 'bank_account', 'bank_branch', 'avatar_url',
   ];
+  const FREELANCER_REQUIRED_KEYS = [
+    'full_name', 'phone', 'date_of_birth', 'gender',
+    'address', 'id_number', 'id_issue_date', 'id_issue_place',
+    'bank_name', 'bank_account', 'bank_branch', 'tax_code',
+  ];
 
   /** Check employee profile completeness from DB */
-  const checkProfileCompletion = async (employeeId: string) => {
+  const checkProfileCompletion = async (employeeId: string, role?: string) => {
     try {
       const profile = await fetchMyProfile(employeeId);
-      const missing = REQUIRED_PROFILE_KEYS.filter(key => {
+      const keys = role === 'freelancer' ? FREELANCER_REQUIRED_KEYS : EMPLOYEE_REQUIRED_KEYS;
+      const missing = keys.filter(key => {
         const v = profile?.[key];
         return !v || (typeof v === 'string' && v.trim().length === 0);
       });
@@ -99,8 +106,8 @@ const App: React.FC = () => {
     // Case 3: Password is set — check profile completion from DB
     const role = parseRole(meta.role || 'member');
     const employeeId = meta.employee_id;
-    if (role === 'member' && employeeId) {
-      await checkProfileCompletion(employeeId);
+    if ((role === 'member' || role === 'freelancer') && employeeId) {
+      await checkProfileCompletion(employeeId, role);
     }
   };
 
@@ -114,6 +121,7 @@ const App: React.FC = () => {
           username: meta.username || session.user.email?.split('@')[0] || 'unknown',
           role: parseRole(meta.role || 'member'),
           employee_id: meta.employee_id || undefined,
+          worker_id: meta.worker_id || undefined,
         });
         // Check onboarding state on initial load (including profile completion from DB)
         await checkNeedsOnboarding(session);
@@ -130,6 +138,7 @@ const App: React.FC = () => {
           username: meta.username || session.user.email?.split('@')[0] || 'unknown',
           role: parseRole(meta.role || 'member'),
           employee_id: meta.employee_id || undefined,
+          worker_id: meta.worker_id || undefined,
         });
 
         // Detect invite or password recovery flow
@@ -196,10 +205,12 @@ const App: React.FC = () => {
         onComplete={() => {
           setNeedsPasswordSet(false);
           // After setting password, check if profile needs completion
-          if (currentUser.employee_id && currentUser.role === 'member') {
+          if (currentUser.employee_id && (currentUser.role === 'member' || currentUser.role === 'freelancer')) {
             setNeedsProfileCompletion(true);
           } else if (currentUser.role === 'member') {
             setActiveApp('portal');
+          } else if (currentUser.role === 'freelancer') {
+            setActiveApp('freelancer-portal');
           }
         }}
       />
@@ -213,7 +224,7 @@ const App: React.FC = () => {
         currentUser={currentUser}
         onComplete={() => {
           setNeedsProfileCompletion(false);
-          setActiveApp('portal');
+          setActiveApp(currentUser.role === 'freelancer' ? 'freelancer-portal' : 'portal');
         }}
       />
     );
@@ -257,6 +268,10 @@ const App: React.FC = () => {
 
   if (activeApp === 'portal') {
     return <PortalApp currentUser={currentUser} onBack={handleBack} />;
+  }
+
+  if (activeApp === 'freelancer-portal') {
+    return <FreelancerPortalApp currentUser={currentUser} onBack={handleBack} />;
   }
 
   // ── Home Screen ──
