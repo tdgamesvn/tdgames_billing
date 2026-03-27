@@ -5,20 +5,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Helper: find auth user by email using direct DB query (reliable, no pagination issues)
+// Helper: find auth user by email using RPC (reliable, no pagination issues)
 async function findAuthUserByEmail(supabaseAdmin: any, email: string) {
-  const { data, error } = await supabaseAdmin
-    .schema('auth')
-    .from('users')
-    .select('id, email, raw_user_meta_data, banned_until')
-    .eq('email', email)
-    .maybeSingle();
+  const { data, error } = await supabaseAdmin.rpc('find_auth_user_by_email', {
+    lookup_email: email,
+  });
 
   if (error || !data) return null;
   return {
     id: data.id,
     email: data.email,
-    user_metadata: data.raw_user_meta_data || {},
+    user_metadata: data.user_metadata || {},
     banned_until: data.banned_until,
   };
 }
