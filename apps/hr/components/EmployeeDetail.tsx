@@ -151,6 +151,52 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
     }
   };
 
+  // State for creating account
+  const [newAccountRole, setNewAccountRole] = useState('member');
+
+  const handleCreateAccount = async () => {
+    const authEmail = employee.type === 'freelancer' ? employee.email : employee.work_email;
+    if (!authEmail) {
+      setRoleToast({ msg: 'Nhân viên chưa có email. Vào Sửa → thêm email trước.', type: 'error' });
+      return;
+    }
+    setChangingRole(true);
+    setRoleToast(null);
+    try {
+      const { data: { session } } = await (await import('@/services/supabaseClient')).supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-employee-auth`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            email: authEmail,
+            full_name: employee.full_name,
+            employee_id: employee.id,
+            role: newAccountRole,
+            ...(employee.type === 'freelancer' ? { worker_id: employee.id } : {}),
+          }),
+        }
+      );
+      const result = await res.json();
+      if (result.success) {
+        setCurrentRole(newAccountRole);
+        setRoleToast({ msg: `✅ Đã tạo tài khoản & gửi email mời (role: ${ROLE_OPTIONS.find(r => r.value === newAccountRole)?.label || newAccountRole})`, type: 'success' });
+      } else {
+        throw new Error(result.error || 'Lỗi tạo tài khoản');
+      }
+    } catch (err: any) {
+      setRoleToast({ msg: err.message || 'Lỗi tạo tài khoản', type: 'error' });
+    } finally {
+      setChangingRole(false);
+      setTimeout(() => setRoleToast(null), 6000);
+    }
+  };
+
   const refreshContracts = async () => {
     const c = await svc.fetchContracts(employee.id);
     setContracts(c);
@@ -264,7 +310,27 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black uppercase tracking-widest text-neutral-medium">Role:</span>
                   {currentRole === 'no_account' ? (
-                    <span className="text-[11px] text-neutral-medium/60 italic">Chưa có tài khoản hệ thống</span>
+                    <>
+                      <select
+                        value={newAccountRole}
+                        onChange={e => setNewAccountRole(e.target.value)}
+                        disabled={changingRole}
+                        className="bg-white/5 border border-primary/10 rounded-lg px-3 py-1.5 text-white text-xs font-bold outline-none focus:border-primary/40 transition-all disabled:opacity-50"
+                        style={{ colorScheme: 'dark' }}
+                      >
+                        {ROLE_OPTIONS.map(r => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={handleCreateAccount}
+                        disabled={changingRole}
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider text-white transition-all hover:opacity-80 disabled:opacity-50"
+                        style={{ background: 'linear-gradient(135deg, #06B6D4 0%, #0891B2 100%)' }}
+                      >
+                        {changingRole ? '⏳ Đang tạo...' : '📧 Tạo tài khoản & Gửi invite'}
+                      </button>
+                    </>
                   ) : (
                     <>
                       <select
