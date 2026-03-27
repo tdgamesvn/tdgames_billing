@@ -5,6 +5,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Helper: find auth user by email using direct DB query (reliable, no pagination issues)
+async function findAuthUserByEmail(supabaseAdmin: any, email: string) {
+  const { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id, email, raw_user_meta_data, banned_until')
+    .eq('email', email)
+    .schema('auth')
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return {
+    id: data.id,
+    email: data.email,
+    user_metadata: data.raw_user_meta_data || {},
+    banned_until: data.banned_until,
+  };
+}
+
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -31,9 +49,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-      const user = existingUsers?.users?.find((u: any) => u.email === email);
-
+      const user = await findAuthUserByEmail(supabaseAdmin, email);
       if (!user) {
         return new Response(
           JSON.stringify({ success: true, disabled: false, message: "No auth user found" }),
@@ -41,7 +57,6 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Ban user (prevents login but keeps account)
       const { error: banErr } = await supabaseAdmin.auth.admin.updateUserById(
         user.id,
         { ban_duration: "876600h", user_metadata: { ...user.user_metadata, status: "terminated" } }
@@ -64,9 +79,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-      const user = existingUsers?.users?.find((u: any) => u.email === email);
-
+      const user = await findAuthUserByEmail(supabaseAdmin, email);
       if (!user) {
         return new Response(
           JSON.stringify({ success: true, enabled: false, message: "No auth user found" }),
@@ -96,8 +109,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-      const user = existingUsers?.users?.find((u: any) => u.email === email);
+      const user = await findAuthUserByEmail(supabaseAdmin, email);
 
       return new Response(
         JSON.stringify({ success: true, exists: !!user, user_id: user?.id || null, role: user?.user_metadata?.role || null }),
@@ -115,9 +127,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-      const user = existingUsers?.users?.find((u: any) => u.email === email);
-
+      const user = await findAuthUserByEmail(supabaseAdmin, email);
       if (!user) {
         return new Response(
           JSON.stringify({ success: false, error: `No auth user found for ${email}` }),
@@ -155,14 +165,12 @@ Deno.serve(async (req: Request) => {
       role: role || "member",
     };
 
-    // Add worker_id for freelancers
     if (worker_id) {
       userMetadata.worker_id = worker_id;
     }
 
-    // Check if user already exists (with pagination to avoid missing users)
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-    const existingUser = existingUsers?.users?.find((u: any) => u.email === email);
+    // Check if user already exists using direct DB query
+    const existingUser = await findAuthUserByEmail(supabaseAdmin, email);
 
     if (existingUser) {
       // Update metadata for existing user
@@ -184,24 +192,7 @@ Deno.serve(async (req: Request) => {
       redirectTo: `${Deno.env.get("SITE_URL") || "https://app.tdgamestudio.com"}`,
     });
 
-    // Handle "already registered" error gracefully
-    if (error) {
-      if (error.message?.includes("already been registered")) {
-        // User exists but was missed by listUsers — try to find and update
-        const { data: retryUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000, page: 1 });
-        const retryUser = retryUsers?.users?.find((u: any) => u.email === email);
-        if (retryUser) {
-          await supabaseAdmin.auth.admin.updateUserById(retryUser.id, {
-            user_metadata: { ...retryUser.user_metadata, ...userMetadata },
-          });
-          return new Response(
-            JSON.stringify({ success: true, invited: false, message: "User already exists, metadata updated" }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-      }
-      throw error;
-    }
+    if (error) throw error;
 
     return new Response(
       JSON.stringify({ success: true, invited: true, user_id: data.user?.id }),
