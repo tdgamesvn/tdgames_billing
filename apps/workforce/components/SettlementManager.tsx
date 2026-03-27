@@ -259,8 +259,13 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
 
   // Helpers
   const fmt = (n: number) => n.toLocaleString();
-  const totalPaid = settlements.filter(s => s.status === 'paid').reduce((s, st) => s + st.total_amount, 0);
-  const totalPending = settlements.filter(s => s.status !== 'paid').reduce((s, st) => s + st.total_amount, 0);
+  // Convert settlement net_amount to VND (auto-convert USD using vcbSellRate)
+  const toVND = (st: Settlement) => {
+    const amount = st.net_amount || st.total_amount;
+    return st.currency === 'USD' ? Math.round(amount * vcbSellRate) : amount;
+  };
+  const totalPaidVND = settlements.filter(s => s.status === 'paid').reduce((s, st) => s + toVND(st), 0);
+  const totalPendingVND = settlements.filter(s => s.status !== 'paid').reduce((s, st) => s + toVND(st), 0);
 
   // ─── Render ─────────────────
   // === DETAIL VIEW ===
@@ -684,11 +689,11 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
         </div>
         <div className="p-5 rounded-[20px] border border-primary/10 bg-surface">
           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Đã chi</p>
-          <p className="text-2xl font-black text-primary">{fmt(totalPaid)}</p>
+          <p className="text-2xl font-black text-primary">{fmt(totalPaidVND)} <span className="text-sm text-neutral-medium">VNĐ</span></p>
         </div>
         <div className="p-5 rounded-[20px] border border-primary/10 bg-surface">
           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Chưa thanh toán</p>
-          <p className="text-2xl font-black text-amber-400">{fmt(totalPending)}</p>
+          <p className="text-2xl font-black text-amber-400">{fmt(totalPendingVND)} <span className="text-sm text-neutral-medium">VNĐ</span></p>
         </div>
       </div>
 
