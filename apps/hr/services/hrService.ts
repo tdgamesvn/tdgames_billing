@@ -253,6 +253,52 @@ export async function deleteEmployee(id: string): Promise<void> {
   }
 }
 
+/** Hard-delete: permanently remove employee record + delete auth account (ADMIN ONLY) */
+export async function hardDeleteEmployee(id: string): Promise<void> {
+  // Fetch employee first to get email for auth deletion
+  const { data: emp } = await supabase
+    .from('hr_employees')
+    .select('work_email, email, type')
+    .eq('id', id)
+    .single();
+
+  // Delete related data first (cascade won't handle all)
+  await supabase.from('hr_contracts').delete().eq('employee_id', id);
+  await supabase.from('hr_documents').delete().eq('employee_id', id);
+  await supabase.from('hr_project_history').delete().eq('employee_id', id);
+  await supabase.from('hr_employee_salary').delete().eq('employee_id', id);
+  await supabase.from('hr_dependents').delete().eq('employee_id', id);
+
+  // Delete the employee record
+  const { error } = await supabase
+    .from('hr_employees')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+
+  // Delete Auth user permanently
+  if (emp) {
+    const authEmail = emp.type === 'freelancer' ? emp.email : emp.work_email;
+    if (authEmail) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-employee-auth`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.access_token}`,
+              'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            },
+            body: JSON.stringify({ action: 'delete_user', email: authEmail }),
+          }
+        );
+      } catch { /* ignore auth delete errors */ }
+    }
+  }
+}
+
 /** Reactivate a terminated employee */
 export async function reactivateEmployee(id: string): Promise<void> {
   const { data: emp } = await supabase

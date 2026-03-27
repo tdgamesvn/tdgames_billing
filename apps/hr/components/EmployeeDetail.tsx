@@ -1,21 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { HrEmployee, HrDepartment, HrContract, HrEvaluation, HrProjectHistory } from '@/types';
+import { HrEmployee, HrDepartment, HrContract, HrEvaluation, HrProjectHistory, AccountUser } from '@/types';
 import * as svc from '../services/hrService';
-import { uploadFileToR2, toPublicUrl, updateContract, deleteContract, updateEmployeeRole } from '../services/hrService';
+import { uploadFileToR2, toPublicUrl, updateContract, deleteContract, updateEmployeeRole, hardDeleteEmployee } from '../services/hrService';
 import DocumentManager from './DocumentManager';
 import ContractGenerator from './ContractGenerator';
 
 interface Props {
   employee: HrEmployee;
   departments: HrDepartment[];
+  currentUser: AccountUser;
   onBack: () => void;
   onEdit: (e: HrEmployee) => void;
 }
 
 type DetailTab = 'info' | 'contracts' | 'evaluations' | 'projects' | 'documents';
 
-const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit }) => {
+const EmployeeDetail: React.FC<Props> = ({ employee, departments, currentUser, onBack, onEdit }) => {
   const [activeTab, setActiveTab] = useState<DetailTab>('info');
   const [showContractGen, setShowContractGen] = useState(false);
   const [viewingContract, setViewingContract] = useState<HrContract | null>(null);
@@ -32,6 +33,10 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
   const [currentRole, setCurrentRole] = useState<string>('');
   const [changingRole, setChangingRole] = useState(false);
   const [roleToast, setRoleToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  // Hard delete state (admin only)
+  const [hardDeleteConfirm, setHardDeleteConfirm] = useState(false);
+  const [hardDeleting, setHardDeleting] = useState(false);
 
   const ROLE_OPTIONS = [
     { value: 'member', label: '👤 Nhân viên', color: '#888' },
@@ -321,6 +326,32 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
                   <button onClick={() => setShowContractGen(true)} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80" style={{ background: employee.type === 'freelancer' ? 'linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%)' : 'linear-gradient(135deg, #34C759 0%, #30D158 100%)' }}>📝 Xuất hợp đồng</button>
                 )}
                 <button onClick={() => onEdit(employee)} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80" style={{ background: 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)' }}>✏️ Sửa</button>
+                {currentUser.role === 'admin' && (
+                  hardDeleteConfirm ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={async () => {
+                          setHardDeleting(true);
+                          try {
+                            await hardDeleteEmployee(employee.id);
+                            onBack();
+                          } catch (err: any) {
+                            setRoleToast({ msg: err.message || 'Lỗi xóa', type: 'error' });
+                            setHardDeleteConfirm(false);
+                          } finally { setHardDeleting(false); }
+                        }}
+                        disabled={hardDeleting}
+                        className="px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80 disabled:opacity-50"
+                        style={{ background: 'linear-gradient(135deg, #DC2626 0%, #991B1B 100%)' }}
+                      >
+                        {hardDeleting ? '⏳ Đang xóa...' : '⚠️ XÁC NHẬN XÓA'}
+                      </button>
+                      <button onClick={() => setHardDeleteConfirm(false)} className="px-3 py-2 rounded-xl border border-white/10 text-neutral-medium text-xs font-black uppercase hover:text-white transition-all">Hủy</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setHardDeleteConfirm(true)} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-red-400 border border-red-500/20 hover:bg-red-500/10 transition-all">🗑️ Xóa vĩnh viễn</button>
+                  )
+                )}
                 <button onClick={onBack} className="px-4 py-2 rounded-xl border border-primary/10 text-neutral-medium text-xs font-black uppercase tracking-widest hover:text-white hover:border-primary/30 transition-all">← Quay lại</button>
               </div>
               {/* Role Changer */}

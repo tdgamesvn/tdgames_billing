@@ -122,6 +122,7 @@ const HrApp: React.FC<HrAppProps> = ({ currentUser, onBack, initialTab }) => {
           <EmployeeDetail
             employee={state.viewingEmployee}
             departments={state.departments}
+            currentUser={currentUser}
             onBack={() => { state.setViewingEmployee(null); state.setActiveTab('employees'); }}
             onEdit={(e) => { state.setEditingEmployee(e); state.setActiveTab('employeeForm'); }}
           />

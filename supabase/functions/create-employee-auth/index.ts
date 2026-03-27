@@ -36,6 +36,33 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // ── DELETE_USER ACTION: Permanently delete auth user ──
+    if (action === "delete_user") {
+      const { email } = body;
+      if (!email) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Missing email for delete_user action" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const user = await findAuthUserByEmail(supabaseAdmin, email);
+      if (!user) {
+        return new Response(
+          JSON.stringify({ success: true, deleted: false, message: "No auth user found" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(user.id);
+      if (delErr) throw delErr;
+
+      return new Response(
+        JSON.stringify({ success: true, deleted: true, message: `Auth user ${email} permanently deleted` }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ── DISABLE ACTION: Ban auth user (soft delete) ──
     if (action === "disable") {
       const { email } = body;
