@@ -49,7 +49,7 @@ export function useInvoiceState(initialTab?: string | null) {
   }, []);
 
   const accessibleTabs: Array<'edit' | 'preview' | 'history' | 'dashboard' | 'activity' | 'recurring'> =
-    currentUser?.role === 'admin'
+    currentUser?.role === 'admin' || currentUser?.role === 'ke_toan'
       ? ['edit', 'preview', 'history', 'dashboard', 'activity', 'recurring']
       : ['edit', 'preview'];
 

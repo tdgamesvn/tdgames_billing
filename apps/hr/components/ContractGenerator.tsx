@@ -1,31 +1,69 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { HrEmployee, HrDepartment, HrEmployeeSalary } from '@/types';
-import { fetchEmployeeSalary } from '../services/hrService';
+import { HrEmployee, HrDepartment, HrEmployeeSalary, HrContract } from '@/types';
+import { fetchEmployeeSalary, saveContract } from '../services/hrService';
 import {
   generateHDLD, generateHDTV, generateNDA,
   generateHDKV, generateNDA_CTV,
   printContract, CONTRACT_TYPES_FULLTIME, CONTRACT_TYPES_FREELANCER, ContractType,
+  CompanyKey, COMPANY_OPTIONS,
 } from '../services/contractService';
 
 interface Props {
   employee: HrEmployee;
   department: HrDepartment | undefined;
+  initialContract?: HrContract; // If provided, opens in view/edit mode with pre-filled data
   onClose: () => void;
+  onContractSaved?: () => void; // callback to refresh contract list
 }
 
-const ContractGenerator: React.FC<Props> = ({ employee, department, onClose }) => {
+const ContractGenerator: React.FC<Props> = ({ employee, department, initialContract, onClose, onContractSaved }) => {
   const isFreelancer = employee.type === 'freelancer';
   const availableTypes = isFreelancer ? CONTRACT_TYPES_FREELANCER : CONTRACT_TYPES_FULLTIME;
-  const [selectedType, setSelectedType] = useState<ContractType>(availableTypes[0].key);
-  const [contractNumber, setContractNumber] = useState('001');
-  const [signingDate, setSigningDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [projectName, setProjectName] = useState('');
-  const [workScope, setWorkScope] = useState('');
+
+  // Parse initialContract to determine initial contractType
+  const parseInitialType = (): ContractType => {
+    if (!initialContract) return availableTypes[0].key;
+    if (initialContract.contract_type === 'nda') return isFreelancer ? 'nda_ctv' : 'nda';
+    if (initialContract.contract_type === 'service') return 'hdkv';
+    if (initialContract.contract_type === 'labor') return 'hdld';
+    return availableTypes[0].key;
+  };
+
+  // Parse project name from title (e.g. "Hợp đồng Khoán việc — Game XYZ" → "Game XYZ")
+  const parseProjectName = (): string => {
+    if (!initialContract?.title) return '';
+    const match = initialContract.title.match(/—\s*(.+)$/);
+    return match ? match[1].trim() : '';
+  };
+
+  // Parse companyKey from notes (e.g. "Bên A: Công ty TNHH TD Consulting | ..." )
+  const parseCompanyKey = (): CompanyKey => {
+    if (!initialContract?.notes) return 'tdgames';
+    if (initialContract.notes.toLowerCase().includes('consulting')) return 'tdconsulting';
+    return 'tdgames';
+  };
+
+  // Parse workScope from notes (e.g. "... | Loại CV: hoạt hình 2D")
+  const parseWorkScope = (): string => {
+    if (!initialContract?.notes) return '';
+    const match = initialContract.notes.match(/Loại CV:\s*(.+)$/);
+    return match ? match[1].trim() : '';
+  };
+  const [selectedType, setSelectedType] = useState<ContractType>(() => parseInitialType());
+  const [contractNumber, setContractNumber] = useState(initialContract?.contract_number || '001');
+  const [signingDate, setSigningDate] = useState(initialContract?.start_date || new Date().toISOString().split('T')[0]);
+  const [projectName, setProjectName] = useState(() => parseProjectName());
+  const [workScope, setWorkScope] = useState(() => parseWorkScope());
+  const [companyKey, setCompanyKey] = useState<CompanyKey>(() => parseCompanyKey());
   const [salaryComponents, setSalaryComponents] = useState<HrEmployeeSalary[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewHtml, setPreviewHtml] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // Save prompt state
+  const [savePrompt, setSavePrompt] = useState(false);
+  const [savingContract, setSavingContract] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Load salary data (for fulltime only)
   useEffect(() => {
@@ -57,14 +95,14 @@ const ContractGenerator: React.FC<Props> = ({ employee, department, onClose }) =
         html = generateNDA(employee, department, signingDate);
         break;
       case 'hdkv':
-        html = generateHDKV(employee, signingDate, contractNumber, projectName, workScope);
+        html = generateHDKV(employee, signingDate, contractNumber, projectName, workScope, companyKey);
         break;
       case 'nda_ctv':
-        html = generateNDA_CTV(employee, signingDate);
+        html = generateNDA_CTV(employee, signingDate, companyKey);
         break;
     }
     setPreviewHtml(html);
-  }, [selectedType, contractNumber, signingDate, projectName, workScope, salaryComponents, loading, employee, department]);
+  }, [selectedType, contractNumber, signingDate, projectName, workScope, companyKey, salaryComponents, loading, employee, department]);
 
   // Data fields to check based on employee type
   const dataChecks = isFreelancer
@@ -108,7 +146,43 @@ const ContractGenerator: React.FC<Props> = ({ employee, department, onClose }) =
   }, [previewHtml]);
 
   const handlePrint = () => {
-    if (previewHtml) printContract(previewHtml);
+    if (!previewHtml) return;
+    printContract(previewHtml);
+    // After printing, prompt to save
+    setSavePrompt(true);
+    setSaveSuccess(false);
+  };
+
+  const handleSaveContract = async () => {
+    setSavingContract(true);
+    try {
+      const contractTypeLabel = availableTypes.find(t => t.key === selectedType)?.label || selectedType;
+      const title = projectName
+        ? `${contractTypeLabel} — ${projectName}`
+        : contractTypeLabel;
+      await saveContract({
+        employee_id: employee.id,
+        contract_type: selectedType === 'nda_ctv' ? 'nda' : 'service',
+        title,
+        contract_number: contractNumber || '',
+        start_date: signingDate,
+        end_date: null,
+        salary: 0,
+        currency: employee.rate_currency || 'VND',
+        rate_type: employee.rate_type || '',
+        rate_amount: employee.rate_amount || 0,
+        file_url: '',
+        status: 'active',
+        notes: `Bên A: ${COMPANY_OPTIONS[companyKey].nameShort}${workScope ? ` | Loại CV: ${workScope}` : ''}`,
+      });
+      setSaveSuccess(true);
+      setSavePrompt(false);
+      if (onContractSaved) onContractSaved();
+    } catch (err: any) {
+      alert('Lưu thất bại: ' + (err.message || ''));
+    } finally {
+      setSavingContract(false);
+    }
   };
 
   return ReactDOM.createPortal(
@@ -134,6 +208,51 @@ const ContractGenerator: React.FC<Props> = ({ employee, department, onClose }) =
             ⚠️ {hasDataMissing ? `Thiếu: ${missingDataFields.join(', ')}` : 'Cần điền Tên dự án & Loại công việc'}
           </span>
         )}
+
+        {/* Save prompt (appears after printing) */}
+        {savePrompt && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: '#1a2a3a', border: '1px solid #0A84FF44',
+            borderRadius: 12, padding: '8px 14px',
+          }}>
+            <span style={{ fontSize: 12, color: '#ccc', fontWeight: 600 }}>
+              💾 Lưu hợp đồng vào hồ sơ?
+            </span>
+            <button
+              onClick={handleSaveContract}
+              disabled={savingContract}
+              style={{
+                padding: '5px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                background: '#0A84FF', color: '#fff', fontSize: 12, fontWeight: 800,
+                opacity: savingContract ? 0.5 : 1,
+              }}
+            >
+              {savingContract ? 'Đang lưu...' : '✅ Lưu'}
+            </button>
+            <button
+              onClick={() => setSavePrompt(false)}
+              style={{
+                padding: '5px 10px', borderRadius: 8, border: '1px solid #444',
+                background: 'transparent', color: '#888', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              Bỏ qua
+            </button>
+          </div>
+        )}
+
+        {/* Success badge */}
+        {saveSuccess && !savePrompt && (
+          <span style={{
+            fontSize: 12, color: '#34C759', fontWeight: 800,
+            background: 'rgba(52,199,89,0.12)', border: '1px solid rgba(52,199,89,0.3)',
+            borderRadius: 8, padding: '6px 12px',
+          }}>
+            ✅ Đã lưu vào hồ sơ
+          </span>
+        )}
+
         <button onClick={handlePrint} disabled={!canExport} style={{
           padding: '8px 20px', borderRadius: 10, border: 'none', cursor: canExport ? 'pointer' : 'not-allowed',
           background: isFreelancer ? 'linear-gradient(135deg, #0A84FF, #5E5CE6)' : 'linear-gradient(135deg, #34C759, #30D158)',
@@ -150,6 +269,7 @@ const ContractGenerator: React.FC<Props> = ({ employee, department, onClose }) =
           ✕ Đóng
         </button>
       </div>
+
 
       {/* Body */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -251,11 +371,41 @@ const ContractGenerator: React.FC<Props> = ({ employee, department, onClose }) =
                   </p>
                 </>
               )}
+              {/* Company selector - only for freelancer contracts */}
+              {isFreelancer && (
+                <div>
+                  <span style={{ display: 'block', fontSize: 11, color: '#777', marginBottom: 4 }}>
+                    🏢 Bên A (Công ty ký)
+                  </span>
+                  {(Object.entries(COMPANY_OPTIONS) as [CompanyKey, typeof COMPANY_OPTIONS[CompanyKey]][]).map(([key, co]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setCompanyKey(key)}
+                      style={{
+                        display: 'block', width: '100%', marginBottom: 6,
+                        padding: '10px 12px', borderRadius: 10, textAlign: 'left', cursor: 'pointer',
+                        border: companyKey === key ? '2px solid #0A84FF' : '1px solid #333',
+                        background: companyKey === key ? 'rgba(10,132,255,0.12)' : '#1a1a1a',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 800, color: companyKey === key ? '#0A84FF' : '#F5F5F5' }}>
+                        {co.nameShort}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#666', marginTop: 2 }}>
+                        MST: {co.taxCode} · {co.gender} {co.representative.split(' ').slice(-2).join(' ')}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
           {/* Salary summary - only for fulltime */}
           {!isFreelancer && !loading && (
+
             <div>
               <label style={{ display: 'block', fontSize: 10, fontWeight: 900, color: '#888', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>
                 Dữ liệu lương

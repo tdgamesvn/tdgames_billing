@@ -113,9 +113,12 @@ export async function fetchEmployees(): Promise<HrEmployee[]> {
 export async function saveEmployee(
   emp: Omit<HrEmployee, 'id' | 'employee_code' | 'created_at' | 'updated_at' | 'department'>
 ): Promise<HrEmployee> {
+  // Extract _role and _salaryAmounts before DB insert (these are not DB columns)
+  const { _role, _salaryAmounts, ...dbFields } = emp as any;
+
   const { data, error } = await supabase
     .from('hr_employees')
-    .insert(emp)
+    .insert(dbFields)
     .select('*, department:hr_departments!hr_employees_department_id_fkey(*)')
     .single();
   if (error) throw error;
@@ -133,13 +136,18 @@ export async function saveEmployee(
             'Authorization': `Bearer ${session?.access_token}`,
             'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
-          body: JSON.stringify({ email: data.work_email, full_name: data.full_name, employee_id: data.id }),
+          body: JSON.stringify({
+            email: data.work_email,
+            full_name: data.full_name,
+            employee_id: data.id,
+            role: _role || 'member',
+          }),
         }
       );
       const result = await res.json();
       if (result.success) {
         if (result.invited) {
-          console.log(`[Auth] Invite email sent to ${data.work_email}`);
+          console.log(`[Auth] Invite email sent to ${data.work_email} (role: ${_role || 'member'})`);
         } else {
           console.log(`[Auth] Account already exists for ${data.work_email}, metadata updated`);
         }
@@ -198,6 +206,26 @@ export async function updateEmployee(id: string, updates: Partial<HrEmployee>): 
     .update({ ...clean, updated_at: new Date().toISOString() })
     .eq('id', id);
   if (error) throw error;
+}
+
+/** Update the auth role for an existing employee via edge function */
+export async function updateEmployeeRole(email: string, newRole: string): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-employee-auth`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ action: 'update_role', email, role: newRole }),
+    }
+  );
+  const result = await res.json();
+  if (result.error) throw new Error(result.error);
+  return result.message || `Đã cập nhật role thành ${newRole}`;
 }
 
 /** Soft-delete: set status to 'terminated' and disable Auth account */

@@ -61,7 +61,7 @@ export function useHrState(initialTab?: string | null) {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   // ── Employee CRUD ──
-  const handleSaveEmployee = async (emp: Omit<HrEmployee, 'id' | 'employee_code' | 'created_at' | 'updated_at' | 'department'> & { _salaryAmounts?: Record<string, number> }) => {
+  const handleSaveEmployee = async (emp: Omit<HrEmployee, 'id' | 'employee_code' | 'created_at' | 'updated_at' | 'department'> & { _salaryAmounts?: Record<string, number>; _role?: string }) => {
     try {
       const { _salaryAmounts, ...empData } = emp as any;
       const saved = await svc.saveEmployee(empData);

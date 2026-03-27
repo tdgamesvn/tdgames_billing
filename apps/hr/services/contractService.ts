@@ -190,15 +190,53 @@ const nationalHeader = () => `
     <div class="stars">***</div>
   </div>`;
 
-const companyInfo = () => `
-  <div class="party-header">BÊN A: CÔNG TY TNHH TD GAMES</div>
+// ══════════════════════════════════════════════════════════════
+// ── Company Options (Bên A) ───────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+export type CompanyKey = 'tdgames' | 'tdconsulting';
+
+export const COMPANY_OPTIONS: Record<CompanyKey, {
+  name: string;
+  nameShort: string;
+  address: string;
+  taxCode: string;
+  representative: string;
+  representativeTitle: string;
+  gender: string; // Ông/Bà
+}> = {
+  tdgames: {
+    name: 'CÔNG TY TNHH TD GAMES',
+    nameShort: 'Công ty TNHH TD Games',
+    address: 'Xóm Ngoài, Xã Đông Anh, TP Hà Nội',
+    taxCode: '0111386856',
+    representative: 'ĐẶNG THẾ TOÀN',
+    representativeTitle: 'Tổng giám đốc',
+    gender: 'Ông',
+  },
+  tdconsulting: {
+    name: 'CÔNG TY TNHH TD CONSULTING',
+    nameShort: 'Công ty TNHH TD Consulting',
+    address: 'Xóm Ngoài, Xã Đông Anh, TP Hà Nội',
+    taxCode: '0109898663',
+    representative: 'NGUYỄN THỊ THÙY DUNG',
+    representativeTitle: 'Tổng giám đốc',
+    gender: 'Bà',
+  },
+};
+
+const companyInfo = (companyKey: CompanyKey = 'tdgames') => {
+  const c = COMPANY_OPTIONS[companyKey];
+  return `
+  <div class="party-header">BÊN A: ${c.name}</div>
   <table class="info-table">
-    <tr><td class="label">Đại diện</td><td class="colon">:</td><td class="value">Ông ĐẶNG THẾ TOÀN</td></tr>
-    <tr><td class="label">Chức vụ</td><td class="colon">:</td><td class="value">Tổng giám đốc</td></tr>
-    <tr><td class="label">Địa chỉ</td><td class="colon">:</td><td class="value">Xóm Ngoài, xã Đông Anh, Thành phố Hà Nội, Việt Nam</td></tr>
-    <tr><td class="label">Mã số thuế</td><td class="colon">:</td><td class="value">0111386856</td></tr>
+    <tr><td class="label">Đại diện</td><td class="colon">:</td><td class="value">${c.gender} ${c.representative}</td></tr>
+    <tr><td class="label">Chức vụ</td><td class="colon">:</td><td class="value">${c.representativeTitle}</td></tr>
+    <tr><td class="label">Địa chỉ</td><td class="colon">:</td><td class="value">${c.address}</td></tr>
+    <tr><td class="label">Mã số thuế</td><td class="colon">:</td><td class="value">${c.taxCode}</td></tr>
   </table>
   <p class="called-as">Sau đây gọi là "Người Sử Dụng Lao Động"</p>`;
+};
 
 const employeeInfo = (e: HrEmployee) => `
   <div class="party-header">BÊN B:</div>
@@ -641,8 +679,10 @@ export function generateHDKV(
   contractNumber: string,
   projectName: string,
   workScope: string,
+  companyKey: CompanyKey = 'tdgames',
 ): string {
   const d = fmtDateParts(signingDate);
+  const c = COMPANY_OPTIONS[companyKey];
 
   return `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>HĐKV - ${employee.full_name}</title>
 <style>${PRINT_CSS}</style></head><body>
@@ -663,11 +703,11 @@ ${nationalHeader()}
 
 <div class="party-header">BÊN A (Bên thuê dịch vụ):</div>
 <table class="info-table">
-  <tr><td class="label">Tên công ty</td><td class="colon">:</td><td class="value">Công ty TNHH TD Games</td></tr>
-  <tr><td class="label">Địa chỉ</td><td class="colon">:</td><td class="value">Xóm Ngoài, Xã Đông Anh, TP Hà Nội</td></tr>
-  <tr><td class="label">Mã số thuế</td><td class="colon">:</td><td class="value">0111386856</td></tr>
-  <tr><td class="label">Đại diện</td><td class="colon">:</td><td class="value">Ông Đặng Thế Toàn</td></tr>
-  <tr><td class="label">Chức vụ</td><td class="colon">:</td><td class="value">Giám đốc</td></tr>
+  <tr><td class="label">Tên công ty</td><td class="colon">:</td><td class="value">${c.nameShort}</td></tr>
+  <tr><td class="label">Địa chỉ</td><td class="colon">:</td><td class="value">${c.address}</td></tr>
+  <tr><td class="label">Mã số thuế</td><td class="colon">:</td><td class="value">${c.taxCode}</td></tr>
+  <tr><td class="label">Đại diện</td><td class="colon">:</td><td class="value">${c.gender} ${c.representative}</td></tr>
+  <tr><td class="label">Chức vụ</td><td class="colon">:</td><td class="value">${c.representativeTitle}</td></tr>
 </table>
 <p class="called-as">(Sau đây gọi tắt là "Bên A")</p>
 
@@ -815,8 +855,10 @@ ${signatureBlock('ĐẠI DIỆN BÊN A', '(Ký, ghi rõ họ tên, đóng dấu)
 export function generateNDA_CTV(
   employee: HrEmployee,
   signingDate: string,
+  companyKey: CompanyKey = 'tdgames',
 ): string {
   const d = fmtDateParts(signingDate);
+  const c = COMPANY_OPTIONS[companyKey];
 
   return `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>NDA CTV - ${employee.full_name}</title>
 <style>${PRINT_CSS}</style></head><body>
@@ -826,12 +868,12 @@ ${nationalHeader()}
 
 <p class="intro-text">THỎA THUẬN BẢO MẬT THÔNG TIN này ("Thỏa thuận") được lập vào ngày ${d.day} tháng ${d.month} năm ${d.year}, GIỮA:</p>
 
-<div class="party-header">BÊN A: CÔNG TY TNHH TD GAMES</div>
+<div class="party-header">BÊN A: ${c.name}</div>
 <table class="info-table">
-  <tr><td class="label">Địa chỉ</td><td class="colon">:</td><td class="value">Xóm Ngoài, Xã Đông Anh, TP Hà Nội</td></tr>
-  <tr><td class="label">Mã số thuế</td><td class="colon">:</td><td class="value">0111386856</td></tr>
-  <tr><td class="label">Đại diện bởi</td><td class="colon">:</td><td class="value">Ông Đặng Thế Toàn</td></tr>
-  <tr><td class="label">Chức vụ</td><td class="colon">:</td><td class="value">Giám đốc</td></tr>
+  <tr><td class="label">Địa chỉ</td><td class="colon">:</td><td class="value">${c.address}</td></tr>
+  <tr><td class="label">Mã số thuế</td><td class="colon">:</td><td class="value">${c.taxCode}</td></tr>
+  <tr><td class="label">Đại diện bởi</td><td class="colon">:</td><td class="value">${c.gender} ${c.representative}</td></tr>
+  <tr><td class="label">Chức vụ</td><td class="colon">:</td><td class="value">${c.representativeTitle}</td></tr>
 </table>
 <p class="called-as">(Sau đây gọi tắt là "Bên A")</p>
 

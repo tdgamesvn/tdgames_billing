@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { HrEmployee, HrDepartment, HrContract, HrEvaluation, HrProjectHistory } from '@/types';
 import * as svc from '../services/hrService';
-import { uploadFileToR2, toPublicUrl } from '../services/hrService';
+import { uploadFileToR2, toPublicUrl, updateContract, deleteContract, updateEmployeeRole } from '../services/hrService';
 import DocumentManager from './DocumentManager';
 import ContractGenerator from './ContractGenerator';
 
@@ -18,10 +18,28 @@ type DetailTab = 'info' | 'contracts' | 'evaluations' | 'projects' | 'documents'
 const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit }) => {
   const [activeTab, setActiveTab] = useState<DetailTab>('info');
   const [showContractGen, setShowContractGen] = useState(false);
+  const [viewingContract, setViewingContract] = useState<HrContract | null>(null);
+  const [editingContract, setEditingContract] = useState<HrContract | null>(null);
+  const [editContractForm, setEditContractForm] = useState<Partial<HrContract>>({});
+  const [savingContractEdit, setSavingContractEdit] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null); // inline delete confirm
   const [contracts, setContracts] = useState<HrContract[]>([]);
   const [evaluations, setEvaluations] = useState<HrEvaluation[]>([]);
   const [projectHistory, setProjectHistory] = useState<HrProjectHistory[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Role change state
+  const [currentRole, setCurrentRole] = useState<string>('');
+  const [changingRole, setChangingRole] = useState(false);
+  const [roleToast, setRoleToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  const ROLE_OPTIONS = [
+    { value: 'member', label: '👤 Nhân viên', color: '#888' },
+    { value: 'ke_toan', label: '📊 Kế toán', color: '#F59E0B' },
+    { value: 'hr', label: '🧑‍💼 Nhân sự', color: '#06B6D4' },
+    { value: 'admin', label: '👑 Admin', color: '#FF375F' },
+    { value: 'freelancer', label: '🤝 Freelancer', color: '#5E5CE6' },
+  ];
 
   // CCCD upload state
   const [cccdFront, setCccdFront] = useState(employee.id_card_front_url || '');
@@ -78,7 +96,89 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
       finally { setLoading(false); }
     };
     load();
+
+    // Check current auth role
+    const checkRole = async () => {
+      const authEmail = employee.type === 'freelancer' ? employee.email : employee.work_email;
+      if (!authEmail) return;
+      try {
+        const { data: { session } } = await (await import('@/services/supabaseClient')).supabase.auth.getSession();
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-employee-auth`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.access_token}`,
+              'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            },
+            body: JSON.stringify({ action: 'check_email', email: authEmail }),
+          }
+        );
+        const result = await res.json();
+        if (result.success && result.exists) {
+          setCurrentRole(result.role || 'member');
+        }
+      } catch {}
+    };
+    checkRole();
   }, [employee.id]);
+
+  const handleRoleChange = async (newRole: string) => {
+    const authEmail = employee.type === 'freelancer' ? employee.email : employee.work_email;
+    if (!authEmail) {
+      setRoleToast({ msg: 'Không tìm thấy email để cập nhật role', type: 'error' });
+      return;
+    }
+    setChangingRole(true);
+    setRoleToast(null);
+    try {
+      const msg = await updateEmployeeRole(authEmail, newRole);
+      setCurrentRole(newRole);
+      setRoleToast({ msg: `✅ Đã đổi role → ${ROLE_OPTIONS.find(r => r.value === newRole)?.label || newRole}`, type: 'success' });
+    } catch (err: any) {
+      setRoleToast({ msg: err.message || 'Lỗi cập nhật role', type: 'error' });
+    } finally {
+      setChangingRole(false);
+      setTimeout(() => setRoleToast(null), 4000);
+    }
+  };
+
+  const refreshContracts = async () => {
+    const c = await svc.fetchContracts(employee.id);
+    setContracts(c);
+  };
+
+  const handleEditContract = (c: HrContract) => {
+    setEditingContract(c);
+    setEditContractForm({
+      title: c.title,
+      contract_number: c.contract_number,
+      start_date: c.start_date,
+      end_date: c.end_date,
+      status: c.status,
+      notes: c.notes,
+    });
+  };
+
+  const handleSaveContractEdit = async () => {
+    if (!editingContract) return;
+    setSavingContractEdit(true);
+    try {
+      await updateContract(editingContract.id, editContractForm);
+      await refreshContracts();
+      setEditingContract(null);
+    } catch (err: any) { alert('Lưu thất bại: ' + (err.message || '')); }
+    finally { setSavingContractEdit(false); }
+  };
+
+  const handleDeleteContract = async (c: HrContract) => {
+    try {
+      await deleteContract(c.id);
+      setConfirmDeleteId(null);
+      await refreshContracts();
+    } catch (err: any) { alert('Xóa thất bại: ' + (err.message || '')); }
+  };
 
 
 
@@ -144,12 +244,37 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
                 </div>
               </div>
             </div>
-            <div className="flex gap-2">
-              {(employee.type === 'fulltime' || employee.type === 'freelancer') && (
-                <button onClick={() => setShowContractGen(true)} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80" style={{ background: employee.type === 'freelancer' ? 'linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%)' : 'linear-gradient(135deg, #34C759 0%, #30D158 100%)' }}>📝 Xuất hợp đồng</button>
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex gap-2">
+                {(employee.type === 'fulltime' || employee.type === 'freelancer') && (
+                  <button onClick={() => setShowContractGen(true)} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80" style={{ background: employee.type === 'freelancer' ? 'linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%)' : 'linear-gradient(135deg, #34C759 0%, #30D158 100%)' }}>📝 Xuất hợp đồng</button>
+                )}
+                <button onClick={() => onEdit(employee)} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80" style={{ background: 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)' }}>✏️ Sửa</button>
+                <button onClick={onBack} className="px-4 py-2 rounded-xl border border-primary/10 text-neutral-medium text-xs font-black uppercase tracking-widest hover:text-white hover:border-primary/30 transition-all">← Quay lại</button>
+              </div>
+              {/* Role Changer */}
+              {currentRole && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-neutral-medium">Role:</span>
+                  <select
+                    value={currentRole}
+                    onChange={e => handleRoleChange(e.target.value)}
+                    disabled={changingRole}
+                    className="bg-white/5 border border-primary/10 rounded-lg px-3 py-1.5 text-white text-xs font-bold outline-none focus:border-primary/40 transition-all disabled:opacity-50"
+                    style={{ colorScheme: 'dark' }}
+                  >
+                    {ROLE_OPTIONS.map(r => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                  {changingRole && <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />}
+                  {roleToast && (
+                    <span className={`text-[11px] font-bold ${roleToast.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {roleToast.msg}
+                    </span>
+                  )}
+                </div>
               )}
-              <button onClick={() => onEdit(employee)} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white transition-all hover:opacity-80" style={{ background: 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)' }}>✏️ Sửa</button>
-              <button onClick={onBack} className="px-4 py-2 rounded-xl border border-primary/10 text-neutral-medium text-xs font-black uppercase tracking-widest hover:text-white hover:border-primary/30 transition-all">← Quay lại</button>
             </div>
           </div>
         </div>
@@ -311,13 +436,112 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
           {contracts.length === 0 ? (
             <p className="text-neutral-medium text-sm text-center py-12">Chưa có hợp đồng</p>
           ) : contracts.map(c => (
-            <div key={c.id} className="rounded-[16px] border border-primary/10 bg-surface p-5 flex items-center justify-between">
-              <div>
-                <p className="text-white font-bold">{c.title}</p>
-                <p className="text-neutral-medium text-xs mt-1">{c.contract_type === 'labor' ? 'HĐ Lao động' : c.contract_type === 'service' ? 'HĐ Dịch vụ' : c.contract_type.toUpperCase()}{c.contract_number && ` — ${c.contract_number}`}</p>
-                <p className="text-neutral-medium/60 text-[11px] mt-1">{c.start_date} → {c.end_date || '∞'}</p>
-              </div>
-              <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${c.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : c.status === 'expired' ? 'bg-orange-500/20 text-orange-400' : 'bg-red-500/20 text-red-400'}`}>{c.status}</span>
+            <div key={c.id} className="rounded-[16px] border border-primary/10 bg-surface p-5">
+              {editingContract?.id === c.id ? (
+                // ── Inline Edit Form ──
+                <div className="space-y-3">
+                  <p className="text-xs font-black uppercase tracking-widest text-blue-400 mb-2">✏️ Chỉnh sửa hợp đồng</p>
+                  {[
+                    { label: 'Tiêu đề', key: 'title', type: 'text' },
+                    { label: 'Số HĐ', key: 'contract_number', type: 'text' },
+                    { label: 'Ngày ký', key: 'start_date', type: 'date' },
+                    { label: 'Ngày kết thúc', key: 'end_date', type: 'date' },
+                  ].map(({ label, key, type }) => (
+                    <div key={key} className="flex items-center gap-3">
+                      <span className="text-neutral-medium text-xs w-24 flex-shrink-0">{label}</span>
+                      <input
+                        type={type}
+                        value={(editContractForm as any)[key] || ''}
+                        onChange={e => setEditContractForm(p => ({ ...p, [key]: e.target.value || null }))}
+                        className="flex-1 bg-white/5 border border-primary/10 rounded-lg px-3 py-1.5 text-white text-sm outline-none focus:border-blue-500/50"
+                        style={{ colorScheme: 'dark' }}
+                      />
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-3">
+                    <span className="text-neutral-medium text-xs w-24">Trạng thái</span>
+                    <select
+                      value={editContractForm.status || 'active'}
+                      onChange={e => setEditContractForm(p => ({ ...p, status: e.target.value as HrContract['status'] }))}
+                      className="flex-1 bg-white/5 border border-primary/10 rounded-lg px-3 py-1.5 text-white text-sm outline-none"
+                      style={{ colorScheme: 'dark' }}
+                    >
+                      <option value="active">Active</option>
+                      <option value="expired">Expired</option>
+                      <option value="terminated">Terminated</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-neutral-medium text-xs w-24">Ghi chú</span>
+                    <input
+                      type="text"
+                      value={editContractForm.notes || ''}
+                      onChange={e => setEditContractForm(p => ({ ...p, notes: e.target.value }))}
+                      className="flex-1 bg-white/5 border border-primary/10 rounded-lg px-3 py-1.5 text-white text-sm outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={handleSaveContractEdit} disabled={savingContractEdit}
+                      className="px-4 py-1.5 rounded-lg text-xs font-black text-white"
+                      style={{ background: 'linear-gradient(135deg, #0A84FF, #5E5CE6)', opacity: savingContractEdit ? 0.5 : 1 }}>
+                      {savingContractEdit ? 'Đang lưu...' : '✅ Lưu'}
+                    </button>
+                    <button onClick={() => setEditingContract(null)}
+                      className="px-4 py-1.5 rounded-lg text-xs font-black border border-primary/10 text-neutral-medium hover:text-white transition-all">
+                      Huỷ
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // ── Display Row ──
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-white font-bold truncate">{c.title}</p>
+                    <p className="text-neutral-medium text-xs mt-1">
+                      {c.contract_type === 'labor' ? 'HĐ Lao động' : c.contract_type === 'service' ? 'HĐ Dịch vụ' : c.contract_type === 'nda' ? 'NDA' : c.contract_type.toUpperCase()}
+                      {c.contract_number && ` — ${c.contract_number}`}
+                    </p>
+                    <p className="text-neutral-medium/60 text-[11px] mt-1">{c.start_date} → {c.end_date || '∞'}</p>
+                    {c.notes && <p className="text-neutral-medium/40 text-[10px] mt-1 truncate">{c.notes}</p>}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                      c.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' :
+                      c.status === 'expired' ? 'bg-orange-500/20 text-orange-400' : 'bg-red-500/20 text-red-400'
+                    }`}>{c.status}</span>
+                    <button onClick={() => setViewingContract(c)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold text-white hover:opacity-80 transition-all"
+                      style={{ background: 'linear-gradient(135deg, #0A84FF, #5E5CE6)' }}>
+                      👁️ Xem
+                    </button>
+                    <button onClick={() => handleEditContract(c)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold text-white hover:opacity-80 transition-all"
+                      style={{ background: 'linear-gradient(135deg, #FF9500, #FF6B00)' }}>
+                      ✏️ Sửa
+                    </button>
+                    {confirmDeleteId === c.id ? (
+                      <>
+                        <span className="text-[11px] text-red-400 font-bold">Xóa?</span>
+                        <button onClick={() => handleDeleteContract(c)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white hover:opacity-80 transition-all"
+                          style={{ background: 'linear-gradient(135deg, #FF453A, #FF375F)' }}>
+                          Xác nhận
+                        </button>
+                        <button onClick={() => setConfirmDeleteId(null)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold border border-primary/10 text-neutral-medium hover:text-white transition-all">
+                          Huỷ
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => setConfirmDeleteId(c.id)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-white hover:opacity-80 transition-all"
+                        style={{ background: 'linear-gradient(135deg, #FF453A, #FF375F)' }}>
+                        🗑️
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -372,12 +596,24 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
         <DocumentManager employee={employee} />
       )}
 
-      {/* Contract Generator Modal */}
+      {/* Contract Generator Modal - New contract */}
       {showContractGen && (
         <ContractGenerator
           employee={employee}
           department={departments.find(d => d.id === employee.department_id)}
           onClose={() => setShowContractGen(false)}
+          onContractSaved={refreshContracts}
+        />
+      )}
+
+      {/* Contract Generator Modal - View/Export existing contract */}
+      {viewingContract && (
+        <ContractGenerator
+          employee={employee}
+          department={departments.find(d => d.id === employee.department_id)}
+          initialContract={viewingContract}
+          onClose={() => setViewingContract(null)}
+          onContractSaved={refreshContracts}
         />
       )}
     </div>

@@ -71,12 +71,14 @@ const EmployeeForm: React.FC<Props> = ({
   const requiredFields: { key: string; label: string }[] = [
     { key: 'full_name', label: 'Họ tên' },
     { key: 'email', label: 'Email cá nhân' },
-    { key: 'phone', label: 'SĐT' },
-    { key: 'date_of_birth', label: 'Ngày sinh' },
-    { key: 'gender', label: 'Giới tính' },
-    { key: 'address', label: 'Địa chỉ thường trú' },
-    { key: 'id_number', label: 'CMND/CCCD' },
-    ...(form.type === 'fulltime' ? [
+    ...(form.type === 'freelancer' ? [
+      // Freelancer: chỉ bắt buộc full_name + email, còn lại tuỳ chọn
+    ] : form.type === 'fulltime' ? [
+      { key: 'phone', label: 'SĐT' },
+      { key: 'date_of_birth', label: 'Ngày sinh' },
+      { key: 'gender', label: 'Giới tính' },
+      { key: 'address', label: 'Địa chỉ thường trú' },
+      { key: 'id_number', label: 'CMND/CCCD' },
       { key: 'work_email', label: 'Email công việc' },
       { key: 'temp_address', label: 'Địa chỉ tạm trú' },
       { key: 'id_issue_date', label: 'Ngày cấp CMND' },
@@ -84,11 +86,13 @@ const EmployeeForm: React.FC<Props> = ({
       { key: 'department_id', label: 'Phòng ban' },
       { key: 'position', label: 'Chức danh' },
       { key: 'start_date', label: 'Ngày bắt đầu' },
-    ] : form.type === 'freelancer' ? [
-      { key: 'id_issue_date', label: 'Ngày cấp CMND' },
-      { key: 'id_issue_place', label: 'Nơi cấp' },
     ] : [
       // parttime
+      { key: 'phone', label: 'SĐT' },
+      { key: 'date_of_birth', label: 'Ngày sinh' },
+      { key: 'gender', label: 'Giới tính' },
+      { key: 'address', label: 'Địa chỉ thường trú' },
+      { key: 'id_number', label: 'CMND/CCCD' },
       { key: 'work_email', label: 'Email công việc' },
       { key: 'temp_address', label: 'Địa chỉ tạm trú' },
       { key: 'id_issue_date', label: 'Ngày cấp CMND' },
@@ -174,40 +178,42 @@ const EmployeeForm: React.FC<Props> = ({
       setForm({
         type: editingEmployee.type,
         status: editingEmployee.status,
-        full_name: editingEmployee.full_name,
-        avatar_url: editingEmployee.avatar_url,
-        email: editingEmployee.email,
-        phone: editingEmployee.phone,
+        full_name: editingEmployee.full_name || '',
+        avatar_url: editingEmployee.avatar_url || '',
+        email: editingEmployee.email || '',
+        work_email: editingEmployee.work_email || '',
+        phone: editingEmployee.phone || '',
         date_of_birth: editingEmployee.date_of_birth,
-        gender: editingEmployee.gender,
-        nationality: editingEmployee.nationality,
-        address: editingEmployee.address,
-        id_number: editingEmployee.id_number,
+        gender: editingEmployee.gender || '',
+        nationality: editingEmployee.nationality || 'Vietnam',
+        address: editingEmployee.address || '',
+        temp_address: editingEmployee.temp_address || '',
+        id_number: editingEmployee.id_number || '',
         id_issue_date: editingEmployee.id_issue_date,
-        id_issue_place: editingEmployee.id_issue_place,
+        id_issue_place: editingEmployee.id_issue_place || '',
         id_card_front_url: editingEmployee.id_card_front_url || '',
         id_card_back_url: editingEmployee.id_card_back_url || '',
-        tax_code: editingEmployee.tax_code,
-        insurance_number: editingEmployee.insurance_number,
+        tax_code: editingEmployee.tax_code || '',
+        insurance_number: editingEmployee.insurance_number || '',
         department_id: editingEmployee.department_id,
-        position: editingEmployee.position,
-        level: editingEmployee.level,
-        salary: editingEmployee.salary,
-        salary_currency: editingEmployee.salary_currency,
+        position: editingEmployee.position || '',
+        level: editingEmployee.level || '',
+        salary: editingEmployee.salary || 0,
+        salary_currency: editingEmployee.salary_currency || 'VND',
         start_date: editingEmployee.start_date,
         probation_end: editingEmployee.probation_end,
-        portfolio_url: editingEmployee.portfolio_url,
+        portfolio_url: editingEmployee.portfolio_url || '',
         specializations: editingEmployee.specializations || [],
-        timezone: editingEmployee.timezone,
-        rate_type: editingEmployee.rate_type,
-        rate_amount: editingEmployee.rate_amount,
-        rate_currency: editingEmployee.rate_currency,
-        payment_method: editingEmployee.payment_method,
+        timezone: editingEmployee.timezone || 'UTC+7',
+        rate_type: editingEmployee.rate_type || '',
+        rate_amount: editingEmployee.rate_amount || 0,
+        rate_currency: editingEmployee.rate_currency || 'USD',
+        payment_method: editingEmployee.payment_method || '',
         payment_details: editingEmployee.payment_details || {},
-        bank_name: editingEmployee.bank_name,
-        bank_account: editingEmployee.bank_account,
-        bank_branch: editingEmployee.bank_branch,
-        notes: editingEmployee.notes,
+        bank_name: editingEmployee.bank_name || '',
+        bank_account: editingEmployee.bank_account || '',
+        bank_branch: editingEmployee.bank_branch || '',
+        notes: editingEmployee.notes || '',
         tags: editingEmployee.tags || [],
       });
       loadContracts(editingEmployee.id);
@@ -227,13 +233,13 @@ const EmployeeForm: React.FC<Props> = ({
     setWorkEmailError('');
     if (missingRequired.length > 0) return;
 
-    // Check duplicate work_email (only for new employees or if work_email changed)
-    if (!isEdit || (isEdit && editingEmployee!.work_email !== form.work_email)) {
+    // Check duplicate work_email (only for non-freelancer, and only if work_email is non-empty)
+    const workEmailVal = (form.work_email || '').trim().toLowerCase();
+    if (workEmailVal && (!isEdit || (isEdit && (editingEmployee!.work_email || '') !== workEmailVal))) {
       const { data: existing } = await supabase
         .from('hr_employees')
         .select('id, full_name')
-        .eq('work_email', form.work_email.trim().toLowerCase())
-        .neq('work_email', '')
+        .eq('work_email', workEmailVal)
         .maybeSingle();
       if (existing && (!isEdit || existing.id !== editingEmployee!.id)) {
         setWorkEmailError(`Email công việc "${form.work_email}" đã tồn tại (${existing.full_name}). Vui lòng dùng email khác.`);

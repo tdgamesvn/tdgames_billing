@@ -221,15 +221,15 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
     </div>
     ${(() => {
       const w = selectedSettlement.worker || workers.find(wk => wk.id === selectedSettlement.worker_id);
-      return (w?.bank_name || w?.bank_account) ? `
+      return `
     <div style="margin:15px 0;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb">
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:8px;font-weight:700">Thông tin thanh toán</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:13px">
-        <div>Ngân hàng: <b>${w.bank_name || '—'}</b></div>
-        <div>Số tài khoản: <b>${w.bank_account || '—'}</b></div>
-        <div>Chủ tài khoản: <b>${w.full_name || '—'}</b></div>
+        <div>Ngân hàng: <b>${w?.bank_name || '—'}</b></div>
+        <div>Số tài khoản: <b>${w?.bank_account || '—'}</b></div>
+        <div>Chủ tài khoản: <b>${w?.full_name || '—'}</b></div>
       </div>
-    </div>` : '';
+    </div>`;
     })()}
     <table>
       <thead><tr>
@@ -245,7 +245,7 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
       ${(selectedSettlement.bonus_amount || 0) > 0 ? `<div class="row" style="color:#d97706"><span>+ Bonus nghiệm thu (${selectedSettlement.bonus_type === 'percent' ? selectedSettlement.bonus_value + '%' : 'cố định'}):</span><b>+${(selectedSettlement.bonus_amount || 0).toLocaleString()} ${selectedSettlement.currency}</b></div>` : ''}
       ${totalVND > 0 ? `<div class="row"><span>Tổng quy đổi VNĐ:</span><b>${(totalVND + totalBonusVND).toLocaleString()} VNĐ</b></div>` : ''}
       <div class="row" style="color:#dc2626"><span>− Thuế TNCN (${selectedSettlement.tax_rate || 10}%):</span><b>-${(selectedSettlement.tax_amount || 0).toLocaleString()} ${selectedSettlement.currency}</b></div>
-      <div class="row grand" style="color:#059669"><span>THỰC NHẬN:</span><span>${(selectedSettlement.net_amount || 0).toLocaleString()} ${selectedSettlement.currency}</span></div>
+      <div class="row grand" style="color:#059669"><span>THỰC NHẬN:</span><span>${(selectedSettlement.net_amount || 0).toLocaleString()} ${selectedSettlement.currency}${selectedSettlement.currency !== 'VND' && totalVND > 0 ? ` <span style="font-size:14px;color:#666;font-weight:400">(≈ ${Math.round((totalVND + totalBonusVND) * (1 - (selectedSettlement.tax_rate || 10) / 100)).toLocaleString()} VNĐ)</span>` : ''}</span></div>
     </div>
     <div class="footer">
       <div class="sig"><div style="font-size:11px;color:#666">Người lập</div><div class="line">${company.name}</div></div>
@@ -397,26 +397,24 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
           </div>
         )}
 
-        {/* Bank info */}
-        {(workerObj?.bank_name || workerObj?.bank_account) && (
-          <div className="px-5 py-4 rounded-[16px] border border-primary/10 bg-surface">
-            <p className="text-[9px] font-black uppercase tracking-widest text-neutral-medium mb-3">🏦 Thông tin thanh toán</p>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-[10px] text-neutral-medium/60 uppercase tracking-wider">Ngân hàng</p>
-                <p className="text-white font-bold text-sm mt-0.5">{workerObj.bank_name || '—'}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-neutral-medium/60 uppercase tracking-wider">Số tài khoản</p>
-                <p className="text-white font-bold text-sm mt-0.5 font-mono">{workerObj.bank_account || '—'}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-neutral-medium/60 uppercase tracking-wider">Chủ tài khoản</p>
-                <p className="text-white font-bold text-sm mt-0.5">{workerObj.full_name || '—'}</p>
-              </div>
+        {/* Bank info — always show */}
+        <div className="px-5 py-4 rounded-[16px] border border-primary/10 bg-surface">
+          <p className="text-[9px] font-black uppercase tracking-widest text-neutral-medium mb-3">🏦 Thông tin thanh toán</p>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <p className="text-[10px] text-neutral-medium/60 uppercase tracking-wider">Ngân hàng</p>
+              <p className="text-white font-bold text-sm mt-0.5">{workerObj?.bank_name || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-neutral-medium/60 uppercase tracking-wider">Số tài khoản</p>
+              <p className="text-white font-bold text-sm mt-0.5 font-mono">{workerObj?.bank_account || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-neutral-medium/60 uppercase tracking-wider">Chủ tài khoản</p>
+              <p className="text-white font-bold text-sm mt-0.5">{workerObj?.full_name || '—'}</p>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Task table */}
         <div ref={printRef} className="rounded-[20px] border border-primary/10 bg-surface overflow-hidden">
@@ -483,7 +481,12 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
                   </tr>
                   <tr className="border-t-2 border-emerald-500/30">
                     <td colSpan={4} className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-emerald-400">💰 THỰC NHẬN</td>
-                    <td colSpan={2} className="px-4 py-3 text-right text-emerald-400 font-black text-xl">{fmt(s.net_amount || 0)} <span className="text-xs text-neutral-medium">{s.currency}</span></td>
+                    <td colSpan={2} className="px-4 py-3 text-right">
+                      <span className="text-emerald-400 font-black text-xl">{fmt(s.net_amount || 0)} <span className="text-xs text-neutral-medium">{s.currency}</span></span>
+                      {s.currency !== 'VND' && totalVND > 0 && (
+                        <div className="text-neutral-medium text-xs mt-0.5">≈ {fmt(Math.round((totalVND) * (1 - (s.tax_rate || 10) / 100)))} VNĐ</div>
+                      )}
+                    </td>
                     <td colSpan={4}></td>
                   </tr>
                 </tfoot>

@@ -105,6 +105,38 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // ── UPDATE_ROLE ACTION: Change user's role ──
+    if (action === "update_role") {
+      const { email, role } = body;
+      if (!email || !role) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Missing email or role for update_role action" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+      const user = existingUsers?.users?.find((u: any) => u.email === email);
+
+      if (!user) {
+        return new Response(
+          JSON.stringify({ success: false, error: `No auth user found for ${email}` }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(
+        user.id,
+        { user_metadata: { ...user.user_metadata, role } }
+      );
+      if (updateErr) throw updateErr;
+
+      return new Response(
+        JSON.stringify({ success: true, updated: true, message: `Role updated to '${role}' for ${email}`, previous_role: user.user_metadata?.role || "member" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ── INVITE ACTION (default): Create/invite user ──
     const { email, full_name, employee_id, role, worker_id } = body;
 

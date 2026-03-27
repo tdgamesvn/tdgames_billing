@@ -27,6 +27,7 @@ const QuickAddEmployee: React.FC<Props> = ({ departments, onSave, onCancel }) =>
     department_id: null as string | null,
     position: '',
     level: '',
+    role: 'member' as string,
     start_date: null as string | null,
     probation_end: null as string | null,
   });
@@ -140,6 +141,7 @@ const QuickAddEmployee: React.FC<Props> = ({ departments, onSave, onCancel }) =>
           bank_name: '', bank_account: '', bank_branch: '',
           notes: '', tags: [],
           _salaryAmounts: salaryAmounts,
+          _role: empForm.role,
         };
         await onSave(empData);
       } catch {} finally { setSaving(false); }
@@ -316,7 +318,7 @@ const QuickAddEmployee: React.FC<Props> = ({ departments, onSave, onCancel }) =>
             {/* Position & Department */}
             <div className={sectionCls}>
               <h3 className="text-lg font-black text-white uppercase tracking-tight">🏢 Vị trí công việc</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className={labelCls}>Phòng ban *</label>
                   <select
@@ -339,6 +341,8 @@ const QuickAddEmployee: React.FC<Props> = ({ departments, onSave, onCancel }) =>
                     placeholder="Senior Artist"
                   />
                 </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <div>
                   <label className={labelCls}>Cấp bậc</label>
                   <select
@@ -355,6 +359,20 @@ const QuickAddEmployee: React.FC<Props> = ({ departments, onSave, onCancel }) =>
                     <option value="Manager">Manager</option>
                     <option value="Director">Director</option>
                   </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Vai trò hệ thống</label>
+                  <select
+                    className={inputCls}
+                    value={empForm.role}
+                    onChange={e => setEmpForm(f => ({ ...f, role: e.target.value }))}
+                  >
+                    <option value="member">👤 Nhân viên (member)</option>
+                    <option value="ke_toan">📊 Kế toán (ke_toan)</option>
+                    <option value="hr">🧑‍💼 Nhân sự (hr)</option>
+                    <option value="admin">👑 Admin</option>
+                  </select>
+                  <p className="text-neutral-medium/50 text-[10px] mt-1">Quyền truy cập các module trong hệ thống</p>
                 </div>
               </div>
             </div>
