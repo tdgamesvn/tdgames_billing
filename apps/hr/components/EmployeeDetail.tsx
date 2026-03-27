@@ -164,28 +164,46 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
     setRoleToast(null);
     try {
       const { data: { session } } = await (await import('@/services/supabaseClient')).supabase.auth.getSession();
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-employee-auth`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`,
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({
-            email: authEmail,
-            full_name: employee.full_name,
-            employee_id: employee.id,
-            role: newAccountRole,
-            ...(employee.type === 'freelancer' ? { worker_id: employee.id } : {}),
-          }),
-        }
-      );
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      };
+      const edgeUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-employee-auth`;
+
+      const res = await fetch(edgeUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          email: authEmail,
+          full_name: employee.full_name,
+          employee_id: employee.id,
+          role: newAccountRole,
+          ...(employee.type === 'freelancer' ? { worker_id: employee.id } : {}),
+        }),
+      });
       const result = await res.json();
+
       if (result.success) {
         setCurrentRole(newAccountRole);
-        setRoleToast({ msg: `✅ Đã tạo tài khoản & gửi email mời (role: ${ROLE_OPTIONS.find(r => r.value === newAccountRole)?.label || newAccountRole})`, type: 'success' });
+        const msg = result.invited
+          ? `✅ Đã tạo tài khoản & gửi email mời (role: ${ROLE_OPTIONS.find(r => r.value === newAccountRole)?.label || newAccountRole})`
+          : `✅ Tài khoản đã tồn tại — đã cập nhật role → ${ROLE_OPTIONS.find(r => r.value === newAccountRole)?.label || newAccountRole}`;
+        setRoleToast({ msg, type: 'success' });
+      } else if (result.error?.includes('already been registered')) {
+        // User already exists but was missed by listUsers — fallback to update_role
+        const updateRes = await fetch(edgeUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ action: 'update_role', email: authEmail, role: newAccountRole }),
+        });
+        const updateResult = await updateRes.json();
+        if (updateResult.success) {
+          setCurrentRole(newAccountRole);
+          setRoleToast({ msg: `✅ Tài khoản đã tồn tại — đã cập nhật role → ${ROLE_OPTIONS.find(r => r.value === newAccountRole)?.label || newAccountRole}`, type: 'success' });
+        } else {
+          throw new Error(updateResult.error || 'Lỗi cập nhật role');
+        }
       } else {
         throw new Error(result.error || 'Lỗi tạo tài khoản');
       }
