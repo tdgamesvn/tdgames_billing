@@ -8,10 +8,10 @@ const corsHeaders = {
 // Helper: find auth user by email using direct DB query (reliable, no pagination issues)
 async function findAuthUserByEmail(supabaseAdmin: any, email: string) {
   const { data, error } = await supabaseAdmin
+    .schema('auth')
     .from('users')
     .select('id, email, raw_user_meta_data, banned_until')
     .eq('email', email)
-    .schema('auth')
     .maybeSingle();
 
   if (error || !data) return null;
