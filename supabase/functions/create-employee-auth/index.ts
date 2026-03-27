@@ -31,7 +31,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
       const user = existingUsers?.users?.find((u: any) => u.email === email);
 
       if (!user) {
@@ -64,7 +64,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
       const user = existingUsers?.users?.find((u: any) => u.email === email);
 
       if (!user) {
@@ -96,7 +96,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
       const user = existingUsers?.users?.find((u: any) => u.email === email);
 
       return new Response(
@@ -115,7 +115,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
       const user = existingUsers?.users?.find((u: any) => u.email === email);
 
       if (!user) {
@@ -160,8 +160,8 @@ Deno.serve(async (req: Request) => {
       userMetadata.worker_id = worker_id;
     }
 
-    // Check if user already exists
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+    // Check if user already exists (with pagination to avoid missing users)
+    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
     const existingUser = existingUsers?.users?.find((u: any) => u.email === email);
 
     if (existingUser) {
@@ -184,7 +184,24 @@ Deno.serve(async (req: Request) => {
       redirectTo: `${Deno.env.get("SITE_URL") || "https://app.tdgamestudio.com"}`,
     });
 
-    if (error) throw error;
+    // Handle "already registered" error gracefully
+    if (error) {
+      if (error.message?.includes("already been registered")) {
+        // User exists but was missed by listUsers — try to find and update
+        const { data: retryUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000, page: 1 });
+        const retryUser = retryUsers?.users?.find((u: any) => u.email === email);
+        if (retryUser) {
+          await supabaseAdmin.auth.admin.updateUserById(retryUser.id, {
+            user_metadata: { ...retryUser.user_metadata, ...userMetadata },
+          });
+          return new Response(
+            JSON.stringify({ success: true, invited: false, message: "User already exists, metadata updated" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+      throw error;
+    }
 
     return new Response(
       JSON.stringify({ success: true, invited: true, user_id: data.user?.id }),
