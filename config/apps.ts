@@ -17,7 +17,7 @@ export const APPS: AppConfig[] = [
     description: 'Tổng quan cho CEO',
     color: '#8B5CF6',
     gradient: 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%)',
-    roles: ['admin'],
+    roles: ['admin', 'ke_toan'],
   },
   {
     id: 'invoice',
@@ -62,7 +62,7 @@ export const APPS: AppConfig[] = [
     description: 'Quản lý nhân sự toàn diện',
     color: '#FF375F',
     gradient: 'linear-gradient(135deg, #FF375F 0%, #FF6B81 100%)',
-    roles: ['admin', 'hr'],
+    roles: ['admin', 'hr', 'ke_toan'],
   },
   {
     id: 'attendance',
@@ -71,7 +71,7 @@ export const APPS: AppConfig[] = [
     description: 'Chấm công & quản lý ca làm việc',
     color: '#FF6B35',
     gradient: 'linear-gradient(135deg, #FF6B35 0%, #F7C948 100%)',
-    roles: ['admin', 'hr'],
+    roles: ['admin', 'hr', 'ke_toan'],
   },
   {
     id: 'payroll',
