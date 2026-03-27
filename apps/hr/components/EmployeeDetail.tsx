@@ -100,7 +100,10 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
     // Check current auth role
     const checkRole = async () => {
       const authEmail = employee.type === 'freelancer' ? employee.email : employee.work_email;
-      if (!authEmail) return;
+      if (!authEmail) {
+        setCurrentRole('no_account');
+        return;
+      }
       try {
         const { data: { session } } = await (await import('@/services/supabaseClient')).supabase.auth.getSession();
         const res = await fetch(
@@ -118,8 +121,12 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
         const result = await res.json();
         if (result.success && result.exists) {
           setCurrentRole(result.role || 'member');
+        } else {
+          setCurrentRole('no_account');
         }
-      } catch {}
+      } catch {
+        setCurrentRole('no_account');
+      }
     };
     checkRole();
   }, [employee.id]);
@@ -256,18 +263,24 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, onBack, onEdit
               {currentRole && (
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black uppercase tracking-widest text-neutral-medium">Role:</span>
-                  <select
-                    value={currentRole}
-                    onChange={e => handleRoleChange(e.target.value)}
-                    disabled={changingRole}
-                    className="bg-white/5 border border-primary/10 rounded-lg px-3 py-1.5 text-white text-xs font-bold outline-none focus:border-primary/40 transition-all disabled:opacity-50"
-                    style={{ colorScheme: 'dark' }}
-                  >
-                    {ROLE_OPTIONS.map(r => (
-                      <option key={r.value} value={r.value}>{r.label}</option>
-                    ))}
-                  </select>
-                  {changingRole && <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />}
+                  {currentRole === 'no_account' ? (
+                    <span className="text-[11px] text-neutral-medium/60 italic">Chưa có tài khoản hệ thống</span>
+                  ) : (
+                    <>
+                      <select
+                        value={currentRole}
+                        onChange={e => handleRoleChange(e.target.value)}
+                        disabled={changingRole}
+                        className="bg-white/5 border border-primary/10 rounded-lg px-3 py-1.5 text-white text-xs font-bold outline-none focus:border-primary/40 transition-all disabled:opacity-50"
+                        style={{ colorScheme: 'dark' }}
+                      >
+                        {ROLE_OPTIONS.map(r => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                      {changingRole && <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />}
+                    </>
+                  )}
                   {roleToast && (
                     <span className={`text-[11px] font-bold ${roleToast.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
                       {roleToast.msg}
