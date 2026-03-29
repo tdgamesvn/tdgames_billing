@@ -9,6 +9,7 @@ import WorkerList from './WorkerList';
 import WorkerForm from './WorkerForm';
 import TaskList from './TaskList';
 import SettlementManager from './SettlementManager';
+import ProjectAcceptanceManager from './ProjectAcceptanceManager';
 import ClickUpConfig from './ClickUpConfig';
 
 interface WorkforceAppProps {
@@ -22,6 +23,7 @@ const TAB_MAP: Record<WorkforceTab, string> = {
   workerForm: 'edit',
   tasks: 'recurring',
   settlements: 'activity',
+  projectAcceptance: 'reports',
   config: 'dashboard',
 };
 
@@ -30,6 +32,7 @@ const TAB_LABELS: Record<string, string> = {
   edit: 'Thêm/Sửa',
   recurring: 'Task',
   activity: 'Nghiệm thu',
+  reports: 'NT Dự Án',
   dashboard: 'Cấu hình',
 };
 
@@ -38,6 +41,7 @@ const REVERSE_TAB: Record<string, WorkforceTab> = {
   edit: 'workerForm',
   recurring: 'tasks',
   activity: 'settlements',
+  reports: 'projectAcceptance',
   dashboard: 'config',
 };
 
@@ -66,7 +70,7 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack, initia
   }, []);
 
   const navbarTab = TAB_MAP[state.activeTab];
-  const accessibleTabs = (['history', 'recurring', 'activity', 'dashboard'] as const).map(t => t);
+  const accessibleTabs = (['history', 'recurring', 'activity', 'reports', 'dashboard'] as const).map(t => t);
 
   const showToast = (message: string, type: 'success' | 'error') => {
     state.setToast({ message, type });
@@ -154,6 +158,16 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack, initia
             onCreateSettlement={state.handleCreateSettlement}
             onUpdateSettlement={state.handleUpdateSettlement}
             onDeleteSettlement={state.handleDeleteSettlement}
+          />
+        )}
+        {state.activeTab === 'projectAcceptance' && (
+          <ProjectAcceptanceManager
+            acceptances={state.projectAcceptances}
+            tasks={state.tasks}
+            vcbSellRate={vcbRate?.sell || 0}
+            onCreateAcceptance={state.handleCreateProjectAcceptance}
+            onUpdateAcceptance={state.handleUpdateProjectAcceptance}
+            onDeleteAcceptance={state.handleDeleteProjectAcceptance}
           />
         )}
         {state.activeTab === 'config' && (

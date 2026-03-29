@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Worker, WorkerContract, WorkforceTask, Settlement } from '@/types';
+import { Worker, WorkerContract, WorkforceTask, Settlement, ProjectAcceptance } from '@/types';
 import * as svc from '../services/workforceService';
+import * as paSvc from '../services/projectAcceptanceService';
 import { supabase } from '@/services/supabaseClient';
 import { setHashTab } from '@/App';
 
-export type WorkforceTab = 'workers' | 'workerForm' | 'tasks' | 'settlements' | 'config';
+export type WorkforceTab = 'workers' | 'workerForm' | 'tasks' | 'settlements' | 'projectAcceptance' | 'config';
 
-const VALID_TABS: WorkforceTab[] = ['workers', 'workerForm', 'tasks', 'settlements', 'config'];
+const VALID_TABS: WorkforceTab[] = ['workers', 'workerForm', 'tasks', 'settlements', 'projectAcceptance', 'config'];
 
 export function useWorkforceState(currentUsername: string, initialTab?: string | null) {
   const [activeTab, _setActiveTab] = useState<WorkforceTab>(() => {
@@ -25,6 +26,7 @@ export function useWorkforceState(currentUsername: string, initialTab?: string |
   const [contracts, setContracts] = useState<WorkerContract[]>([]);
   const [tasks, setTasks] = useState<WorkforceTask[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [projectAcceptances, setProjectAcceptances] = useState<ProjectAcceptance[]>([]);
 
   // ── Edit state ──
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
@@ -39,14 +41,16 @@ export function useWorkforceState(currentUsername: string, initialTab?: string |
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [w, t, s] = await Promise.all([
+      const [w, t, s, pa] = await Promise.all([
         svc.fetchWorkers(),
         svc.fetchTasks(),
         svc.fetchSettlements(),
+        paSvc.fetchProjectAcceptances(),
       ]);
       setWorkers(w);
       setTasks(t);
       setSettlements(s);
+      setProjectAcceptances(pa);
     } catch (e: any) {
       setToast({ message: e.message || 'Lỗi tải dữ liệu', type: 'error' });
     } finally {
@@ -243,6 +247,46 @@ export function useWorkforceState(currentUsername: string, initialTab?: string |
     }
   };
 
+  // ── Project Acceptance ──
+  const handleCreateProjectAcceptance = async (
+    projectName: string,
+    clientName: string,
+    period: string,
+    taskIds: string[],
+    totalAmount: number,
+    currency: string,
+    notes: string,
+    clientPrices?: Record<string, number>
+  ) => {
+    try {
+      const saved = await paSvc.createProjectAcceptance(projectName, clientName, period, taskIds, totalAmount, currency, notes, clientPrices);
+      setProjectAcceptances(prev => [saved, ...prev]);
+      setToast({ message: 'Created project acceptance', type: 'success' });
+    } catch (e: any) {
+      setToast({ message: e.message, type: 'error' });
+    }
+  };
+
+  const handleUpdateProjectAcceptance = async (id: string, updates: Partial<ProjectAcceptance>) => {
+    try {
+      await paSvc.updateProjectAcceptance(id, updates);
+      setProjectAcceptances(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+      setToast({ message: 'Đã cập nhật nghiệm thu dự án', type: 'success' });
+    } catch (e: any) {
+      setToast({ message: e.message, type: 'error' });
+    }
+  };
+
+  const handleDeleteProjectAcceptance = async (id: string) => {
+    try {
+      await paSvc.deleteProjectAcceptance(id);
+      setProjectAcceptances(prev => prev.filter(a => a.id !== id));
+      setToast({ message: 'Đã xóa nghiệm thu dự án', type: 'success' });
+    } catch (e: any) {
+      setToast({ message: e.message, type: 'error' });
+    }
+  };
+
   // ── Filtered data ──
   const filteredWorkers = workers.filter(w => {
     if (filterWorkerType && w.type !== filterWorkerType) return false;
@@ -262,6 +306,7 @@ export function useWorkforceState(currentUsername: string, initialTab?: string |
     contracts, loadContracts,
     tasks, filteredTasks,
     settlements,
+    projectAcceptances,
     editingWorker, setEditingWorker,
     selectedWorkerId, setSelectedWorkerId,
     filterWorkerType, setFilterWorkerType,
@@ -271,6 +316,7 @@ export function useWorkforceState(currentUsername: string, initialTab?: string |
     handleSaveContract, handleUpdateContract, handleDeleteContract,
     handleSaveTask, handleUpdateTask, handleDeleteTask,
     handleCreateSettlement, handleUpdateSettlement, handleDeleteSettlement,
+    handleCreateProjectAcceptance, handleUpdateProjectAcceptance, handleDeleteProjectAcceptance,
     loadAll,
   };
 }

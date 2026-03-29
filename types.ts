@@ -210,6 +210,28 @@ export interface SettlementTask {
   task_id: string;
 }
 
+// ── Project-Based Acceptance (Nghiệm thu theo dự án) ─────────
+export interface ProjectAcceptance {
+  id?: string;
+  project_name: string;
+  client_name: string;
+  period: string;
+  total_tasks: number;
+  total_amount: number;
+  currency: string;
+  status: 'draft' | 'sent' | 'accepted';
+  notes: string;
+  discount_type: 'amount' | 'percent';
+  discount_value: number;
+  created_at?: string;
+}
+
+export interface ProjectAcceptanceTask {
+  id?: string;
+  acceptance_id: string;
+  task_id: string;
+}
+
 // ── CRM ──────────────────────────────────────────────────────
 export interface CrmContact {
   id: string;
