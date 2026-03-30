@@ -192,7 +192,7 @@ export function exportPaySlipToExcel(sheet: PayPayrollSheet, rec: PayPayrollReco
   } else {
     rows.push(['— BƯỚC 3-8: BẢO HIỂM → THUẾ → NET —']);
     rows.push(['BH nhân viên (10.5%)', '', rec.employee_bhxh]);
-    rows.push(['Thu nhập chịu thuế (CB + KPI)', '', rec.taxable_income]);
+    rows.push(['Thu nhập chịu thuế (CB + ĐT + KPI)', '', rec.taxable_income]);
     rows.push(['Giảm trừ bản thân', '', -15_500_000]);
     rows.push(['Giảm trừ NPT (' + rec.dependents_count + ' người)', '', -(rec.dependents_count * 6_200_000)]);
     rows.push(['Thu nhập tính thuế', '', rec.assessable_income]);

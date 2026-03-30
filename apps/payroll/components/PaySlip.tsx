@@ -178,7 +178,7 @@ const PaySlip: React.FC<Props> = ({ sheet, record: rec, onClose }) => {
               ) : (
                 <>
                   <Tr2 label="BH nhân viên (10.5%)" value={`-${fmt(rec.employee_bhxh)}`} color="#e65100" />
-                  <Tr2 label="Thu nhập chịu thuế (CB + KPI)" value={fmt(rec.taxable_income)} />
+                  <Tr2 label="Thu nhập chịu thuế (CB + ĐT + KPI)" value={fmt(rec.taxable_income)} />
                   <Tr2 label="Giảm trừ bản thân" value={`-${fmt(15_500_000)}`} color="#888" />
                   <Tr2 label={`Giảm trừ NPT (${rec.dependents_count} người)`} value={`-${fmt(rec.dependents_count * 6_200_000)}`} color="#888" />
                   <Tr2 label="Thu nhập tính thuế" value={rec.assessable_income > 0 ? fmt(rec.assessable_income) : '0'} />

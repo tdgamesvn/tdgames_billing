@@ -253,7 +253,7 @@ const PayrollSheet: React.FC<Props> = ({
                           ) : (
                             <>
                               <Row label="BH nhân viên (10.5%)" value={fmt(rec.employee_bhxh)} color="text-orange-400" />
-                              <Row label="TNCT (CB + KPI)" value={fmt(rec.taxable_income)} />
+                              <Row label="TNCT (CB + ĐT + KPI)" value={fmt(rec.taxable_income)} />
                               <Row label="Giảm trừ bản thân" value={`-${fmt(15_500_000)}`} color="text-neutral-medium" />
                               <Row label={`Giảm trừ NPT (${rec.dependents_count})`} value={`-${fmt(rec.dependents_count * 6_200_000)}`} color="text-neutral-medium" />
                               <Row label="TNTT" value={rec.assessable_income > 0 ? fmt(rec.assessable_income) : '0 (âm → 0)'} />

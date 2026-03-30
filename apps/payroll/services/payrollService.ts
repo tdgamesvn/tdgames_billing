@@ -79,12 +79,13 @@ export function calculatePayroll(input: PayrollInput): PayrollOutput {
   const grossActual = baseSalaryActual + lunchActual + transportActual
     + clothingActual + kpiActual + defaultOtActual + extraOt;
 
-  // ── PROBATION: Không đóng BH, thuế TNCN 10% trên tổng thu nhập ──
+  // ── PROBATION: Không đóng BH, thuế TNCN 10% trên thu nhập chịu thuế ──
   if (input.isProbation) {
     const employeeBhxh = 0;
-    const taxableIncome = grossActual;
-    const assessableIncome = grossActual; // không giảm trừ
-    const pit = r(grossActual * 0.10); // 10% cố định
+    // Thu nhập chịu thuế: CB + Xăng xe/ĐT + KPI (không gồm ăn trưa, trang phục, tăng ca)
+    const taxableIncome = baseSalaryActual + transportActual + kpiActual;
+    const assessableIncome = taxableIncome;
+    const pit = r(taxableIncome * 0.10); // 10% cố định
     const netSalary = grossActual - pit;
     const companyBhxh = 0;
     const totalCompanyCost = grossActual;
@@ -100,8 +101,8 @@ export function calculatePayroll(input: PayrollInput): PayrollOutput {
   // [BƯỚC 3] Bảo hiểm nhân viên
   const employeeBhxh = r(baseSalaryActual * BH_EMPLOYEE_RATE);
 
-  // [BƯỚC 4] Thu nhập chịu thuế (chỉ lương CB + KPI)
-  const taxableIncome = baseSalaryActual + kpiActual;
+  // [BƯỚC 4] Thu nhập chịu thuế (CB + Xăng xe/ĐT + KPI — không gồm ăn trưa, trang phục, tăng ca)
+  const taxableIncome = baseSalaryActual + transportActual + kpiActual;
 
   // [BƯỚC 5] Thu nhập tính thuế
   let assessableIncome = taxableIncome - employeeBhxh
