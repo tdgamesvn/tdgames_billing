@@ -152,6 +152,11 @@ const PayrollSheet: React.FC<Props> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-sm">{isExpanded ? '▼' : '▶'}</span>
                       <span className="text-white font-bold text-sm truncate">{empName}</span>
+                      {rec.is_probation && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 text-[9px] font-bold uppercase tracking-wider">
+                          THỬ VIỆC
+                        </span>
+                      )}
                       <button
                         onClick={e => { e.stopPropagation(); setPaySlipRecord(rec); }}
                         className="ml-1 px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-400 text-[9px] font-bold uppercase tracking-wider hover:bg-indigo-500/25 transition-all"
@@ -229,20 +234,39 @@ const PayrollSheet: React.FC<Props> = ({
 
                         {/* Right: Steps 3-8 */}
                         <div className="space-y-2">
-                          <div className="text-[10px] font-bold text-emerald-400 uppercase mb-1">Bước 3-8: BH → Thuế → Net</div>
-                          <Row label="BH nhân viên (10.5%)" value={fmt(rec.employee_bhxh)} color="text-orange-400" />
-                          <Row label="TNCT (CB + KPI)" value={fmt(rec.taxable_income)} />
-                          <Row label="Giảm trừ bản thân" value={`-${fmt(15_500_000)}`} color="text-neutral-medium" />
-                          <Row label={`Giảm trừ NPT (${rec.dependents_count})`} value={`-${fmt(rec.dependents_count * 6_200_000)}`} color="text-neutral-medium" />
-                          <Row label="TNTT" value={rec.assessable_income > 0 ? fmt(rec.assessable_income) : '0 (âm → 0)'} />
-                          <Row label="Thuế TNCN" value={rec.pit > 0 ? fmt(rec.pit) : '0'} color={rec.pit > 0 ? 'text-red-400' : 'text-emerald-400'} />
-                          <div className="border-t border-white/[0.06] pt-2 mt-2">
-                            <Row label="NET THỰC LĨNH" value={`${fmt(rec.net_salary)}đ`} bold highlight />
+                          <div className="text-[10px] font-bold text-emerald-400 uppercase mb-1">
+                            {rec.is_probation ? 'THỬ VIỆC: Thuế 10% – Không BH' : 'Bước 3-8: BH → Thuế → Net'}
                           </div>
-                          <div className="border-t border-white/[0.06] pt-2 mt-2">
-                            <Row label="BH công ty (21.5%)" value={fmt(rec.company_bhxh)} color="text-blue-400" />
-                            <Row label="Chi phí công ty" value={fmt(rec.total_company_cost)} bold color="text-blue-400" />
-                          </div>
+                          {rec.is_probation ? (
+                            <>
+                              <Row label="BH nhân viên" value="0 (không đóng)" color="text-neutral-medium/50" />
+                              <Row label="Thu nhập chịu thuế" value={fmt(rec.taxable_income)} />
+                              <Row label="Thuế TNCN (10% cố định)" value={fmt(rec.pit)} color="text-red-400" />
+                              <div className="border-t border-white/[0.06] pt-2 mt-2">
+                                <Row label="NET THỰC LĨNH" value={`${fmt(rec.net_salary)}đ`} bold highlight />
+                              </div>
+                              <div className="border-t border-white/[0.06] pt-2 mt-2">
+                                <Row label="BH công ty" value="0 (không đóng)" color="text-neutral-medium/50" />
+                                <Row label="Chi phí công ty" value={fmt(rec.total_company_cost)} bold color="text-blue-400" />
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <Row label="BH nhân viên (10.5%)" value={fmt(rec.employee_bhxh)} color="text-orange-400" />
+                              <Row label="TNCT (CB + KPI)" value={fmt(rec.taxable_income)} />
+                              <Row label="Giảm trừ bản thân" value={`-${fmt(15_500_000)}`} color="text-neutral-medium" />
+                              <Row label={`Giảm trừ NPT (${rec.dependents_count})`} value={`-${fmt(rec.dependents_count * 6_200_000)}`} color="text-neutral-medium" />
+                              <Row label="TNTT" value={rec.assessable_income > 0 ? fmt(rec.assessable_income) : '0 (âm → 0)'} />
+                              <Row label="Thuế TNCN (lũy tiến)" value={rec.pit > 0 ? fmt(rec.pit) : '0'} color={rec.pit > 0 ? 'text-red-400' : 'text-emerald-400'} />
+                              <div className="border-t border-white/[0.06] pt-2 mt-2">
+                                <Row label="NET THỰC LĨNH" value={`${fmt(rec.net_salary)}đ`} bold highlight />
+                              </div>
+                              <div className="border-t border-white/[0.06] pt-2 mt-2">
+                                <Row label="BH công ty (21.5%)" value={fmt(rec.company_bhxh)} color="text-blue-400" />
+                                <Row label="Chi phí công ty" value={fmt(rec.total_company_cost)} bold color="text-blue-400" />
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

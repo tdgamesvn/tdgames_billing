@@ -123,6 +123,13 @@ const PaySlip: React.FC<Props> = ({ sheet, record: rec, onClose }) => {
             <InfoRow label="Phòng ban" value={dept} />
             <InfoRow label="Họ và tên" value={empName} />
             <InfoRow label="Chức vụ" value={position} />
+            {rec.is_probation && (
+              <div style={{ gridColumn: '1 / -1', marginTop: '4px' }}>
+                <span style={{ background: '#FFF3E0', color: '#E65100', padding: '2px 10px', borderRadius: '4px', fontSize: '9px', fontWeight: 900, letterSpacing: '0.08em' }}>
+                  ⭐ THỬ VIỆC – Không đóng BH, Thuế 10%
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Divider */}
@@ -153,7 +160,7 @@ const PaySlip: React.FC<Props> = ({ sheet, record: rec, onClose }) => {
           </table>
 
           {/* Tax calculation */}
-          <SectionTitle title="BẢO HIỂM & THUẾ" />
+          <SectionTitle title={rec.is_probation ? 'THUẾ TNCN (THỬ VIỆC)' : 'BẢO HIỂM & THUẾ'} />
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '8px' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid #e5e5e5' }}>
@@ -162,12 +169,22 @@ const PaySlip: React.FC<Props> = ({ sheet, record: rec, onClose }) => {
               </tr>
             </thead>
             <tbody>
-              <Tr2 label="BH nhân viên (10.5%)" value={`-${fmt(rec.employee_bhxh)}`} color="#e65100" />
-              <Tr2 label="Thu nhập chịu thuế (CB + KPI)" value={fmt(rec.taxable_income)} />
-              <Tr2 label="Giảm trừ bản thân" value={`-${fmt(15_500_000)}`} color="#888" />
-              <Tr2 label={`Giảm trừ NPT (${rec.dependents_count} người)`} value={`-${fmt(rec.dependents_count * 6_200_000)}`} color="#888" />
-              <Tr2 label="Thu nhập tính thuế" value={rec.assessable_income > 0 ? fmt(rec.assessable_income) : '0'} />
-              <Tr2 label="Thuế TNCN" value={rec.pit > 0 ? `-${fmt(rec.pit)}` : '0'} color={rec.pit > 0 ? '#d32f2f' : '#2e7d32'} />
+              {rec.is_probation ? (
+                <>
+                  <Tr2 label="BH nhân viên" value="0 (không đóng – thử việc)" color="#999" />
+                  <Tr2 label="Thu nhập chịu thuế" value={fmt(rec.taxable_income)} />
+                  <Tr2 label="Thuế TNCN (10% cố định)" value={rec.pit > 0 ? `-${fmt(rec.pit)}` : '0'} color="#d32f2f" />
+                </>
+              ) : (
+                <>
+                  <Tr2 label="BH nhân viên (10.5%)" value={`-${fmt(rec.employee_bhxh)}`} color="#e65100" />
+                  <Tr2 label="Thu nhập chịu thuế (CB + KPI)" value={fmt(rec.taxable_income)} />
+                  <Tr2 label="Giảm trừ bản thân" value={`-${fmt(15_500_000)}`} color="#888" />
+                  <Tr2 label={`Giảm trừ NPT (${rec.dependents_count} người)`} value={`-${fmt(rec.dependents_count * 6_200_000)}`} color="#888" />
+                  <Tr2 label="Thu nhập tính thuế" value={rec.assessable_income > 0 ? fmt(rec.assessable_income) : '0'} />
+                  <Tr2 label="Thuế TNCN (lũy tiến)" value={rec.pit > 0 ? `-${fmt(rec.pit)}` : '0'} color={rec.pit > 0 ? '#d32f2f' : '#2e7d32'} />
+                </>
+              )}
             </tbody>
           </table>
 
@@ -185,8 +202,17 @@ const PaySlip: React.FC<Props> = ({ sheet, record: rec, onClose }) => {
           <SectionTitle title="CHI PHÍ CÔNG TY" />
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px' }}>
             <tbody>
-              <Tr2 label="BH công ty (21.5%)" value={fmt(rec.company_bhxh)} color="#1565c0" />
-              <TrBold2 label="TỔNG CHI PHÍ CÔNG TY" value={fmt(rec.total_company_cost)} color="#1565c0" />
+              {rec.is_probation ? (
+                <>
+                  <Tr2 label="BH công ty" value="0 (không đóng – thử việc)" color="#999" />
+                  <TrBold2 label="TỔNG CHI PHÍ CÔNG TY" value={fmt(rec.total_company_cost)} color="#1565c0" />
+                </>
+              ) : (
+                <>
+                  <Tr2 label="BH công ty (21.5%)" value={fmt(rec.company_bhxh)} color="#1565c0" />
+                  <TrBold2 label="TỔNG CHI PHÍ CÔNG TY" value={fmt(rec.total_company_cost)} color="#1565c0" />
+                </>
+              )}
             </tbody>
           </table>
 

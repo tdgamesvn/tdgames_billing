@@ -657,6 +657,7 @@ export interface PayPayrollRecord {
   extra_ot_hours: number;
   extra_ot: number;
   dependents_count: number;
+  is_probation: boolean;
   // OUTPUT
   gross_ref: number;
   gross_actual: number;

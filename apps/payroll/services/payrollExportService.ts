@@ -20,6 +20,7 @@ export function exportPayrollToExcel(sheet: PayPayrollSheet, records: PayPayroll
     'STT',
     'Mã NV',
     'Họ và tên',
+    'Thử việc',
     'Ngày công',
     'Lương CB',
     'PC ăn trưa',
@@ -31,13 +32,13 @@ export function exportPayrollToExcel(sheet: PayPayrollSheet, records: PayPayroll
     'Tăng ca PS (đ)',
     'Gross TK',
     'Gross thực tế',
-    'BH NV (10.5%)',
+    'BH NV',
     'Thu nhập chịu thuế',
     'Số NPT',
     'Thu nhập tính thuế',
     'Thuế TNCN',
     'NET thực lĩnh',
-    'BH công ty (21.5%)',
+    'BH công ty',
     'Chi phí công ty',
   ]);
 
@@ -47,6 +48,7 @@ export function exportPayrollToExcel(sheet: PayPayrollSheet, records: PayPayroll
       idx + 1,
       rec.employee?.employee_code || '',
       rec.employee?.full_name || '',
+      rec.is_probation ? 'Có' : '',
       rec.work_days,
       rec.base_salary,
       rec.lunch_allowance,
@@ -76,6 +78,7 @@ export function exportPayrollToExcel(sheet: PayPayrollSheet, records: PayPayroll
 
   rows.push([
     '', '', 'TỔNG CỘNG', '',
+    '',
     sum('base_salary'),
     sum('lunch_allowance'),
     sum('transport_allowance'),
@@ -104,6 +107,7 @@ export function exportPayrollToExcel(sheet: PayPayrollSheet, records: PayPayroll
     { wch: 5 },   // STT
     { wch: 10 },  // Mã NV
     { wch: 25 },  // Họ tên
+    { wch: 10 },  // Thử việc
     { wch: 10 },  // Ngày công
     { wch: 14 },  // Lương CB
     { wch: 14 },  // PC ăn trưa
@@ -157,6 +161,9 @@ export function exportPaySlipToExcel(sheet: PayPayrollSheet, rec: PayPayrollReco
   rows.push(['Họ và tên:', empName]);
   rows.push(['Phòng ban:', rec.employee?.department?.name || '—']);
   rows.push(['Chức vụ:', rec.employee?.position || '—']);
+  if (rec.is_probation) {
+    rows.push(['Trạng thái:', 'THỬ VIỆC – Không đóng BH, Thuế 10%']);
+  }
   rows.push([]);
 
   // Detail table
@@ -176,17 +183,29 @@ export function exportPaySlipToExcel(sheet: PayPayrollSheet, rec: PayPayrollReco
   rows.push(['Gross tham chiếu', '', rec.gross_ref]);
   rows.push(['Gross thực tế', '', rec.gross_actual]);
   rows.push([]);
-  rows.push(['— BƯỚC 3-8: BẢO HIỂM → THUẾ → NET —']);
-  rows.push(['BH nhân viên (10.5%)', '', rec.employee_bhxh]);
-  rows.push(['Thu nhập chịu thuế (CB + KPI)', '', rec.taxable_income]);
-  rows.push(['Giảm trừ bản thân', '', -15_500_000]);
-  rows.push(['Giảm trừ NPT (' + rec.dependents_count + ' người)', '', -(rec.dependents_count * 6_200_000)]);
-  rows.push(['Thu nhập tính thuế', '', rec.assessable_income]);
-  rows.push(['Thuế TNCN', '', rec.pit]);
+
+  if (rec.is_probation) {
+    rows.push(['— THỬ VIỆC: THUẾ 10% – KHÔNG BH —']);
+    rows.push(['BH nhân viên', '', '0 (không đóng)']);
+    rows.push(['Thu nhập chịu thuế', '', rec.taxable_income]);
+    rows.push(['Thuế TNCN (10% cố định)', '', rec.pit]);
+  } else {
+    rows.push(['— BƯỚC 3-8: BẢO HIỂM → THUẾ → NET —']);
+    rows.push(['BH nhân viên (10.5%)', '', rec.employee_bhxh]);
+    rows.push(['Thu nhập chịu thuế (CB + KPI)', '', rec.taxable_income]);
+    rows.push(['Giảm trừ bản thân', '', -15_500_000]);
+    rows.push(['Giảm trừ NPT (' + rec.dependents_count + ' người)', '', -(rec.dependents_count * 6_200_000)]);
+    rows.push(['Thu nhập tính thuế', '', rec.assessable_income]);
+    rows.push(['Thuế TNCN (lũy tiến)', '', rec.pit]);
+  }
   rows.push([]);
   rows.push(['NET THỰC LĨNH', '', rec.net_salary]);
   rows.push([]);
-  rows.push(['BH công ty (21.5%)', '', rec.company_bhxh]);
+  if (rec.is_probation) {
+    rows.push(['BH công ty', '', '0 (không đóng)']);
+  } else {
+    rows.push(['BH công ty (21.5%)', '', rec.company_bhxh]);
+  }
   rows.push(['Tổng chi phí công ty', '', rec.total_company_cost]);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);

@@ -39,6 +39,7 @@ interface PayrollInput {
   defaultOt: number;
   extraOtHours: number;
   dependentsCount: number;
+  isProbation: boolean;
 }
 
 interface PayrollOutput {
@@ -78,6 +79,24 @@ export function calculatePayroll(input: PayrollInput): PayrollOutput {
   const grossActual = baseSalaryActual + lunchActual + transportActual
     + clothingActual + kpiActual + defaultOtActual + extraOt;
 
+  // ── PROBATION: Không đóng BH, thuế TNCN 10% trên tổng thu nhập ──
+  if (input.isProbation) {
+    const employeeBhxh = 0;
+    const taxableIncome = grossActual;
+    const assessableIncome = grossActual; // không giảm trừ
+    const pit = r(grossActual * 0.10); // 10% cố định
+    const netSalary = grossActual - pit;
+    const companyBhxh = 0;
+    const totalCompanyCost = grossActual;
+
+    return {
+      grossRef, grossActual, extraOt,
+      employeeBhxh, taxableIncome, assessableIncome,
+      pit, netSalary, companyBhxh, totalCompanyCost,
+    };
+  }
+
+  // ── CHÍNH THỨC: Đóng BH + Thuế lũy tiến ──
   // [BƯỚC 3] Bảo hiểm nhân viên
   const employeeBhxh = r(baseSalaryActual * BH_EMPLOYEE_RATE);
 
@@ -229,6 +248,9 @@ export async function createPayrollSheet(
   });
 
   // 6. Build records
+  // Determine last day of payroll month to check probation status
+  const payrollLastDay = new Date(year, month, 0); // last day of this month
+
   const rows = employees.map(emp => {
     // Salary components for this employee
     const empSalary = (salaryRows || []).filter(s => s.employee_id === emp.id);
@@ -244,6 +266,11 @@ export async function createPayrollSheet(
     const workDays = attRec?.work_days ?? STANDARD_DAYS;
     const extraOtHours = attRec?.ot_hours ?? 0;
 
+    // Probation check: NV thử việc nếu probation_end > ngày cuối tháng lương
+    const isProbation = emp.probation_end
+      ? new Date(emp.probation_end) > payrollLastDay
+      : false;
+
     const input: PayrollInput = {
       workDays,
       baseSalary: salaryMap.base_salary || 0,
@@ -254,6 +281,7 @@ export async function createPayrollSheet(
       defaultOt: salaryMap.default_ot || 0,
       extraOtHours,
       dependentsCount: depCountMap[emp.id] || 0,
+      isProbation,
     };
 
     const output = calculatePayroll(input);
@@ -271,6 +299,7 @@ export async function createPayrollSheet(
       extra_ot_hours: input.extraOtHours,
       extra_ot: output.extraOt,
       dependents_count: input.dependentsCount,
+      is_probation: isProbation,
       gross_ref: output.grossRef,
       gross_actual: output.grossActual,
       employee_bhxh: output.employeeBhxh,
@@ -307,6 +336,7 @@ export function recalculateRecord(rec: PayPayrollRecord): PayPayrollRecord {
     defaultOt: rec.default_ot,
     extraOtHours: rec.extra_ot_hours,
     dependentsCount: rec.dependents_count,
+    isProbation: rec.is_probation ?? false,
   };
   const output = calculatePayroll(input);
   return {

@@ -890,7 +890,7 @@ ${nationalHeader()}
 
 <div class="article">
   <p><strong>XÉT VÌ:</strong></p>
-  <p>Các Bên dự định tiến hành bàn bạc hoặc đàm phán về việc hợp tác kinh doanh ("Dự án" này có phạm vi bao hàm tất cả các mối quan hệ hình thành trên cơ sở bàn bạc hoặc đàm phán đó).</p>
+  <p>Các Bên dự định thiết lập và duy trì quan hệ hợp tác lâu dài, bao gồm toàn bộ các dự án, hạng mục công việc phát sinh trong quá trình hợp tác giữa hai bên ("Dự án").</p>
   <p>Để thực hiện mục tiêu của Dự án, Các Bên đồng ý tiết lộ một số Thông tin mật (như định nghĩa dưới đây) liên quan đến Dự án kèm theo yêu cầu bảo mật tuyệt đối và trên cơ sở các điều khoản và điều kiện sau.</p>
   <p>Các Bên thống nhất Thỏa thuận này với điều khoản và điều kiện như sau:</p>
 </div>
@@ -953,6 +953,7 @@ ${nationalHeader()}
 <div class="article">
   <div class="article-title">Điều 10. BỒI THƯỜNG THIỆT HẠI</div>
   <p>Trong bất kỳ trường hợp nào, nếu Bên Tiết Lộ và/hoặc khách hàng của Bên Tiết Lộ phát hiện ra Thông tin mật bị tiết lộ ra bên ngoài hoặc sử dụng sai mục đích bởi Bên Nhận hoặc bất kỳ nhân viên hiện thời hay nhân viên cũ của Bên Nhận, gây thiệt hại lập tức hoặc có thể xảy ra trong tương lai mà thiệt hại đó có thể xác định được, thì Bên Nhận phải bồi thường thiệt hại cũng như chịu các trách nhiệm pháp lý có liên quan. Cụ thể như sau: Tùy vào tính chất và mức độ vi phạm, Bên vi phạm còn phải chịu trách nhiệm bồi thường toàn bộ thiệt hại cho Bên Tiết Lộ, bao gồm nhưng không giới hạn các thiệt hại về chi phí đầu tư, doanh thu, uy tín, chi phí cho việc khắc phục hậu quả và những thiệt hại mà lẽ ra Bên Tiết Lộ sẽ có được nếu như Thông tin mật không bị tiết lộ.</p>
+  <p>Trong trường hợp vi phạm nghĩa vụ bảo mật, Bên vi phạm phải chịu mức phạt vi phạm là <strong>8% (tám phần trăm)</strong> tổng giá trị các Hợp đồng Khoán việc đã ký giữa hai bên, đồng thời bồi thường toàn bộ thiệt hại thực tế phát sinh (nếu có).</p>
   <p>Các bên đồng ý rằng nếu bất cứ bên nào vi phạm bất cứ nghĩa vụ nào trong Thỏa thuận này, ngoài chế tài phạt vi phạm, bồi thường thiệt hại trên đây, Bên vi phạm còn phải chịu các chế tài về việc xử lý hành vi cạnh tranh không lành mạnh theo quy định của pháp luật cạnh tranh.</p>
 </div>
 
@@ -963,7 +964,7 @@ ${nationalHeader()}
 
 <div class="article">
   <div class="article-title">Điều 12. THỜI HẠN THỎA THUẬN</div>
-  <p>Thỏa thuận này có hiệu lực sau khi được ký kết và sẽ được kéo dài cho đến khi mà Thông Tin vẫn còn là Thông Tin Mật theo như định nghĩa của từ này ở Điều 2 trên đây.</p>
+  <p>Thỏa thuận này có hiệu lực kể từ ngày ký và được duy trì trong suốt thời gian hợp tác giữa hai bên, và tiếp tục có hiệu lực trong vòng <strong>03 (ba) năm</strong> kể từ ngày chấm dứt quan hệ hợp tác cuối cùng giữa hai bên.</p>
 </div>
 
 <div class="article">
