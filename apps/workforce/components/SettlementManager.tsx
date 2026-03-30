@@ -284,7 +284,10 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
     const totalPrice = detailTasks.reduce((sum, t) => sum + (t.price || 0), 0);
     const totalBonus = detailTasks.reduce((sum, t) => sum + (t.bonus || 0), 0);
     const totalVND = detailTasks.reduce((sum, t) => {
-      if (t.currency === 'USD' && t.exchange_rate > 0) return sum + t.price * t.exchange_rate;
+      if (t.currency === 'USD') {
+        const rate = t.payment_status === 'paid' && t.exchange_rate > 0 ? t.exchange_rate : vcbSellRate;
+        return rate > 0 ? sum + t.price * rate : sum;
+      }
       if (t.currency === 'VND') return sum + t.price;
       return sum;
     }, 0);
@@ -452,7 +455,8 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
                 ) : detailTasks.length === 0 ? (
                   <tr><td colSpan={10} className="text-center py-8 text-neutral-medium">Không có task</td></tr>
                 ) : detailTasks.map((t, i) => {
-                  const vndEquiv = t.currency === 'USD' && t.exchange_rate > 0 ? t.price * t.exchange_rate : null;
+                  const effectiveRate = t.payment_status === 'paid' && t.exchange_rate > 0 ? t.exchange_rate : vcbSellRate;
+                  const vndEquiv = t.currency === 'USD' && effectiveRate > 0 ? t.price * effectiveRate : null;
                   return (
                     <tr key={t.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 text-neutral-medium/50">{i + 1}</td>
@@ -565,7 +569,8 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
                 <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
                   {eligibleTasks.map(t => {
                     const isSelected = selTaskIds.includes(t.id!);
-                    const vndPreview = t.currency === 'USD' && t.exchange_rate > 0 ? t.price * t.exchange_rate : null;
+                    const liveRate = vcbSellRate > 0 ? vcbSellRate : t.exchange_rate;
+                    const vndPreview = t.currency === 'USD' && liveRate > 0 ? t.price * liveRate : null;
                     return (
                       <label key={t.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                         isSelected ? 'border-primary/40 bg-primary/5' : 'border-primary/10 hover:border-primary/20'
