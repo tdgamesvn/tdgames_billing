@@ -380,7 +380,12 @@ const TaskList: React.FC<TaskListProps> = ({
                         e.stopPropagation();
                         e.preventDefault();
                         const next = t.payment_status === 'paid' ? 'unpaid' : 'paid';
-                        onUpdate(t.id!, { payment_status: next });
+                        const updates: Partial<WorkforceTask> = { payment_status: next };
+                        // Lock in avg rate when marking as paid for USD tasks
+                        if (next === 'paid' && t.currency === 'USD' && vcbSellRate > 0) {
+                          updates.exchange_rate = vcbSellRate;
+                        }
+                        onUpdate(t.id!, updates);
                         onToast(next === 'paid' ? '💰 Đã đánh dấu thanh toán' : '⏳ Đã chuyển về chưa thanh toán', 'success');
                       }}
                       className={`text-[9px] font-bold px-2.5 py-1 rounded-md cursor-pointer hover:scale-105 active:scale-95 transition-all ${
@@ -494,7 +499,11 @@ const TaskList: React.FC<TaskListProps> = ({
                         setEditingPriceId(t.id!);
                         setEditPrice(t.price > 0 ? String(t.price) : '');
                         setEditCurrency(t.currency || 'VND');
-                        setEditRate(t.exchange_rate > 0 ? String(t.exchange_rate) : (t.currency === 'USD' && vcbSellRate > 0 ? String(vcbSellRate) : ''));
+                        setEditRate(
+                          t.payment_status === 'paid' && t.exchange_rate > 0
+                            ? String(t.exchange_rate)
+                            : (t.currency === 'USD' && vcbSellRate > 0 ? String(vcbSellRate) : '')
+                        );
                         setEditBonus(t.bonus > 0 ? String(t.bonus) : '');
                         setEditBonusNote(t.bonus_note || '');
                         setEditNotes(t.notes || '');
@@ -505,11 +514,16 @@ const TaskList: React.FC<TaskListProps> = ({
                         <span className="text-xs text-neutral-medium">{t.currency}</span>
                         <span className="text-[10px] text-neutral-medium/40 ml-2 opacity-0 group-hover/price:opacity-100 transition-opacity">✏️ sửa</span>
                       </p>
-                      {t.currency === 'USD' && t.exchange_rate > 0 && t.price > 0 && (
-                        <p className="text-emerald-400/80 text-[10px] font-bold">
-                          = {(t.price * t.exchange_rate).toLocaleString()} VNĐ (tỉ giá: {t.exchange_rate.toLocaleString()})
-                        </p>
-                      )}
+                      {t.currency === 'USD' && t.price > 0 && (() => {
+                        const isPaid = t.payment_status === 'paid';
+                        const rate = isPaid && t.exchange_rate > 0 ? t.exchange_rate : vcbSellRate;
+                        if (rate <= 0) return null;
+                        return (
+                          <p className="text-emerald-400/80 text-[10px] font-bold">
+                            = {(t.price * rate).toLocaleString()} VNĐ (tỉ giá: {rate.toLocaleString()}{!isPaid ? ' ⚡ live' : ' 🔒'})
+                          </p>
+                        );
+                      })()}
                       {t.bonus > 0 && (
                         <p className="text-yellow-400/80 text-[10px] font-bold">
                           + Bonus: {t.bonus.toLocaleString()} {t.currency}{t.bonus_note ? ` — ${t.bonus_note}` : ''}
@@ -560,7 +574,11 @@ const TaskList: React.FC<TaskListProps> = ({
                         setEditingPriceId(t.id!);
                         setEditPrice(t.price > 0 ? String(t.price) : '');
                         setEditCurrency(t.currency || 'VND');
-                        setEditRate(t.exchange_rate > 0 ? String(t.exchange_rate) : (t.currency === 'USD' && vcbSellRate > 0 ? String(vcbSellRate) : ''));
+                        setEditRate(
+                          t.payment_status === 'paid' && t.exchange_rate > 0
+                            ? String(t.exchange_rate)
+                            : (t.currency === 'USD' && vcbSellRate > 0 ? String(vcbSellRate) : '')
+                        );
                         setEditBonus(t.bonus > 0 ? String(t.bonus) : '');
                         setEditBonusNote(t.bonus_note || '');
                         setEditNotes(t.notes || '');
@@ -590,7 +608,11 @@ const TaskList: React.FC<TaskListProps> = ({
                             e.stopPropagation();
                             e.preventDefault();
                             const next = t.payment_status === 'paid' ? 'unpaid' : 'paid';
-                            onUpdate(t.id!, { payment_status: next });
+                            const updates: Partial<WorkforceTask> = { payment_status: next };
+                            if (next === 'paid' && t.currency === 'USD' && vcbSellRate > 0) {
+                              updates.exchange_rate = vcbSellRate;
+                            }
+                            onUpdate(t.id!, updates);
                             onToast(next === 'paid' ? '💰 Đã đánh dấu thanh toán' : '⏳ Đã chuyển về chưa thanh toán', 'success');
                           }}
                           className={`text-[9px] font-bold px-2.5 py-1 rounded-md cursor-pointer hover:scale-105 active:scale-95 transition-all ${

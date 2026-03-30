@@ -156,7 +156,8 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
     } catch { /* ignore */ }
 
     const taskRows = detailTasks.map((t, i) => {
-      const vndEquiv = t.currency === 'USD' && t.exchange_rate > 0 ? (t.price * t.exchange_rate).toLocaleString() : '';
+      const effectiveRate = t.currency === 'USD' ? (t.payment_status === 'paid' && t.exchange_rate > 0 ? t.exchange_rate : vcbSellRate) : 0;
+      const vndEquiv = t.currency === 'USD' && effectiveRate > 0 ? (t.price * effectiveRate).toLocaleString() : '';
       return `<tr>
         <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;color:#666">${i + 1}</td>
         <td style="padding:8px;border-bottom:1px solid #eee;max-width:250px">${t.title}</td>
@@ -174,12 +175,18 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
     const totalPrice = detailTasks.reduce((s, t) => s + (t.price || 0), 0);
     const totalBonus = detailTasks.reduce((s, t) => s + (t.bonus || 0), 0);
     const totalVND = detailTasks.reduce((s, t) => {
-      if (t.currency === 'USD' && t.exchange_rate > 0) return s + t.price * t.exchange_rate;
+      if (t.currency === 'USD') {
+        const rate = t.payment_status === 'paid' && t.exchange_rate > 0 ? t.exchange_rate : vcbSellRate;
+        return rate > 0 ? s + t.price * rate : s;
+      }
       if (t.currency === 'VND') return s + t.price;
       return s;
     }, 0);
     const totalBonusVND = detailTasks.reduce((s, t) => {
-      if (t.currency === 'USD' && t.exchange_rate > 0) return s + (t.bonus || 0) * t.exchange_rate;
+      if (t.currency === 'USD') {
+        const rate = t.payment_status === 'paid' && t.exchange_rate > 0 ? t.exchange_rate : vcbSellRate;
+        return rate > 0 ? s + (t.bonus || 0) * rate : s;
+      }
       if (t.currency === 'VND') return s + (t.bonus || 0);
       return s;
     }, 0);
