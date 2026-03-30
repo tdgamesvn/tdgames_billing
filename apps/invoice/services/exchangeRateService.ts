@@ -26,3 +26,11 @@ export async function fetchExchangeRate(): Promise<ExchangeRateData> {
   }
   return res.json();
 }
+
+/**
+ * Calculate avg exchange rate = (buy + sell) / 2
+ * Used for all USD→VND conversions.
+ */
+export function avgRate(data: ExchangeRateData): number {
+  return Math.round((data.buy + data.sell) / 2);
+}

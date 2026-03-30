@@ -3,7 +3,7 @@ import { DEFAULT_INVOICE } from '@/constants';
 import { InvoiceData, ServiceItem, BankingInfo, ClientInfo, ClientRecord, StudioRecord, StudioInfo, AccountUser } from '@/types';
 import { supabase } from '@/services/supabaseClient';
 import { createAndPollDraft, getEInvoiceDetail } from '../services/sePayService';
-import { fetchExchangeRate, ExchangeRateData } from '../services/exchangeRateService';
+import { fetchExchangeRate, ExchangeRateData, avgRate } from '../services/exchangeRateService';
 import {
   saveInvoiceToCloud,
   fetchInvoicesFromCloud,
@@ -179,8 +179,8 @@ export function useInvoiceState(initialTab?: string | null) {
       try {
         const data = await fetchExchangeRate();
         setVcbRate(data);
-        // Auto-populate the exchange rate with VCB sell rate
-        if (data.sell > 0) setExchangeRate(data.sell);
+        // Auto-populate the exchange rate with VCB avg rate (buy + sell) / 2
+        if (data.buy > 0 && data.sell > 0) setExchangeRate(avgRate(data));
       } catch (err) {
         console.warn('[VCB Rate] Failed to fetch:', err);
       } finally {

@@ -3,7 +3,7 @@ import AppBackground from '@/components/AppBackground';
 import { AccountUser } from '@/types';
 import { ToastNotification } from '@/components/ToastNotification';
 import { Navbar } from '@/apps/invoice/components/Navbar';
-import { fetchExchangeRate, ExchangeRateData } from '@/apps/invoice/services/exchangeRateService';
+import { fetchExchangeRate, ExchangeRateData, avgRate } from '@/apps/invoice/services/exchangeRateService';
 import { useWorkforceState, WorkforceTab } from '../hooks/useWorkforceState';
 import WorkerList from './WorkerList';
 import WorkerForm from './WorkerForm';
@@ -146,7 +146,7 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack, initia
             onUpdate={state.handleUpdateTask}
             onRefresh={state.loadAll}
             onToast={showToast}
-            vcbSellRate={vcbRate?.sell || 0}
+            vcbSellRate={vcbRate ? avgRate(vcbRate) : 0}
           />
         )}
         {state.activeTab === 'settlements' && (
@@ -154,7 +154,7 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack, initia
             settlements={state.settlements}
             workers={state.workers}
             tasks={state.tasks}
-            vcbSellRate={vcbRate?.sell || 0}
+            vcbSellRate={vcbRate ? avgRate(vcbRate) : 0}
             onCreateSettlement={state.handleCreateSettlement}
             onUpdateSettlement={state.handleUpdateSettlement}
             onDeleteSettlement={state.handleDeleteSettlement}
@@ -164,7 +164,7 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack, initia
           <ProjectAcceptanceManager
             acceptances={state.projectAcceptances}
             tasks={state.tasks}
-            vcbSellRate={vcbRate?.sell || 0}
+            vcbSellRate={vcbRate ? avgRate(vcbRate) : 0}
             onCreateAcceptance={state.handleCreateProjectAcceptance}
             onUpdateAcceptance={state.handleUpdateProjectAcceptance}
             onDeleteAcceptance={state.handleDeleteProjectAcceptance}

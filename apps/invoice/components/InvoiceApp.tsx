@@ -1,6 +1,7 @@
 import React from 'react';
 import AppBackground from '@/components/AppBackground';
 import { useInvoiceState } from '../hooks/useInvoiceState';
+import { avgRate } from '../services/exchangeRateService';
 import { AccountUser } from '@/types';
 
 // Invoice‑specific components
@@ -279,12 +280,15 @@ const InvoiceApp: React.FC<InvoiceAppProps> = ({ currentUser, onBack, initialTab
                   placeholder="25400" min="1"
                 />
                 <p className={`text-[11px] mt-1 ${state.invoice.theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>
-                  {state.vcbRate ? (
-                    <button type="button" onClick={() => state.setExchangeRate(state.vcbRate!.sell)}
-                      className="underline decoration-dotted hover:text-primary transition-colors cursor-pointer">
-                      🏦 VCB sell rate: {state.vcbRate.sell.toLocaleString('vi-VN')} VND
-                    </button>
-                  ) : 'Use the USD sell rate from your bank on the transaction date'}
+                  {state.vcbRate ? (() => {
+                    const avg = avgRate(state.vcbRate!);
+                    return (
+                      <button type="button" onClick={() => state.setExchangeRate(avg)}
+                        className="underline decoration-dotted hover:text-primary transition-colors cursor-pointer">
+                        🏦 VCB TB: {avg.toLocaleString('vi-VN')} VND (Mua {state.vcbRate!.buy.toLocaleString('vi-VN')} + Bán {state.vcbRate!.sell.toLocaleString('vi-VN')} / 2)
+                      </button>
+                    );
+                  })() : 'Dùng tỉ giá trung bình (mua + bán) / 2 của ngân hàng'}
                 </p>
               </div>
               <div className={`mb-6 p-4 rounded-xl ${state.invoice.theme === 'dark' ? 'bg-emerald-500/5 border border-emerald-500/20' : 'bg-emerald-50 border border-emerald-200'}`}>

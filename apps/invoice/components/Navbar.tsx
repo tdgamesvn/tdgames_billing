@@ -41,11 +41,18 @@ export const Navbar: React.FC<NavbarProps> = ({ theme, currentUser, activeTab, a
           {vcbRateLoading ? (
             <span className="animate-pulse text-xs text-neutral-medium">loading...</span>
           ) : vcbRate ? (
-            <div className="flex flex-col items-end leading-none">
-              <span className={`text-sm font-black tabular-nums ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                {vcbRate.sell.toLocaleString('vi-VN')} <span className={`text-[9px] font-bold ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>₫</span>
-              </span>
-              <span className={`text-[8px] font-bold uppercase tracking-wider mt-0.5 ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>
+            <div className="flex flex-col items-end leading-none gap-0.5">
+              <div className="flex items-center gap-2">
+                <span className={`text-[9px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-cyan-400/70' : 'text-cyan-600'}`}>Mua</span>
+                <span className={`text-xs font-black tabular-nums ${theme === 'dark' ? 'text-cyan-400' : 'text-cyan-600'}`}>
+                  {vcbRate.buy.toLocaleString('vi-VN')}
+                </span>
+                <span className={`text-[9px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-white/50' : 'text-gray-400'}`}>Bán</span>
+                <span className={`text-xs font-black tabular-nums ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                  {vcbRate.sell.toLocaleString('vi-VN')}
+                </span>
+              </div>
+              <span className={`text-[8px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-neutral-medium' : 'text-gray-400'}`}>
                 VCB • {(() => {
                   try {
                     const d = new Date(vcbRate.updated_at);
