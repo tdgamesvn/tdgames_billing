@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { WorkforceTask, ProjectAcceptance } from '@/types';
 import * as paSvc from '../services/projectAcceptanceService';
 
-type AcceptanceTask = WorkforceTask & { client_price: number };
+type AcceptanceTask = WorkforceTask & { client_price: number; acceptance_note: string };
 
 interface ProjectAcceptanceManagerProps {
   acceptances: ProjectAcceptance[];
@@ -40,6 +40,57 @@ const STATUS_NEXT_LABEL: Record<string, string> = {
 const inputCls = "w-full bg-transparent border border-primary/10 rounded-xl px-4 py-3 text-white placeholder-neutral-medium/40 focus:outline-none focus:border-primary/40 transition-all text-sm";
 const labelCls = "text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2 block";
 
+// Internal task status labels and colors (for display)
+const TASK_STATUS_LABELS: Record<string, string> = {
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  approved: 'Approved',
+  rejected: 'Rejected',
+};
+const TASK_STATUS_COLORS: Record<string, string> = {
+  in_progress: 'bg-blue-500/20 text-blue-400',
+  completed: 'bg-yellow-500/20 text-yellow-400',
+  approved: 'bg-emerald-500/20 text-emerald-400',
+  rejected: 'bg-red-500/20 text-red-400',
+};
+
+// ClickUp status color palette (auto-assigned by index)
+const CLICKUP_STATUS_PALETTE = [
+  'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  'bg-pink-500/20 text-pink-400 border-pink-500/30',
+  'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  'bg-red-500/20 text-red-400 border-red-500/30',
+  'bg-teal-500/20 text-teal-400 border-teal-500/30',
+  'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
+];
+
+// Known ClickUp status → fixed color map for consistency
+const CLICKUP_STATUS_COLORS: Record<string, { bg: string; text: string; hex: string }> = {
+  'approved':       { bg: 'bg-emerald-500/20', text: 'text-emerald-400', hex: '#10b981' },
+  'complete':       { bg: 'bg-emerald-500/20', text: 'text-emerald-400', hex: '#10b981' },
+  'closed':         { bg: 'bg-emerald-500/20', text: 'text-emerald-400', hex: '#10b981' },
+  'client_review':  { bg: 'bg-amber-500/20',   text: 'text-amber-400',   hex: '#f59e0b' },
+  'review':         { bg: 'bg-yellow-500/20',  text: 'text-yellow-400',  hex: '#eab308' },
+  'lead_check':     { bg: 'bg-orange-500/20',  text: 'text-orange-400',  hex: '#f97316' },
+  'in progess':     { bg: 'bg-blue-500/20',    text: 'text-blue-400',    hex: '#3b82f6' },
+  'in progress':    { bg: 'bg-blue-500/20',    text: 'text-blue-400',    hex: '#3b82f6' },
+  'fix':            { bg: 'bg-red-500/20',     text: 'text-red-400',     hex: '#ef4444' },
+  'new request':    { bg: 'bg-purple-500/20',  text: 'text-purple-400',  hex: '#a855f7' },
+};
+
+const getClickupStatusStyle = (status: string) => {
+  const lower = status.toLowerCase();
+  const known = CLICKUP_STATUS_COLORS[lower];
+  if (known) return { className: `${known.bg} ${known.text}`, hex: known.hex };
+  // Fallback: hash-based color from palette
+  const hash = lower.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  return { className: 'bg-neutral-500/20 text-neutral-400', hex: '#9ca3af' };
+};
+
 type View = 'list' | 'create' | 'detail';
 type CompanyId = 'tdgames' | 'tdconsulting';
 
@@ -72,25 +123,58 @@ const ProjectAcceptanceManager: React.FC<ProjectAcceptanceManagerProps> = ({
   const [selPeriod, setSelPeriod] = useState('');
   const [selNotes, setSelNotes] = useState('');
   const [selTaskIds, setSelTaskIds] = useState<string[]>([]);
+  // ClickUp status filter for task selection during create (dynamic per project)
+  const [selClickupStatusFilter, setSelClickupStatusFilter] = useState<string[]>([]);
   // Custom client prices per task (different from freelancer price)
   const [customPrices, setCustomPrices] = useState<Record<string, number>>({});
 
-  // Get unique clients and projects
-  const closedTasks = tasks.filter(t => !!t.closed_date && t.status === 'approved');
-  const uniqueClients = [...new Set(closedTasks.map(t => t.clickup_space_name).filter(Boolean))].sort() as string[];
+  // Get unique clients and projects (no status pre-filter — show all)
+  const uniqueClients = [...new Set(tasks.map(t => t.clickup_space_name).filter(Boolean))].sort() as string[];
   const uniqueProjects = [...new Set(
-    closedTasks
+    tasks
       .filter(t => !selClient || t.clickup_space_name === selClient)
       .map(t => t.clickup_folder_name)
       .filter(Boolean)
   )].sort() as string[];
 
-  // Eligible tasks for creation
-  const eligibleTasks = closedTasks.filter(t => {
+  // Tasks scoped to selected client/project (before clickup_status filter)
+  const scopedTasks = tasks.filter(t => {
     if (selClient && t.clickup_space_name !== selClient) return false;
     if (selProject && t.clickup_folder_name !== selProject) return false;
     return true;
   });
+
+  // All unique ClickUp statuses available in the current scope
+  const availableClickupStatuses = [...new Set(
+    scopedTasks.map(t => t.clickup_status).filter(Boolean)
+  )].sort() as string[];
+
+  // Eligible tasks = scoped + filtered by selected ClickUp statuses
+  const eligibleTasks = scopedTasks.filter(t => {
+    if (selClickupStatusFilter.length === 0) return true; // no filter = show all
+    return selClickupStatusFilter.includes(t.clickup_status || '');
+  });
+
+  // Toggle clickup status filter
+  const toggleStatusFilter = (status: string) => {
+    setSelClickupStatusFilter(prev =>
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+    setSelTaskIds([]);
+    setCustomPrices({});
+  };
+
+  // Select all / deselect all statuses
+  const selectAllStatuses = () => {
+    setSelClickupStatusFilter([...availableClickupStatuses]);
+    setSelTaskIds([]);
+    setCustomPrices({});
+  };
+  const deselectAllStatuses = () => {
+    setSelClickupStatusFilter([]);
+    setSelTaskIds([]);
+    setCustomPrices({});
+  };
 
   const selectedTasksData = eligibleTasks.filter(t => selTaskIds.includes(t.id!));
   const selectedTotal = selectedTasksData.reduce((s, t) => s + (customPrices[t.id!] ?? 0), 0);
@@ -106,6 +190,7 @@ const ProjectAcceptanceManager: React.FC<ProjectAcceptanceManagerProps> = ({
     setSelTaskIds([]);
     setSelNotes('');
     setCustomPrices({});
+    setSelClickupStatusFilter([]);
   };
 
   const toggleTask = (tid: string) =>
@@ -143,6 +228,16 @@ const ProjectAcceptanceManager: React.FC<ProjectAcceptanceManagerProps> = ({
     } catch { /* revert if needed */ }
   };
 
+  // Update note for a task inline in detail view
+  const handleUpdateDetailNote = async (taskId: string, newNote: string) => {
+    if (!selectedAcceptance) return;
+    // Optimistic update
+    setDetailTasks(prev => prev.map(t => t.id === taskId ? { ...t, acceptance_note: newNote } : t));
+    try {
+      await paSvc.updateAcceptanceTaskNote(selectedAcceptance.id!, taskId, newNote);
+    } catch { /* revert if needed */ }
+  };
+
   // PDF Export — English, client-facing, no worker info, USD only, uses client_price
   const handleExportPDF = async () => {
     if (!selectedAcceptance) return;
@@ -161,14 +256,33 @@ const ProjectAcceptanceManager: React.FC<ProjectAcceptanceManagerProps> = ({
       });
     } catch { /* ignore */ }
 
-    const taskRows = detailTasks.map((t, i) => {
-      const price = t.client_price || 0;
-      return `<tr>
-        <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;color:#666">${i + 1}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;max-width:380px">${t.title}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;white-space:nowrap">${t.closed_date || ''}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${price > 0 ? '$' + price.toLocaleString('en-US') : '—'}</td>
-      </tr>`;
+    // Group tasks by clickup_list_name
+    const pdfListGroups = new Map<string, typeof detailTasks>();
+    detailTasks.forEach(t => {
+      const listName = t.clickup_list_name || 'Other';
+      if (!pdfListGroups.has(listName)) pdfListGroups.set(listName, []);
+      pdfListGroups.get(listName)!.push(t);
+    });
+
+    let rowIdx = 0;
+    const taskRows = Array.from(pdfListGroups.entries()).map(([listName, groupTasks]) => {
+      const groupSub = groupTasks.reduce((s, t) => s + (t.client_price || 0), 0);
+      const hdr = `<tr><td colspan="6" style="padding:10px 8px 6px;font-weight:800;font-size:12px;color:#1e293b;border-bottom:2px solid #e2e8f0;text-transform:uppercase;letter-spacing:1px;background:#f8fafc">${listName} <span style="font-weight:400;font-size:10px;color:#94a3b8;margin-left:8px">${groupTasks.length} tasks</span></td></tr>`;
+      const rows = groupTasks.map(t => {
+        rowIdx++;
+        const price = t.client_price || 0;
+        const cs = t.clickup_status || t.status || '';
+        const ss = getClickupStatusStyle(cs);
+        return `<tr>
+          <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;color:#666">${rowIdx}</td>
+          <td style="padding:8px;border-bottom:1px solid #eee;max-width:380px">${t.title}</td>
+          <td style="padding:8px;border-bottom:1px solid #eee;white-space:nowrap"><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${ss.hex}15;color:${ss.hex};text-transform:capitalize">${cs}</span></td>
+          <td style="padding:8px;border-bottom:1px solid #eee;white-space:nowrap">${t.closed_date || ''}</td>
+          <td style="padding:8px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${price > 0 ? '$' + price.toLocaleString('en-US') : ''}</td>
+          <td style="padding:8px;border-bottom:1px solid #eee;color:#888;font-size:11px">${t.acceptance_note || ''}</td>
+        </tr>`;
+      }).join('');
+      return hdr + rows;
     }).join('');
 
     const totalClientPrice = detailTasks.reduce((s, t) => s + (t.client_price || 0), 0);
@@ -225,8 +339,8 @@ const ProjectAcceptanceManager: React.FC<ProjectAcceptanceManagerProps> = ({
     </div>
     <table>
       <thead><tr>
-        <th style="text-align:center">#</th><th>Task Description</th><th>Completed</th>
-        <th style="text-align:right">Amount (USD)</th>
+        <th style="text-align:center">#</th><th>Task Description</th><th>Status</th><th>Completed</th>
+        <th style="text-align:right">Amount (USD)</th><th>Notes</th>
       </tr></thead>
       <tbody>${taskRows}</tbody>
     </table>
@@ -384,49 +498,89 @@ const ProjectAcceptanceManager: React.FC<ProjectAcceptanceManagerProps> = ({
                 <tr className="border-b border-primary/10">
                   <th className="text-left px-4 py-3 text-[9px] font-black uppercase tracking-widest text-neutral-medium w-8">#</th>
                   <th className="text-left px-4 py-3 text-[9px] font-black uppercase tracking-widest text-neutral-medium min-w-[250px]">Task Description</th>
+                  <th className="text-left px-4 py-3 text-[9px] font-black uppercase tracking-widest text-neutral-medium whitespace-nowrap">Status</th>
                   <th className="text-left px-4 py-3 text-[9px] font-black uppercase tracking-widest text-neutral-medium whitespace-nowrap">Completed</th>
                   <th className="text-right px-4 py-3 text-[9px] font-black uppercase tracking-widest text-neutral-medium">Client Price (USD)</th>
+                  <th className="text-left px-4 py-3 text-[9px] font-black uppercase tracking-widest text-neutral-medium min-w-[150px]">Notes</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingTasks ? (
-                  <tr><td colSpan={4} className="text-center py-8 text-neutral-medium">Loading...</td></tr>
+                  <tr><td colSpan={6} className="text-center py-8 text-neutral-medium">Loading...</td></tr>
                 ) : detailTasks.length === 0 ? (
-                  <tr><td colSpan={4} className="text-center py-8 text-neutral-medium">No tasks</td></tr>
-                ) : detailTasks.map((t, i) => (
-                  <tr key={t.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                    <td className="px-4 py-3 text-neutral-medium/50">{i + 1}</td>
-                    <td className="px-4 py-3 text-white font-medium">{t.title}</td>
-                    <td className="px-4 py-3 text-neutral-medium text-xs whitespace-nowrap">{t.closed_date || '—'}</td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="inline-flex items-center gap-1.5 justify-end">
-                        <span className="text-neutral-medium/40 text-xs">$</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          defaultValue={t.client_price || ''}
-                          onBlur={e => {
-                            const val = parseFloat(e.target.value) || 0;
-                            if (val !== t.client_price) {
-                              handleUpdateDetailPrice(t.id!, val);
-                            }
-                          }}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                          }}
-                          placeholder="0"
-                          className="w-28 bg-transparent border border-primary/10 rounded-lg px-3 py-1.5 text-blue-400 font-bold text-sm text-right focus:outline-none focus:border-blue-500/40 transition-all placeholder-neutral-medium/20 hover:border-primary/20"
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                  <tr><td colSpan={6} className="text-center py-8 text-neutral-medium">No tasks</td></tr>
+                ) : (() => {
+                  const listGroups = new Map<string, AcceptanceTask[]>();
+                  detailTasks.forEach(t => {
+                    const ln = t.clickup_list_name || 'Other';
+                    if (!listGroups.has(ln)) listGroups.set(ln, []);
+                    listGroups.get(ln)!.push(t);
+                  });
+                  let idx = 0;
+                  return Array.from(listGroups.entries()).map(([listName, groupTasks]) => {
+                    const sub = groupTasks.reduce((s, t) => s + (t.client_price || 0), 0);
+                    return (
+                      <React.Fragment key={listName}>
+                        <tr className="bg-white/[0.03]">
+                          <td colSpan={6} className="px-4 py-2.5 border-b border-primary/20">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">
+                                {listName}
+                                <span className="text-neutral-medium/50 font-medium ml-2 normal-case tracking-normal">
+                                  {groupTasks.length} tasks
+                                </span>
+                              </span>
+                              <span className="text-[10px] font-bold text-blue-400/70">
+                                {fmtUSD(sub)}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        {groupTasks.map(t => {
+                          idx++;
+                          const clickupStatus = t.clickup_status || t.status || '';
+                          const style = getClickupStatusStyle(clickupStatus);
+                          return (
+                            <tr key={t.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                              <td className="px-4 py-3 text-neutral-medium/50">{idx}</td>
+                              <td className="px-4 py-3 text-white font-medium">{t.title}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md capitalize ${style.className}`}>
+                                  {clickupStatus}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-neutral-medium text-xs whitespace-nowrap">{t.closed_date || '\u2014'}</td>
+                              <td className="px-4 py-2 text-right">
+                                <div className="inline-flex items-center gap-1.5 justify-end">
+                                  <span className="text-neutral-medium/40 text-xs">$</span>
+                                  <input type="number" min="0" step="1" defaultValue={t.client_price || ''}
+                                    onBlur={e => { const v = parseFloat(e.target.value) || 0; if (v !== t.client_price) handleUpdateDetailPrice(t.id!, v); }}
+                                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                    placeholder="0"
+                                    className="w-28 bg-transparent border border-primary/10 rounded-lg px-3 py-1.5 text-blue-400 font-bold text-sm text-right focus:outline-none focus:border-blue-500/40 transition-all placeholder-neutral-medium/20 hover:border-primary/20"
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-4 py-2">
+                                <input type="text" defaultValue={t.acceptance_note || ''}
+                                  onBlur={e => { const v = e.target.value.trim(); if (v !== (t.acceptance_note || '')) handleUpdateDetailNote(t.id!, v); }}
+                                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                  placeholder="Add note..."
+                                  className="w-full bg-transparent border border-primary/10 rounded-lg px-3 py-1.5 text-neutral-medium text-xs focus:outline-none focus:border-blue-500/40 transition-all placeholder-neutral-medium/20 hover:border-primary/20"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  });
+                })()}
               </tbody>
               {detailTasks.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-blue-500/20">
-                    <td colSpan={3} className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-neutral-medium">Subtotal</td>
+                    <td colSpan={5} className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-neutral-medium">Subtotal</td>
                     <td className="px-4 py-3 text-right text-blue-400 font-black text-base">{fmtUSD(totalClientPrice)}</td>
                   </tr>
                 </tfoot>
@@ -437,7 +591,7 @@ const ProjectAcceptanceManager: React.FC<ProjectAcceptanceManagerProps> = ({
 
         {/* Discount controls */}
         <div className="rounded-[20px] border border-primary/10 bg-surface p-5">
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-4">Discount / Chiết khấu</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-4">Discount</p>
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center rounded-xl border border-primary/10 overflow-hidden">
               <button
@@ -513,7 +667,7 @@ const ProjectAcceptanceManager: React.FC<ProjectAcceptanceManagerProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className={labelCls}>Client (Space)</label>
-              <select className={inputCls} value={selClient} onChange={e => { setSelClient(e.target.value); setSelProject(''); setSelTaskIds([]); setCustomPrices({}); }}>
+              <select className={inputCls} value={selClient} onChange={e => { setSelClient(e.target.value); setSelProject(''); setSelTaskIds([]); setCustomPrices({}); setSelClickupStatusFilter([]); }}>
                 <option value="">-- All clients --</option>
                 {uniqueClients.map(c => (
                   <option key={c} value={c}>{c}</option>
@@ -522,7 +676,7 @@ const ProjectAcceptanceManager: React.FC<ProjectAcceptanceManagerProps> = ({
             </div>
             <div>
               <label className={labelCls}>Project (Folder) *</label>
-              <select className={inputCls} value={selProject} onChange={e => { setSelProject(e.target.value); setSelTaskIds([]); setCustomPrices({}); }}>
+              <select className={inputCls} value={selProject} onChange={e => { setSelProject(e.target.value); setSelTaskIds([]); setCustomPrices({}); setSelClickupStatusFilter([]); }}>
                 <option value="">-- Select project --</option>
                 {uniqueProjects.map(p => (
                   <option key={p} value={p}>{p}</option>
@@ -539,6 +693,43 @@ const ProjectAcceptanceManager: React.FC<ProjectAcceptanceManagerProps> = ({
             </div>
           </div>
 
+          {/* ClickUp Status Filter — dynamic per project */}
+          {(selProject || selClient) && availableClickupStatuses.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className={labelCls + ' !mb-0'}>Filter by ClickUp Status ({selClickupStatusFilter.length}/{availableClickupStatuses.length})</label>
+                <div className="flex gap-2">
+                  <button onClick={selectAllStatuses} className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors font-bold">Select all</button>
+                  <span className="text-neutral-medium/30">|</span>
+                  <button onClick={deselectAllStatuses} className="text-[10px] text-neutral-medium hover:text-white transition-colors font-bold">Clear</button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {availableClickupStatuses.map((status, idx) => {
+                  const isActive = selClickupStatusFilter.includes(status);
+                  const colorCls = CLICKUP_STATUS_PALETTE[idx % CLICKUP_STATUS_PALETTE.length];
+                  const count = scopedTasks.filter(t => t.clickup_status === status).length;
+                  return (
+                    <button
+                      key={status}
+                      onClick={() => toggleStatusFilter(status)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold tracking-wider transition-all border ${
+                        isActive
+                          ? colorCls
+                          : 'text-neutral-medium/50 border-primary/10 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      {isActive ? '✓ ' : ''}{status} <span className="opacity-50 ml-1">({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {selClickupStatusFilter.length === 0 && (
+                <p className="text-neutral-medium/40 text-[10px] mt-1.5">💡 No filter applied — showing all {scopedTasks.length} tasks</p>
+              )}
+            </div>
+          )}
+
           {/* Task Selection — editable client price */}
           {(selProject || selClient) && (
             <div className="space-y-3">
@@ -552,44 +743,68 @@ const ProjectAcceptanceManager: React.FC<ProjectAcceptanceManagerProps> = ({
               </div>
 
               {eligibleTasks.length === 0 ? (
-                <p className="text-neutral-medium text-sm py-4 text-center">No completed tasks for this project</p>
+                <p className="text-neutral-medium text-sm py-4 text-center">No tasks match the current filter</p>
               ) : (
-                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-                  {eligibleTasks.map(t => {
-                    const isSelected = selTaskIds.includes(t.id!);
-                    const clientPrice = customPrices[t.id!] ?? 0;
-                    return (
-                      <div key={t.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                        isSelected ? 'border-blue-500/40 bg-blue-500/5' : 'border-primary/10 hover:border-primary/20'
-                      }`}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleTask(t.id!)}
-                          className="accent-blue-500 w-4 h-4 shrink-0 cursor-pointer"
-                        />
-                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleTask(t.id!)}>
-                          <p className="text-white text-sm font-medium truncate">{t.title}</p>
-                          <div className="flex items-center gap-1.5 text-[10px] text-neutral-medium/50 mt-0.5">
-                            {t.closed_date && <span>Closed: {t.closed_date}</span>}
-                          </div>
+                <div className="space-y-1 max-h-[400px] overflow-y-auto pr-1">
+                  {(() => {
+                    const createListGroups = new Map<string, WorkforceTask[]>();
+                    eligibleTasks.forEach(t => {
+                      const ln = t.clickup_list_name || 'Other';
+                      if (!createListGroups.has(ln)) createListGroups.set(ln, []);
+                      createListGroups.get(ln)!.push(t);
+                    });
+                    return Array.from(createListGroups.entries()).map(([listName, groupTasks]) => (
+                      <div key={listName} className="mb-3">
+                        <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03] border border-primary/10 mb-1.5">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">
+                            {listName}
+                            <span className="text-neutral-medium/50 font-medium ml-2 normal-case tracking-normal">
+                              {groupTasks.length} tasks
+                            </span>
+                          </span>
+                          <span className="text-[10px] text-neutral-medium/50">
+                            {groupTasks.filter(t => selTaskIds.includes(t.id!)).length} selected
+                          </span>
                         </div>
-                        <div className="shrink-0 flex items-center gap-2">
-                          <span className="text-neutral-medium/40 text-xs">$</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={clientPrice || ''}
-                            onChange={e => setCustomPrice(t.id!, parseFloat(e.target.value) || 0)}
-                            placeholder="0"
-                            className="w-24 bg-transparent border border-primary/10 rounded-lg px-3 py-1.5 text-blue-400 font-bold text-sm text-right focus:outline-none focus:border-blue-500/40 transition-all placeholder-neutral-medium/20"
-                          />
-                          <span className="text-neutral-medium/40 text-[10px]">USD</span>
+                        <div className="space-y-1.5 pl-1">
+                          {groupTasks.map(t => {
+                            const isSelected = selTaskIds.includes(t.id!);
+                            const clientPrice = customPrices[t.id!] ?? 0;
+                            const clickupStatus = t.clickup_status || t.status || '';
+                            const statusStyle = getClickupStatusStyle(clickupStatus);
+                            return (
+                              <div key={t.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                                isSelected ? 'border-blue-500/40 bg-blue-500/5' : 'border-primary/10 hover:border-primary/20'
+                              }`}>
+                                <input type="checkbox" checked={isSelected} onChange={() => toggleTask(t.id!)}
+                                  className="accent-blue-500 w-4 h-4 shrink-0 cursor-pointer" />
+                                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleTask(t.id!)}>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-white text-sm font-medium truncate">{t.title}</p>
+                                    <span className={`shrink-0 text-[10px] font-bold px-2.5 py-0.5 rounded-md capitalize ${statusStyle.className}`}>
+                                      {clickupStatus}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-neutral-medium/50 mt-0.5">
+                                    {t.closed_date && <span>Closed: {t.closed_date}</span>}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 flex items-center gap-2">
+                                  <span className="text-neutral-medium/40 text-xs">$</span>
+                                  <input type="number" min="0" step="1" value={clientPrice || ''}
+                                    onChange={e => setCustomPrice(t.id!, parseFloat(e.target.value) || 0)}
+                                    placeholder="0"
+                                    className="w-24 bg-transparent border border-primary/10 rounded-lg px-3 py-1.5 text-blue-400 font-bold text-sm text-right focus:outline-none focus:border-blue-500/40 transition-all placeholder-neutral-medium/20"
+                                  />
+                                  <span className="text-neutral-medium/40 text-[10px]">USD</span>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                    );
-                  })}
+                    ));
+                  })()}
                 </div>
               )}
 

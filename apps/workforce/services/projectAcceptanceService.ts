@@ -79,12 +79,13 @@ export async function fetchProjectAcceptanceTasks(
 ): Promise<(WorkforceTask & { client_price: number })[]> {
   const { data, error } = await supabase
     .from('wf_project_acceptance_tasks')
-    .select('client_price, task:wf_tasks(*, worker:wf_workers(*))')
+    .select('client_price, note, task:wf_tasks(*, worker:wf_workers(*))')
     .eq('acceptance_id', acceptanceId);
   if (error) throw error;
   return (data || []).map((d: any) => ({
     ...d.task,
     client_price: d.client_price ?? 0,
+    acceptance_note: d.note ?? '',
   }));
 }
 
@@ -97,6 +98,20 @@ export async function updateAcceptanceTaskClientPrice(
   const { error } = await supabase
     .from('wf_project_acceptance_tasks')
     .update({ client_price: clientPrice })
+    .eq('acceptance_id', acceptanceId)
+    .eq('task_id', taskId);
+  if (error) throw error;
+}
+
+// ── Update note for a single acceptance task ──────────────
+export async function updateAcceptanceTaskNote(
+  acceptanceId: string,
+  taskId: string,
+  note: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('wf_project_acceptance_tasks')
+    .update({ note })
     .eq('acceptance_id', acceptanceId)
     .eq('task_id', taskId);
   if (error) throw error;
