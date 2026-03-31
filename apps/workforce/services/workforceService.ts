@@ -11,6 +11,57 @@ export async function fetchWorkers(): Promise<Worker[]> {
   return data || [];
 }
 
+/**
+ * Sync worker data from HR employees (hr_employees → wf_workers).
+ * Matches by email. Updates phone, bank, tax_code if missing in wf_workers.
+ * Returns number of workers updated.
+ */
+export async function syncWorkersFromHR(): Promise<number> {
+  // 1. Fetch all workers
+  const { data: workers, error: wErr } = await supabase
+    .from('wf_workers')
+    .select('*');
+  if (wErr) throw wErr;
+  if (!workers || workers.length === 0) return 0;
+
+  // 2. Get matching HR employees (freelancers) by email
+  const emails = workers.map(w => w.email).filter(Boolean);
+  if (emails.length === 0) return 0;
+
+  const { data: hrEmployees, error: hErr } = await supabase
+    .from('hr_employees')
+    .select('email, phone, bank_name, bank_account, bank_branch, tax_code, address, id_number, full_name, date_of_birth, gender')
+    .in('email', emails);
+  if (hErr) throw hErr;
+  if (!hrEmployees || hrEmployees.length === 0) return 0;
+
+  // 3. Build lookup by email
+  const hrByEmail = new Map(hrEmployees.map(h => [h.email.toLowerCase(), h]));
+
+  // 4. Update workers with missing fields from HR
+  let updatedCount = 0;
+  for (const w of workers) {
+    const hr = hrByEmail.get(w.email?.toLowerCase());
+    if (!hr) continue;
+
+    const updates: Record<string, any> = {};
+    if (!w.phone && hr.phone) updates.phone = hr.phone;
+    if (!w.bank_name && hr.bank_name) updates.bank_name = hr.bank_name;
+    if (!w.bank_account && hr.bank_account) updates.bank_account = hr.bank_account;
+    if (!w.tax_code && hr.tax_code) updates.tax_code = hr.tax_code;
+
+    if (Object.keys(updates).length > 0) {
+      const { error: uErr } = await supabase
+        .from('wf_workers')
+        .update(updates)
+        .eq('id', w.id);
+      if (!uErr) updatedCount++;
+    }
+  }
+
+  return updatedCount;
+}
+
 export async function saveWorker(w: Omit<Worker, 'id' | 'created_at'>): Promise<Worker> {
   const { data, error } = await supabase
     .from('wf_workers')

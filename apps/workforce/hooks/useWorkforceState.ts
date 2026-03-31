@@ -51,6 +51,15 @@ export function useWorkforceState(currentUsername: string, initialTab?: string |
       setTasks(t);
       setSettlements(s);
       setProjectAcceptances(pa);
+
+      // Auto-sync from HR in background (non-blocking)
+      svc.syncWorkersFromHR().then(count => {
+        if (count > 0) {
+          console.log(`[Sync] Updated ${count} workers from HR`);
+          // Reload workers to reflect synced data
+          svc.fetchWorkers().then(updated => setWorkers(updated));
+        }
+      }).catch(() => {});
     } catch (e: any) {
       setToast({ message: e.message || 'Lỗi tải dữ liệu', type: 'error' });
     } finally {
@@ -130,6 +139,22 @@ export function useWorkforceState(currentUsername: string, initialTab?: string |
       setToast({ message: 'Đã xóa', type: 'success' });
     } catch (e: any) {
       setToast({ message: e.message, type: 'error' });
+    }
+  };
+
+  // ── Sync from HR ──
+  const handleSyncFromHR = async () => {
+    try {
+      const count = await svc.syncWorkersFromHR();
+      if (count > 0) {
+        const updated = await svc.fetchWorkers();
+        setWorkers(updated);
+        setToast({ message: `✅ Đã đồng bộ ${count} nhân sự từ HR`, type: 'success' });
+      } else {
+        setToast({ message: 'Dữ liệu đã đồng bộ rồi, không có gì mới.', type: 'success' });
+      }
+    } catch (e: any) {
+      setToast({ message: e.message || 'Lỗi đồng bộ từ HR', type: 'error' });
     }
   };
 
@@ -312,7 +337,7 @@ export function useWorkforceState(currentUsername: string, initialTab?: string |
     filterWorkerType, setFilterWorkerType,
     filterTaskStatus, setFilterTaskStatus,
     filterTaskWorker, setFilterTaskWorker,
-    handleSaveWorker, handleUpdateWorker, handleDeleteWorker,
+    handleSaveWorker, handleUpdateWorker, handleDeleteWorker, handleSyncFromHR,
     handleSaveContract, handleUpdateContract, handleDeleteContract,
     handleSaveTask, handleUpdateTask, handleDeleteTask,
     handleCreateSettlement, handleUpdateSettlement, handleDeleteSettlement,

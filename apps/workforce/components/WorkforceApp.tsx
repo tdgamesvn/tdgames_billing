@@ -119,6 +119,7 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack, initia
             onToggleActive={(w) => state.handleUpdateWorker(w.id!, { is_active: !w.is_active })}
             onRefresh={state.loadAll}
             onAdd={() => { state.setEditingWorker(null); state.setActiveTab('workerForm'); }}
+            onSyncFromHR={state.handleSyncFromHR}
           />
         )}
         {state.activeTab === 'workerForm' && (

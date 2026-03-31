@@ -48,9 +48,21 @@ const labelCls = "text-[10px] font-black uppercase tracking-widest text-neutral-
 type View = 'list' | 'create' | 'detail';
 type CompanyId = 'tdgames' | 'tdconsulting';
 
-const COMPANY_CONFIG: Record<CompanyId, { name: string; logo: string; subtitle: string }> = {
-  tdgames: { name: 'TD Games Studio', logo: '/logo_td_notext.png', subtitle: 'CÔNG TY TNHH TD GAMES' },
-  tdconsulting: { name: 'TD Consulting', logo: '/logo_tdc.png', subtitle: 'CÔNG TY TNHH TD CONSULTING' },
+const COMPANY_CONFIG: Record<CompanyId, {
+  name: string; logo: string; subtitle: string;
+  fullName: string; address: string; taxCode: string;
+  representative: string; representativeTitle: string; gender: string;
+}> = {
+  tdgames: {
+    name: 'TD Games Studio', logo: '/logo_td_notext.png', subtitle: 'CÔNG TY TNHH TD GAMES',
+    fullName: 'Công ty TNHH TD Games', address: 'Xóm Ngoài, Xã Đông Anh, TP Hà Nội',
+    taxCode: '0111386856', representative: 'Đặng Thế Toàn', representativeTitle: 'Tổng Giám Đốc', gender: 'Ông',
+  },
+  tdconsulting: {
+    name: 'TD Consulting', logo: '/logo_tdc.png', subtitle: 'CÔNG TY TNHH TD CONSULTING',
+    fullName: 'Công ty TNHH TD Consulting', address: 'Xóm Ngoài, Xã Đông Anh, TP Hà Nội',
+    taxCode: '0109898663', representative: 'Nguyễn Thị Thùy Dung', representativeTitle: 'Tổng Giám Đốc', gender: 'Bà',
+  },
 };
 
 const SettlementManager: React.FC<SettlementManagerProps> = ({
@@ -196,12 +208,20 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
       body{font-family:'Segoe UI',Roboto,sans-serif;margin:40px;color:#222;font-size:13px}
       h1{font-size:24px;margin:0;color:#111}
       h2{font-size:16px;margin:0;color:#555;font-weight:400}
-      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px;border-bottom:3px solid #f59e0b;padding-bottom:20px}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;border-bottom:3px solid #f59e0b;padding-bottom:20px}
       .logo-row{display:flex;align-items:center;gap:12px}
       .logo-row img{width:48px;height:48px;object-fit:contain}
-      .meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:14px;color:#555;margin-bottom:10px}
-      .meta span{font-weight:700;color:#222;font-size:16px}
-      table{width:100%;border-collapse:collapse;margin:20px 0;font-size:12px}
+      .parties{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:20px}
+      .party-box{padding:14px 16px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb}
+      .party-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#333;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #f59e0b}
+      .party-info{font-size:12.5px;line-height:1.7}
+      .party-info .label{color:#666;display:inline-block;width:100px}
+      .party-info .value{color:#111;font-weight:500}
+      .party-info .value b{font-weight:700;font-size:13px}
+      .settlement-meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;padding:10px 16px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:13px}
+      .settlement-meta .label{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#92400e;font-weight:600}
+      .settlement-meta .val{font-weight:700;color:#222;font-size:14px}
+      table{width:100%;border-collapse:collapse;margin:16px 0;font-size:12px}
       tr{page-break-inside:avoid;break-inside:avoid}
       thead{display:table-header-group}
       th{padding:10px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#666;border-bottom:2px solid #222;white-space:nowrap}
@@ -209,35 +229,55 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
       .totals .row{padding:6px 0;display:flex;justify-content:flex-end;gap:20px}
       .totals .grand{font-size:18px;font-weight:700;color:#f59e0b;border-top:2px solid #222;padding-top:10px;margin-top:5px}
       .footer{margin-top:60px;display:flex;justify-content:space-between;page-break-inside:avoid;break-inside:avoid}
-      .sig{text-align:center;width:200px}
-      .sig .line{margin-top:60px;border-top:1px solid #333;padding-top:5px;font-weight:600}
+      .sig{text-align:center;width:220px}
+      .sig .sig-title{font-size:12px;font-weight:700;text-transform:uppercase;color:#333}
+      .sig .sig-note{font-size:10px;font-style:italic;color:#888;margin-top:2px}
+      .sig .line{margin-top:70px;border-top:1px solid #333;padding-top:5px;font-weight:600}
       @media print{@page{margin:10mm 12mm}body{margin:0}}
     </style></head><body>
     <div class="header">
-      <div class="logo-row">${logoBase64 ? `<img src="${logoBase64}" alt="Logo" />` : ''}<div><h1>NGHIỆM THU CÔNG VIỆC</h1><h2>${company.name}</h2></div></div>
+      <div class="logo-row">${logoBase64 ? `<img src="${logoBase64}" alt="Logo" />` : ''}<div><h1>NGHIỆM THU CÔNG VIỆC</h1><h2>${company.subtitle}</h2></div></div>
       <div style="text-align:right"><div style="font-size:11px;color:#666">Kỳ nghiệm thu</div>
         <div style="font-size:20px;font-weight:700">${selectedSettlement.period}</div>
         <div style="font-size:11px;color:#666;margin-top:4px">Ngày xuất: ${new Date().toLocaleDateString('vi-VN')}</div>
       </div>
     </div>
-    <div class="meta">
-      <div>Nhân sự: <span>${workerName}</span></div>
-      <div>Trạng thái: <span>${STATUS_LABELS[selectedSettlement.status]}</span></div>
-      <div>Số lượng task: <span>${detailTasks.length}</span></div>
-      ${selectedSettlement.notes ? `<div>Ghi chú: <span>${selectedSettlement.notes}</span></div>` : ''}
-    </div>
-    ${(() => {
-      const w = selectedSettlement.worker || workers.find(wk => wk.id === selectedSettlement.worker_id);
-      return `
-    <div style="margin:15px 0;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb">
-      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:8px;font-weight:700">Thông tin thanh toán</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:13px">
-        <div>Ngân hàng: <b>${w?.bank_name || '—'}</b></div>
-        <div>Số tài khoản: <b>${w?.bank_account || '—'}</b></div>
-        <div>Chủ tài khoản: <b>${w?.full_name || '—'}</b></div>
+
+    <!-- BÊN A / BÊN B -->
+    <div class="parties">
+      <div class="party-box">
+        <div class="party-title">BÊN A — Bên thuê dịch vụ</div>
+        <div class="party-info">
+          <div><span class="label">Tên công ty</span><span class="value">: <b>${company.fullName}</b></span></div>
+          <div><span class="label">Địa chỉ</span><span class="value">: ${company.address}</span></div>
+          <div><span class="label">Mã số thuế</span><span class="value">: ${company.taxCode}</span></div>
+          <div><span class="label">Đại diện</span><span class="value">: ${company.gender} <b>${company.representative}</b></span></div>
+          <div><span class="label">Chức vụ</span><span class="value">: ${company.representativeTitle}</span></div>
+        </div>
       </div>
-    </div>`;
-    })()}
+      <div class="party-box">
+        <div class="party-title">BÊN B — Cá nhân cung cấp dịch vụ</div>
+        ${(() => {
+          const w = selectedSettlement.worker || workers.find(wk => wk.id === selectedSettlement.worker_id);
+          return `<div class="party-info">
+          <div><span class="label">Họ và tên</span><span class="value">: <b>${w?.full_name || '—'}</b></span></div>
+          <div><span class="label">Điện thoại</span><span class="value">: ${w?.phone || '—'}</span></div>
+          <div><span class="label">Email</span><span class="value">: ${w?.email || '—'}</span></div>
+          <div><span class="label">Ngân hàng</span><span class="value">: ${w?.bank_name || '—'}</span></div>
+          <div><span class="label">Số tài khoản</span><span class="value">: <b>${w?.bank_account || '—'}</b></span></div>
+          <div><span class="label">Chủ tài khoản</span><span class="value">: ${w?.full_name || '—'}</span></div>
+        </div>`;
+        })()}
+      </div>
+    </div>
+
+    <!-- Settlement Summary -->
+    <div class="settlement-meta">
+      <div><div class="label">Số lượng task</div><div class="val">${detailTasks.length}</div></div>
+      <div><div class="label">Trạng thái</div><div class="val">${STATUS_LABELS[selectedSettlement.status]}</div></div>
+      ${selectedSettlement.notes ? `<div><div class="label">Ghi chú</div><div class="val" style="font-size:12px;font-weight:400">${selectedSettlement.notes}</div></div>` : `<div></div>`}
+    </div>
+
     <table>
       <thead><tr>
         <th style="text-align:center">#</th><th>Task</th><th>Project</th><th>Ngày đóng</th>
@@ -255,8 +295,8 @@ const SettlementManager: React.FC<SettlementManagerProps> = ({
       <div class="row grand" style="color:#059669"><span>THỰC NHẬN:</span><span>${(selectedSettlement.net_amount || 0).toLocaleString()} ${selectedSettlement.currency}${selectedSettlement.currency !== 'VND' && totalVND > 0 ? ` <span style="font-size:14px;color:#666;font-weight:400">(≈ ${Math.round((totalVND + totalBonusVND) * (1 - (selectedSettlement.tax_rate || 10) / 100)).toLocaleString()} VNĐ)</span>` : ''}</span></div>
     </div>
     <div class="footer">
-      <div class="sig"><div style="font-size:11px;color:#666">Người lập</div><div class="line">${company.name}</div></div>
-      <div class="sig"><div style="font-size:11px;color:#666">Nhân sự xác nhận</div><div class="line">${workerName}</div></div>
+      <div class="sig"><div class="sig-title">Đại diện Bên A</div><div class="sig-note">(Ký, ghi rõ họ tên)</div><div class="line">${company.representative}</div></div>
+      <div class="sig"><div class="sig-title">Đại diện Bên B</div><div class="sig-note">(Ký, ghi rõ họ tên)</div><div class="line">${workerName}</div></div>
     </div>
     </body></html>`);
     printWindow.document.close();

@@ -11,13 +11,15 @@ interface WorkerListProps {
   onToggleActive: (w: Worker) => void;
   onRefresh: () => void;
   onAdd: () => void;
+  onSyncFromHR?: () => Promise<void>;
 }
 
 const WorkerList: React.FC<WorkerListProps> = ({
   workers, isLoading, filterType, setFilterType,
-  onEdit, onDelete, onToggleActive, onRefresh, onAdd
+  onEdit, onDelete, onToggleActive, onRefresh, onAdd, onSyncFromHR
 }) => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const freelancerCount = workers.filter(w => w.type === 'freelancer').length;
   const inhouseCount = workers.filter(w => w.type === 'inhouse').length;
 
@@ -39,6 +41,21 @@ const WorkerList: React.FC<WorkerListProps> = ({
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
             Thêm nhân sự
           </button>
+          {onSyncFromHR && (
+            <button
+              onClick={async () => { setSyncing(true); try { await onSyncFromHR(); } finally { setSyncing(false); } }}
+              disabled={syncing}
+              className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-cyan-500/20 text-cyan-400 font-black text-xs uppercase tracking-widest hover:bg-cyan-500/10 transition-all hover:scale-105 disabled:opacity-50"
+              title="Đồng bộ dữ liệu từ HR (phone, bank, ...)"
+            >
+              {syncing ? (
+                <div className="w-4 h-4 border-2 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin" />
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              )}
+              Sync HR
+            </button>
+          )}
           <button onClick={onRefresh} className="p-3 rounded-2xl border border-primary/10 text-neutral-medium hover:text-primary hover:border-primary/30 transition-all hover:scale-105">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
           </button>
