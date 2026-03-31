@@ -147,9 +147,11 @@ const TaskList: React.FC<TaskListProps> = ({
         }
 
         if (existing) {
-          // Update existing
+          // Update existing — also update project name in case folder was renamed on ClickUp
           await wfSvc.updateTask(existing.id, {
             title: ct.title,
+            project: ct.folder_name || ct.list_name || '',
+            client_name: ct.space_name || '',
             clickup_status: ct.clickup_status,
             status: ourStatus,
             start_date: startDate,
