@@ -5,6 +5,7 @@ import { ToastNotification } from '@/components/ToastNotification';
 import { Navbar } from '@/apps/invoice/components/Navbar';
 import { useCrmState, CrmTab } from '../hooks/useCrmState';
 import ClientList from './ClientList';
+import EmailOutreach from './EmailOutreach';
 import ClientForm from './ClientForm';
 import ProjectList from './ProjectList';
 import DocumentList from './DocumentList';
@@ -24,6 +25,7 @@ const TAB_MAP: Record<CrmTab, string> = {
   documents:  'settings',
   payments:   'activity',
   activities: 'board',
+  outreach:   'outreach',
 };
 
 const TAB_LABELS: Record<string, string> = {
@@ -32,6 +34,7 @@ const TAB_LABELS: Record<string, string> = {
   settings: 'Tài liệu',
   activity: 'Thanh toán',
   board:    'Hoạt động',
+  outreach: '📧 Outreach',
 };
 
 const REVERSE_TAB: Record<string, CrmTab> = {
@@ -40,6 +43,7 @@ const REVERSE_TAB: Record<string, CrmTab> = {
   settings: 'documents',
   activity: 'payments',
   board:    'activities',
+  outreach: 'outreach',
 };
 
 const TYPE_ICON: Record<string, { icon: string; label: string; color: string }> = {
@@ -168,7 +172,7 @@ const CrmApp: React.FC<CrmAppProps> = ({ currentUser, onBack, initialTab }) => {
   const [showForm, setShowForm] = useState(false);
 
   const navbarTab = TAB_MAP[state.activeTab];
-  const accessibleTabs = ['history', 'tasks', 'settings', 'activity', 'board'];
+  const accessibleTabs = ['history', 'tasks', 'settings', 'activity', 'board', 'outreach'];
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden transition-colors duration-500" style={{ backgroundColor: '#0F0F0F' }}>
@@ -254,6 +258,11 @@ const CrmApp: React.FC<CrmAppProps> = ({ currentUser, onBack, initialTab }) => {
         {/* ── Activities Tab ── */}
         {state.activeTab === 'activities' && (
           <GlobalActivityFeed clients={state.clients} actor={currentUser.username} />
+        )}
+
+        {/* ── Email Outreach Tab ── */}
+        {state.activeTab === 'outreach' && (
+          <EmailOutreach clients={state.clients} />
         )}
       </main>
 

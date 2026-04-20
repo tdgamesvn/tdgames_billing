@@ -320,6 +320,52 @@ export interface CrmActivity {
   created_at: string;
 }
 
+// ── CRM Outreach (Lead-centric) ───────────────────────────────
+export interface CrmOutreachLead {
+  id: string;
+  client_id: string | null;
+  studio_name: string;
+  contact_name: string;
+  first_name: string;
+  email: string;
+  job_title: string;
+  linkedin_url: string;
+  tier: number; // 1=Art Director, 2=Producer, 3=CEO
+  outreach_status: 'pending' | 'initial_sent' | 'followup1_sent' | 'followup2_sent' | 'replied' | 'bounced' | 'unsubscribed';
+  initial_sent_at: string | null;
+  followup1_sent_at: string | null;
+  followup2_sent_at: string | null;
+  replied_at: string | null;
+  source: string;
+  tags: string[];
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CrmEmailLog {
+  id: string;
+  lead_id: string;
+  template_name: string;
+  to_email: string;
+  subject: string;
+  gmail_message_id: string;
+  status: 'sent' | 'delivered' | 'bounced' | 'failed';
+  error_message: string;
+  sent_at: string;
+}
+
+export interface CrmEmailTemplate {
+  id: string;
+  name: string;
+  subject_lines: string[];
+  html_content: string;
+  delay_days: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // ── HR Module Types ───────────────────────────────────────────
 
 export interface HrDepartment {
