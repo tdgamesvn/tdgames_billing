@@ -14,6 +14,7 @@ const STATUS_CFG: Record<string, { label: string; color: string; icon: string }>
   followup2_sent: { label: 'Follow-up 2', color: '#BF5AF2', icon: '📩' },
   replied:        { label: 'Đã phản hồi', color: '#34C759', icon: '💬' },
   bounced:        { label: 'Bị bounce',   color: '#FF453A', icon: '⚠️' },
+  invalid_email:  { label: 'Email lỗi',   color: '#FF3B30', icon: '❌' },
   unsubscribed:   { label: 'Huỷ',         color: '#555',    icon: '🚫' },
 };
 
@@ -266,6 +267,8 @@ const LeadsTab: React.FC<LeadsProps> = ({ leads, clients, isLoading, templates, 
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [bulkSending, setBulkSending] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, success: 0, failed: 0 });
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<{ verified: number; valid: number; invalid: number } | null>(null);
 
   useEffect(() => { fetchQuota().then(setQuota); }, []);
 
@@ -331,6 +334,28 @@ const LeadsTab: React.FC<LeadsProps> = ({ leads, clients, isLoading, templates, 
     } catch (err: any) { alert(`Lỗi kết nối: ${err.message}`); }
     onRefresh();
     fetchQuota().then(setQuota);
+  };
+
+  // Verify pending emails before sending
+  const handleVerifyEmails = async () => {
+    const API = import.meta.env.VITE_OUTREACH_API_URL;
+    if (!API) { alert('VITE_OUTREACH_API_URL chưa cấu hình'); return; }
+    const pendingCount = leads.filter(l => l.outreach_status === 'pending').length;
+    if (pendingCount === 0) { alert('Không có leads pending cần verify.'); return; }
+    if (!confirm(`Verify ${Math.min(pendingCount, 100)} email addresses?\n\nEmail không hợp lệ sẽ được đánh dấu "invalid_email".`)) return;
+    setVerifying(true);
+    setVerifyResult(null);
+    try {
+      const res = await fetch(`${API}/api/email/verify-pending`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 100 }),
+      });
+      if (!res.ok) { alert(`Lỗi: ${res.status}`); return; }
+      const data = await res.json();
+      setVerifyResult({ verified: data.verified, valid: data.valid, invalid: data.invalid });
+      alert(`✅ Verify hoàn thành!\n\nĐã kiểm tra: ${data.verified}\nHợp lệ: ${data.valid}\nKhông hợp lệ: ${data.invalid} (đã đánh dấu)`);
+      onRefresh();
+    } catch (err: any) { alert(`Lỗi: ${err.message}`); } finally { setVerifying(false); }
   };
 
   // CSV Import
@@ -476,7 +501,17 @@ const LeadsTab: React.FC<LeadsProps> = ({ leads, clients, isLoading, templates, 
           padding: '10px 16px', border: 'none', borderRadius: '8px', background: '#FF9500',
           color: '#000', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
         }}>＋ Thêm Lead</button>
+        <button onClick={handleVerifyEmails} disabled={verifying} style={{
+          padding: '10px 16px', border: 'none', borderRadius: '8px',
+          background: verifying ? '#555' : '#34C759',
+          color: '#fff', fontSize: '12px', fontWeight: 700, cursor: verifying ? 'not-allowed' : 'pointer',
+        }}>{verifying ? '⏳ Đang verify...' : '🔍 Verify Emails'}</button>
       </div>
+      {verifyResult && (
+        <div style={{ padding: '8px 14px', background: 'rgba(52,199,89,0.1)', border: '1px solid rgba(52,199,89,0.3)', borderRadius: '8px', fontSize: '12px', color: '#34C759', marginTop: '8px' }}>
+          ✅ Đã verify: {verifyResult.verified} | Hợp lệ: {verifyResult.valid} | ❌ Lỗi: {verifyResult.invalid}
+        </div>
+      )}
 
       {/* Import Panel */}
       {showImport && (
