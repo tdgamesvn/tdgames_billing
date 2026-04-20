@@ -289,33 +289,46 @@ const LeadsTab: React.FC<LeadsProps> = ({ leads, clients, isLoading, templates, 
     } catch (err: any) { alert(`Lỗi: ${err.message}`); } finally { setSendingId(null); }
   };
 
-  // Bulk send to all pending leads (with rate limiting)
+  // Bulk send via server-side batch (with 2-5 min delay between each email)
   const handleBulkSend = async () => {
     const API = import.meta.env.VITE_OUTREACH_API_URL;
     if (!API) { alert('VITE_OUTREACH_API_URL chưa cấu hình'); return; }
-    const pendingLeads = leads.filter(l => l.outreach_status === 'pending');
+    const pendingCount = leads.filter(l => l.outreach_status === 'pending').length;
     const remaining = quota?.remaining || 30;
-    const batchSize = Math.min(pendingLeads.length, remaining);
+    const batchSize = Math.min(pendingCount, remaining);
     if (batchSize === 0) { alert(remaining <= 0 ? 'Đã hết quota hôm nay.' : 'Không có leads pending.'); return; }
-    if (!confirm(`Gửi email initial cho ${batchSize} leads (Quota còn: ${remaining})?\n\nSẽ mất ~${batchSize * 3} phút (delay 2-5 phút giữa mỗi email).`)) return;
-    setBulkSending(true);
-    setBulkProgress({ current: 0, total: batchSize, success: 0, failed: 0 });
-    let success = 0, failed = 0;
-    for (let i = 0; i < batchSize; i++) {
-      setBulkProgress(p => ({ ...p, current: i + 1 }));
-      try {
-        const res = await fetch(`${API}/api/email/send`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lead_id: pendingLeads[i].id, template_name: 'initial_outreach' }),
-        });
-        if (res.ok) { success++; } else { failed++; if (res.status === 429) break; }
-      } catch { failed++; }
-      setBulkProgress(p => ({ ...p, success, failed }));
-      // Small delay between API calls (actual rate limiting is on server side)
-      if (i < batchSize - 1) await new Promise(r => setTimeout(r, 1000));
-    }
-    setBulkSending(false);
-    alert(`✅ Hoàn thành!\nThành công: ${success}\nThất bại: ${failed}`);
+    const estTime = Math.round(batchSize * 3.5); // avg 3.5 min per email
+    if (!confirm(`Gửi email initial cho ${batchSize} leads?\n\n⏱ Ước tính: ~${estTime} phút (delay 2-5 phút giữa mỗi email)\n🔒 Server tự xử lý — bạn có thể đóng tab.`)) return;
+    
+    // Trigger server-side batch
+    try {
+      const res = await fetch(`${API}/api/email/batch`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template_name: 'initial_outreach', limit: batchSize, min_delay: 120, max_delay: 300 }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Lỗi: ${err.error || err.detail || res.status}`); return; }
+      const data = await res.json();
+      if (data.error) { alert(data.error); return; }
+      setBulkSending(true);
+      setBulkProgress({ current: 0, total: data.count, success: 0, failed: 0 });
+      
+      // Poll for status every 10 seconds
+      const pollInterval = setInterval(async () => {
+        try {
+          const sr = await fetch(`${API}/api/email/batch-status`);
+          if (!sr.ok) return;
+          const st = await sr.json();
+          setBulkProgress({ current: st.current, total: st.total, success: st.success, failed: st.failed });
+          if (!st.running) {
+            clearInterval(pollInterval);
+            setBulkSending(false);
+            alert(`✅ Batch hoàn thành!\nThành công: ${st.success}\nThất bại: ${st.failed}`);
+            onRefresh();
+            fetchQuota().then(setQuota);
+          }
+        } catch { /* ignore poll errors */ }
+      }, 10000);
+    } catch (err: any) { alert(`Lỗi kết nối: ${err.message}`); }
     onRefresh();
     fetchQuota().then(setQuota);
   };
