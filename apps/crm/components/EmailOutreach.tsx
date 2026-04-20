@@ -678,6 +678,15 @@ const DiscoveryTab: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
   const [results, setResults] = useState<any[] | null>(null);
   const [error, setError] = useState('');
 
+  // Batch import state
+  const [showImport, setShowImport] = useState(false);
+  const [importList, setImportList] = useState<{ company: string; domain: string }[]>([]);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, found: 0, failed: 0 });
+  const [batchResults, setBatchResults] = useState<any[]>([]);
+  const [manualAdd, setManualAdd] = useState({ company: '', domain: '' });
+  const importRef = useRef<HTMLInputElement>(null);
+
   const handleDiscover = async () => {
     if (!company.trim()) return;
     setDiscovering(true); setError(''); setResults(null);
@@ -689,11 +698,11 @@ const DiscoveryTab: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
     } finally { setDiscovering(false); }
   };
 
-  const handleAddToLeads = async (contact: any) => {
+  const handleAddToLeads = async (contact: any, studioName?: string) => {
     try {
       await svc.createLead({
         client_id: null,
-        studio_name: company,
+        studio_name: studioName || company,
         contact_name: contact.name || '',
         first_name: (contact.name || '').split(' ')[0],
         email: contact.email || '',
@@ -709,9 +718,118 @@ const DiscoveryTab: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
     } catch (err: any) { alert('Error: ' + err.message); }
   };
 
+  // Parse CSV file for company list
+  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.split('\n').filter(l => l.trim());
+      const header = lines[0].toLowerCase();
+      const hasHeader = header.includes('company') || header.includes('name') || header.includes('domain') || header.includes('studio');
+      const startIdx = hasHeader ? 1 : 0;
+
+      const parsed: { company: string; domain: string }[] = [];
+      for (let i = startIdx; i < lines.length; i++) {
+        const parts = lines[i].split(/[,;\t]/).map(s => s.replace(/"/g, '').trim());
+        if (parts[0]) {
+          parsed.push({ company: parts[0], domain: parts[1] || '' });
+        }
+      }
+      setImportList(prev => {
+        // Deduplicate
+        const existing = new Set(prev.map(p => p.company.toLowerCase()));
+        const newOnes = parsed.filter(p => !existing.has(p.company.toLowerCase()));
+        return [...prev, ...newOnes];
+      });
+      if (importRef.current) importRef.current.value = '';
+    };
+    reader.readAsText(file);
+  };
+
+  // Add single company manually
+  const handleManualAdd = () => {
+    if (!manualAdd.company.trim()) return;
+    setImportList(prev => {
+      if (prev.some(p => p.company.toLowerCase() === manualAdd.company.toLowerCase())) return prev;
+      return [...prev, { company: manualAdd.company.trim(), domain: manualAdd.domain.trim() }];
+    });
+    setManualAdd({ company: '', domain: '' });
+  };
+
+  // Remove from list
+  const handleRemove = (idx: number) => {
+    setImportList(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // Run batch discovery
+  const handleBatchDiscovery = async () => {
+    if (importList.length === 0) return;
+    if (!confirm(`Chạy Discovery cho ${importList.length} công ty?\n\nServer sẽ tự động tìm contacts qua Web Scraping + Google CSE + SalesQL.`)) return;
+
+    setBatchRunning(true);
+    setBatchProgress({ current: 0, total: importList.length, found: 0, failed: 0 });
+    setBatchResults([]);
+    let totalFound = 0, totalFailed = 0;
+
+    for (let i = 0; i < importList.length; i++) {
+      const item = importList[i];
+      setBatchProgress(p => ({ ...p, current: i + 1 }));
+      try {
+        const contacts = await svc.discoverContacts(item.company, item.domain);
+        if (contacts && contacts.length > 0) {
+          totalFound += contacts.length;
+          setBatchResults(prev => [...prev, { company: item.company, contacts, status: 'ok' }]);
+        } else {
+          totalFailed++;
+          setBatchResults(prev => [...prev, { company: item.company, contacts: [], status: 'empty' }]);
+        }
+      } catch {
+        totalFailed++;
+        setBatchResults(prev => [...prev, { company: item.company, contacts: [], status: 'error' }]);
+      }
+      setBatchProgress(p => ({ ...p, found: totalFound, failed: totalFailed }));
+      // Small delay between API calls
+      if (i < importList.length - 1) await new Promise(r => setTimeout(r, 2000));
+    }
+
+    setBatchRunning(false);
+    alert(`✅ Batch Discovery hoàn thành!\n\nĐã quét: ${importList.length} công ty\nTìm thấy: ${totalFound} contacts\nThất bại: ${totalFailed}`);
+    onRefresh();
+  };
+
+  // Add all contacts from batch results to leads
+  const handleAddAllToLeads = async () => {
+    const allContacts = batchResults.flatMap(r => r.contacts.map((c: any) => ({ ...c, _studio: r.company })));
+    if (allContacts.length === 0) { alert('Không có contacts để thêm.'); return; }
+    if (!confirm(`Thêm ${allContacts.length} contacts vào Leads?`)) return;
+
+    let added = 0;
+    for (const c of allContacts) {
+      try {
+        await svc.createLead({
+          client_id: null,
+          studio_name: c._studio,
+          contact_name: c.name || '',
+          first_name: (c.name || '').split(' ')[0],
+          email: c.email || '',
+          job_title: c.title || '',
+          linkedin_url: c.linkedin_url || '',
+          tier: c.tier_num || 3,
+          outreach_status: 'pending',
+          initial_sent_at: null, followup1_sent_at: null, followup2_sent_at: null, replied_at: null,
+          source: 'batch_discovery', tags: [], notes: '',
+        });
+        added++;
+      } catch { /* skip duplicate */ }
+    }
+    alert(`✅ Đã thêm ${added}/${allContacts.length} contacts vào Leads!`);
+    onRefresh();
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Info box */}
+      {/* Single Discovery */}
       <div style={{ background: '#161616', border: '1px solid #FF950030', borderRadius: '12px', padding: '20px' }}>
         <h4 style={{ fontSize: '14px', fontWeight: 800, color: '#F5F5F5', marginBottom: '8px' }}>🔍 Lead Discovery Pipeline</h4>
         <p style={{ fontSize: '13px', color: '#888', lineHeight: 1.6, marginBottom: '16px' }}>
@@ -733,6 +851,167 @@ const DiscoveryTab: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
         </div>
       </div>
 
+      {/* ── Batch Import Section ── */}
+      <div style={{ background: '#161616', border: '1px solid #0A84FF30', borderRadius: '12px', padding: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <h4 style={{ fontSize: '14px', fontWeight: 800, color: '#F5F5F5' }}>📋 Batch Discovery — Import danh sách công ty</h4>
+          <button onClick={() => setShowImport(!showImport)} style={{
+            padding: '6px 14px', border: '1px solid #0A84FF50', borderRadius: '8px',
+            background: showImport ? '#0A84FF20' : 'transparent', color: '#0A84FF',
+            fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+          }}>{showImport ? '▲ Thu gọn' : '▼ Mở rộng'}</button>
+        </div>
+
+        {showImport && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* CSV Upload + Manual add */}
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'end' }}>
+              <div>
+                <label style={labelStyle}>📥 Upload CSV</label>
+                <input ref={importRef} type="file" accept=".csv,.txt,.tsv" onChange={handleCsvImport} style={{
+                  ...inputStyle, padding: '8px', fontSize: '12px',
+                }} />
+              </div>
+              <div style={{ flex: 1, minWidth: '160px' }}>
+                <label style={labelStyle}>Thêm thủ công - Company</label>
+                <input style={inputStyle} value={manualAdd.company} onChange={e => setManualAdd(p => ({ ...p, company: e.target.value }))}
+                  placeholder="Zynga" onKeyDown={e => e.key === 'Enter' && handleManualAdd()} />
+              </div>
+              <div style={{ flex: 1, minWidth: '140px' }}>
+                <label style={labelStyle}>Domain</label>
+                <input style={inputStyle} value={manualAdd.domain} onChange={e => setManualAdd(p => ({ ...p, domain: e.target.value }))}
+                  placeholder="zynga.com" onKeyDown={e => e.key === 'Enter' && handleManualAdd()} />
+              </div>
+              <button onClick={handleManualAdd} style={{
+                padding: '10px 14px', border: 'none', borderRadius: '8px', background: '#34C759',
+                color: '#fff', fontSize: '12px', fontWeight: 700, cursor: 'pointer', height: '42px',
+              }}>＋ Thêm</button>
+            </div>
+
+            <p style={{ fontSize: '11px', color: '#666', fontStyle: 'italic' }}>
+              ℹ️ CSV format: company_name, domain (mỗi dòng 1 công ty). Cột domain là optional.
+            </p>
+
+            {/* Company List */}
+            {importList.length > 0 && (
+              <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #333', borderRadius: '8px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #333', position: 'sticky', top: 0, background: '#1A1A1A' }}>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', color: '#666', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' }}>#</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', color: '#666', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' }}>Company</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', color: '#666', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' }}>Domain</th>
+                      <th style={{ padding: '8px 12px', width: '40px' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importList.map((item, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #222' }}>
+                        <td style={{ padding: '6px 12px', color: '#555' }}>{idx + 1}</td>
+                        <td style={{ padding: '6px 12px', color: '#F5F5F5', fontWeight: 600 }}>{item.company}</td>
+                        <td style={{ padding: '6px 12px', color: '#0A84FF', fontSize: '11px' }}>{item.domain || '—'}</td>
+                        <td style={{ padding: '6px 12px' }}>
+                          <button onClick={() => handleRemove(idx)} style={{
+                            border: 'none', background: 'none', color: '#FF453A', cursor: 'pointer', fontSize: '14px',
+                          }}>✕</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button onClick={handleBatchDiscovery} disabled={batchRunning || importList.length === 0} style={{
+                padding: '10px 24px', border: 'none', borderRadius: '8px',
+                background: batchRunning ? '#333' : '#FF9500', color: batchRunning ? '#888' : '#000',
+                fontSize: '13px', fontWeight: 800, cursor: batchRunning ? 'wait' : 'pointer',
+              }}>{batchRunning ? `⏳ Đang quét ${batchProgress.current}/${batchProgress.total}...` : `🚀 Chạy Discovery (${importList.length} công ty)`}</button>
+              {importList.length > 0 && !batchRunning && (
+                <button onClick={() => { if (confirm('Xóa toàn bộ danh sách?')) setImportList([]); }} style={{
+                  padding: '10px 14px', border: '1px solid #FF453A30', borderRadius: '8px',
+                  background: 'transparent', color: '#FF453A', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                }}>🗑 Xóa danh sách</button>
+              )}
+              <span style={{ fontSize: '12px', color: '#888' }}>
+                {importList.length > 0 && `${importList.length} công ty`}
+              </span>
+            </div>
+
+            {/* Batch Progress */}
+            {batchRunning && (
+              <div style={{ background: '#FF950010', border: '1px solid #FF950030', borderRadius: '10px', padding: '14px 20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '12px', color: '#FF9500', fontWeight: 600 }}>⏳ Đang chạy batch discovery...</span>
+                  <span style={{ fontSize: '12px', color: '#888' }}>{batchProgress.current}/{batchProgress.total}</span>
+                </div>
+                <div style={{ height: '6px', background: '#222', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${batchProgress.total ? (batchProgress.current / batchProgress.total * 100) : 0}%`, background: 'linear-gradient(90deg, #FF9500, #FFD60A)', borderRadius: '3px', transition: 'width 0.3s' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '16px', marginTop: '6px', fontSize: '11px' }}>
+                  <span style={{ color: '#34C759' }}>✅ Tìm thấy: {batchProgress.found}</span>
+                  <span style={{ color: '#FF453A' }}>❌ Lỗi: {batchProgress.failed}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Batch Results */}
+      {batchResults.length > 0 && (
+        <div style={{ background: '#161616', border: '1px solid #34C75930', borderRadius: '12px', overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#F5F5F5' }}>
+              📊 Kết quả Batch: {batchResults.reduce((sum, r) => sum + r.contacts.length, 0)} contacts từ {batchResults.filter(r => r.status === 'ok').length}/{batchResults.length} công ty
+            </h4>
+            {batchResults.some(r => r.contacts.length > 0) && (
+              <button onClick={handleAddAllToLeads} style={{
+                padding: '6px 14px', border: 'none', borderRadius: '6px', background: '#34C759',
+                color: '#fff', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+              }}>＋ Thêm tất cả vào Leads</button>
+            )}
+          </div>
+          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+            {batchResults.map((r, ri) => (
+              <div key={ri} style={{ borderBottom: '1px solid #1A1A1A' }}>
+                <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1A1A1A' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: r.status === 'ok' ? '#34C759' : r.status === 'empty' ? '#888' : '#FF453A' }}>
+                    {r.status === 'ok' ? '✅' : r.status === 'empty' ? '⬚' : '❌'} {r.company}
+                    <span style={{ color: '#555', fontWeight: 400, marginLeft: '8px' }}>({r.contacts.length} contacts)</span>
+                  </span>
+                </div>
+                {r.contacts.length > 0 && (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <tbody>
+                      {r.contacts.map((c: any, ci: number) => {
+                        const tc = TIER_CFG[c.tier_num] || TIER_CFG[3];
+                        return (
+                          <tr key={ci} style={{ borderBottom: '1px solid #161616' }}>
+                            <td style={{ padding: '6px 12px 6px 32px', width: '80px' }}><span style={{ fontSize: '10px', color: tc.color, fontWeight: 700 }}>{tc.icon} T{c.tier_num}</span></td>
+                            <td style={{ padding: '6px 12px', color: '#F5F5F5', fontWeight: 600 }}>{c.name}</td>
+                            <td style={{ padding: '6px 12px', color: '#888', fontSize: '11px' }}>{c.title}</td>
+                            <td style={{ padding: '6px 12px', color: '#0A84FF', fontSize: '11px' }}>{c.email}</td>
+                            <td style={{ padding: '6px 8px', width: '60px' }}>
+                              <button onClick={() => handleAddToLeads(c, r.company)} style={{
+                                padding: '3px 8px', border: 'none', borderRadius: '4px', background: '#34C75920',
+                                color: '#34C759', fontSize: '10px', fontWeight: 700, cursor: 'pointer',
+                              }}>＋ Add</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div style={{ background: '#FF453A15', border: '1px solid #FF453A30', borderRadius: '10px', padding: '14px 20px' }}>
@@ -745,7 +1024,7 @@ const DiscoveryTab: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
         </div>
       )}
 
-      {/* Results */}
+      {/* Single Discovery Results */}
       {results && results.length === 0 && (
         <div style={{ textAlign: 'center', padding: '40px', color: '#555' }}>Không tìm thấy contacts</div>
       )}
