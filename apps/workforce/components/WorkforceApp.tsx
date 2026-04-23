@@ -11,6 +11,7 @@ import TaskList from './TaskList';
 import SettlementManager from './SettlementManager';
 import ProjectAcceptanceManager from './ProjectAcceptanceManager';
 import ClickUpConfig from './ClickUpConfig';
+import { FinancialDashboard } from './FinancialDashboard';
 
 interface WorkforceAppProps {
   currentUser: AccountUser;
@@ -24,6 +25,7 @@ const TAB_MAP: Record<WorkforceTab, string> = {
   tasks: 'recurring',
   settlements: 'activity',
   projectAcceptance: 'reports',
+  financials: 'overview',
   config: 'dashboard',
 };
 
@@ -33,6 +35,7 @@ const TAB_LABELS: Record<string, string> = {
   recurring: 'Task',
   activity: 'Nghiệm thu',
   reports: 'NT Dự Án',
+  overview: 'Tổng Quan',
   dashboard: 'Cấu hình',
 };
 
@@ -42,6 +45,7 @@ const REVERSE_TAB: Record<string, WorkforceTab> = {
   recurring: 'tasks',
   activity: 'settlements',
   reports: 'projectAcceptance',
+  overview: 'financials',
   dashboard: 'config',
 };
 
@@ -70,7 +74,7 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack, initia
   }, []);
 
   const navbarTab = TAB_MAP[state.activeTab];
-  const accessibleTabs = (['history', 'recurring', 'activity', 'reports', 'dashboard'] as const).map(t => t);
+  const accessibleTabs = (['history', 'recurring', 'activity', 'reports', 'overview', 'dashboard'] as const).map(t => t);
 
   const showToast = (message: string, type: 'success' | 'error') => {
     state.setToast({ message, type });
@@ -171,6 +175,11 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack, initia
             onDeleteAcceptance={state.handleDeleteProjectAcceptance}
           />
         )}
+
+        {state.activeTab === 'financials' && (
+          <FinancialDashboard />
+        )}
+
         {state.activeTab === 'config' && (
           <ClickUpConfig onToast={showToast} />
         )}

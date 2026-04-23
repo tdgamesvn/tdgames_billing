@@ -268,7 +268,9 @@ const LeadsTab: React.FC<LeadsProps> = ({ leads, clients, isLoading, templates, 
   const [bulkSending, setBulkSending] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, success: 0, failed: 0 });
   const [verifying, setVerifying] = useState(false);
-  const [verifyResult, setVerifyResult] = useState<{ verified: number; valid: number; invalid: number } | null>(null);
+  const [verifyResult, setVerifyResult] = useState<{ verified: number; valid: number; invalid: number; high_risk?: number } | null>(null);
+  const [checkingBounces, setCheckingBounces] = useState(false);
+  const [bounceResult, setBounceResult] = useState<{ bounces_found: number; leads_updated: number; bounces?: any[] } | null>(null);
 
   useEffect(() => { fetchQuota().then(setQuota); }, []);
 
@@ -338,11 +340,13 @@ const LeadsTab: React.FC<LeadsProps> = ({ leads, clients, isLoading, templates, 
 
   // Verify pending emails before sending
   const handleVerifyEmails = async () => {
+    console.log('[Verify] Button clicked');
     const API = import.meta.env.VITE_OUTREACH_API_URL;
+    console.log('[Verify] API URL:', API);
     if (!API) { alert('VITE_OUTREACH_API_URL chưa cấu hình'); return; }
     const pendingCount = leads.filter(l => l.outreach_status === 'pending').length;
     if (pendingCount === 0) { alert('Không có leads pending cần verify.'); return; }
-    if (!confirm(`Verify ${Math.min(pendingCount, 100)} email addresses?\n\nEmail không hợp lệ sẽ được đánh dấu "invalid_email".`)) return;
+    if (!confirm(`Verify ${Math.min(pendingCount, 100)} email addresses?\n\nKiểm tra: MX records, SMTP, catch-all, domain match, disposable, role-based.\nEmail không hợp lệ sẽ được đánh dấu "invalid_email".`)) return;
     setVerifying(true);
     setVerifyResult(null);
     try {
@@ -352,10 +356,33 @@ const LeadsTab: React.FC<LeadsProps> = ({ leads, clients, isLoading, templates, 
       });
       if (!res.ok) { alert(`Lỗi: ${res.status}`); return; }
       const data = await res.json();
-      setVerifyResult({ verified: data.verified, valid: data.valid, invalid: data.invalid });
-      alert(`✅ Verify hoàn thành!\n\nĐã kiểm tra: ${data.verified}\nHợp lệ: ${data.valid}\nKhông hợp lệ: ${data.invalid} (đã đánh dấu)`);
+      setVerifyResult({ verified: data.verified, valid: data.valid, invalid: data.invalid, high_risk: data.high_risk || 0 });
+      alert(`✅ Verify hoàn thành!\n\nĐã kiểm tra: ${data.verified}\nHợp lệ: ${data.valid}\n⚠️ High Risk: ${data.high_risk || 0}\n❌ Invalid: ${data.invalid} (đã đánh dấu)`);
       onRefresh();
     } catch (err: any) { alert(`Lỗi: ${err.message}`); } finally { setVerifying(false); }
+  };
+
+  // Check bounces from Gmail inbox
+  const handleCheckBounces = async () => {
+    console.log('[Bounce] Button clicked');
+    const API = import.meta.env.VITE_OUTREACH_API_URL;
+    console.log('[Bounce] API URL:', API);
+    if (!API) { alert('VITE_OUTREACH_API_URL chưa cấu hình'); return; }
+    if (!confirm('Quét Gmail inbox tìm email bị bounce?\n\nSẽ tự động đánh dấu leads bị bounce trong database.')) return;
+    setCheckingBounces(true);
+    setBounceResult(null);
+    try {
+      const res = await fetch(`${API}/api/email/check-bounces`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days_back: 14, max_results: 50, auto_update: true }),
+      });
+      if (!res.ok) { alert(`Lỗi: ${res.status}`); return; }
+      const data = await res.json();
+      setBounceResult(data);
+      alert(`📬 Bounce check hoàn thành!\n\nBounce tìm thấy: ${data.bounces_found}\nLeads đã cập nhật: ${data.leads_updated}\nĐã đánh dấu trước: ${data.already_marked}`);
+      onRefresh();
+      fetchQuota().then(setQuota);
+    } catch (err: any) { alert(`Lỗi: ${err.message}`); } finally { setCheckingBounces(false); }
   };
 
   // CSV Import
@@ -501,15 +528,39 @@ const LeadsTab: React.FC<LeadsProps> = ({ leads, clients, isLoading, templates, 
           padding: '10px 16px', border: 'none', borderRadius: '8px', background: '#FF9500',
           color: '#000', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
         }}>＋ Thêm Lead</button>
-        <button onClick={handleVerifyEmails} disabled={verifying} style={{
+        <button type="button" onClick={handleVerifyEmails} disabled={verifying} style={{
           padding: '10px 16px', border: 'none', borderRadius: '8px',
           background: verifying ? '#555' : '#34C759',
           color: '#fff', fontSize: '12px', fontWeight: 700, cursor: verifying ? 'not-allowed' : 'pointer',
-        }}>{verifying ? '⏳ Đang verify...' : '🔍 Verify Emails'}</button>
+        }}>{verifying ? '⏳ Đang verify...' : '✅ Verify Emails'}</button>
+        <button type="button" onClick={handleCheckBounces} disabled={checkingBounces} style={{
+          padding: '10px 16px', border: 'none', borderRadius: '8px',
+          background: checkingBounces ? '#555' : '#FF453A',
+          color: '#fff', fontSize: '12px', fontWeight: 700, cursor: checkingBounces ? 'not-allowed' : 'pointer',
+        }}>{checkingBounces ? '⏳ Scanning...' : '📬 Check Bounces'}</button>
       </div>
       {verifyResult && (
         <div style={{ padding: '8px 14px', background: 'rgba(52,199,89,0.1)', border: '1px solid rgba(52,199,89,0.3)', borderRadius: '8px', fontSize: '12px', color: '#34C759', marginTop: '8px' }}>
-          ✅ Đã verify: {verifyResult.verified} | Hợp lệ: {verifyResult.valid} | ❌ Lỗi: {verifyResult.invalid}
+          ✅ Đã verify: {verifyResult.verified} | Hợp lệ: {verifyResult.valid}{verifyResult.high_risk ? ` | ⚠️ High Risk: ${verifyResult.high_risk}` : ''} | ❌ Invalid: {verifyResult.invalid}
+        </div>
+      )}
+      {bounceResult && (
+        <div style={{ padding: '8px 14px', background: 'rgba(255,69,58,0.1)', border: '1px solid rgba(255,69,58,0.3)', borderRadius: '8px', fontSize: '12px', color: '#FF453A', marginTop: '8px' }}>
+          📬 Bounces: {bounceResult.bounces_found} tìm thấy | {bounceResult.leads_updated} leads đã cập nhật
+          {bounceResult.bounces && bounceResult.bounces.length > 0 && (
+            <details style={{ marginTop: '6px' }}>
+              <summary style={{ cursor: 'pointer', color: '#FF9500' }}>Chi tiết ({bounceResult.bounces.length})</summary>
+              <div style={{ marginTop: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                {bounceResult.bounces.map((b: any, i: number) => (
+                  <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid #222', fontSize: '11px' }}>
+                    <span style={{ color: '#FF453A' }}>{b.email}</span>
+                    <span style={{ color: '#888', marginLeft: '8px' }}>— {b.reason}</span>
+                    <span style={{ color: '#555', marginLeft: '8px' }}>{b.db_status}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
         </div>
       )}
 

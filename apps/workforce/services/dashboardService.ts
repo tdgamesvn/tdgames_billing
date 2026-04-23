@@ -1,0 +1,258 @@
+import { supabase } from '@/services/supabaseClient';
+import { fetchEmployees } from '@/apps/hr/services/hrService';
+
+export interface FulltimeKPI {
+  employeeId: string;
+  workerId: string;
+  fullName: string;
+  period: string; // "YYYY-MM"
+  totalCompanyCost: number; // Cost in VND
+  totalTaskRevenue: number; // Revenue in USD
+  totalTaskCount: number;
+  profitLoss: number; // P&L in VND (assuming exchange rate)
+  roiPercent: number;
+  kpiScore: 'A' | 'B' | 'C' | 'D' | 'F' | 'N/A';
+}
+
+export interface FreelancerPaymentSummary {
+  workerId: string;
+  workerName: string;
+  taskCount: number;
+  totalAmount: number; // Original currency amount
+  currency: string;
+  taxAmount: number;
+  netAmount: number; // VND usually
+  paymentStatus: string;
+}
+
+export interface MonthlyFinancialSummary {
+  period: { month: number; year: number };
+  
+  // Revenue
+  totalRevenue: number;            // Total from acceptances (USD)
+  revenueCurrency: string;         // USD
+  revenueVND: number;              // Converted to VND
+  
+  // Costs
+  fulltimePayroll: number;         // Total fulltime cost (VND)
+  freelancerPayments: number;      // Total freelancer cost (VND)
+  operationalExpenses: number;     // Other expenses (VND)
+  totalCost: number;               // Total cost (VND)
+  
+  // P&L
+  grossProfit: number;             // P&L in VND
+  profitMargin: number;            // % ROI
+  
+  // Breakdowns
+  fulltimeBreakdown: FulltimeKPI[];
+  freelancerBreakdown: FreelancerPaymentSummary[];
+}
+
+export async function getDashboardData(month: number, year: number, exchangeRate: number = 25000): Promise<MonthlyFinancialSummary> {
+  const periodStr = `${year}-${month.toString().padStart(2, '0')}`;
+  
+  // 1. Get Revenue (Project Acceptances in this period)
+  const { data: acceptances } = await supabase
+    .from('wf_project_acceptances')
+    .select('id, total_amount, currency, status')
+    .eq('period', periodStr)
+    .eq('status', 'approved');
+    
+  let totalRevenueUSD = 0;
+  if (acceptances) {
+    totalRevenueUSD = acceptances.reduce((sum, acc) => {
+      // Assuming all are USD for now, convert if needed
+      return sum + Number(acc.total_amount || 0);
+    }, 0);
+  }
+  const revenueVND = totalRevenueUSD * exchangeRate;
+
+  // 2. Get Fulltime Payroll Cost
+  // We need the sheet for the specific month/year
+  const { data: sheets } = await supabase
+    .from('pay_payroll_sheets')
+    .select('id')
+    .eq('month', month)
+    .eq('year', year)
+    .in('status', ['approved', 'paid']); // Consider costs only if approved/paid
+
+  let fulltimePayroll = 0;
+  const fulltimeCostsMap = new Map<string, number>(); // employee_id -> cost
+  
+  if (sheets && sheets.length > 0) {
+    const sheetIds = sheets.map(s => s.id);
+    const { data: payrollRecords } = await supabase
+      .from('pay_payroll_records')
+      .select('employee_id, total_company_cost')
+      .in('sheet_id', sheetIds);
+      
+    if (payrollRecords) {
+      payrollRecords.forEach(r => {
+        const cost = Number(r.total_company_cost || 0);
+        fulltimePayroll += cost;
+        fulltimeCostsMap.set(r.employee_id, cost);
+      });
+    }
+  }
+
+  // 3. Get Freelancer Payments (Settlements)
+  const { data: settlements } = await supabase
+    .from('wf_settlements')
+    .select('worker_id, total_tasks, total_amount, currency, tax_amount, net_amount, status, worker:wf_workers(full_name)')
+    .eq('period', periodStr);
+
+  let freelancerPayments = 0;
+  const freelancerBreakdown: FreelancerPaymentSummary[] = [];
+  
+  if (settlements) {
+    settlements.forEach(s => {
+      const net = Number(s.net_amount || 0);
+      freelancerPayments += net;
+      
+      freelancerBreakdown.push({
+        workerId: s.worker_id,
+        workerName: (s.worker as any)?.full_name || 'Unknown',
+        taskCount: s.total_tasks || 0,
+        totalAmount: Number(s.total_amount || 0),
+        currency: s.currency,
+        taxAmount: Number(s.tax_amount || 0),
+        netAmount: net,
+        paymentStatus: s.status
+      });
+    });
+  }
+
+  // 4. Get Operational Expenses
+  // Assuming expense_date is like "YYYY-MM-DD"
+  const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
+  const endOfMonth = new Date(year, month, 0).toISOString().split('T')[0]; // Last day of month
+  
+  const { data: expenses } = await supabase
+    .from('expense_expenses')
+    .select('amount, currency')
+    .gte('expense_date', startOfMonth)
+    .lte('expense_date', endOfMonth)
+    .eq('status', 'approved');
+
+  let operationalExpenses = 0;
+  if (expenses) {
+    expenses.forEach(e => {
+      const amt = Number(e.amount || 0);
+      // Simplify: assume expenses are in VND. If USD, convert.
+      operationalExpenses += (e.currency === 'USD' ? amt * exchangeRate : amt);
+    });
+  }
+
+  const totalCost = fulltimePayroll + freelancerPayments + operationalExpenses;
+  const grossProfit = revenueVND - totalCost;
+  const profitMargin = totalCost > 0 ? (grossProfit / totalCost) * 100 : 0;
+
+  // 5. Calculate Fulltime KPI
+  // We need tasks completed by fulltime workers in this period, and their client_price
+  const { data: hrEmployees } = await supabase
+    .from('hr_employees')
+    .select('id, full_name, type, status, worker_id')
+    .eq('type', 'fulltime')
+    .eq('status', 'active');
+    
+  const fulltimeBreakdown: FulltimeKPI[] = [];
+  
+  if (hrEmployees) {
+    const fulltimeWorkerIds = hrEmployees.map(e => e.worker_id).filter(Boolean) as string[];
+    
+    // Fetch tasks linked to acceptances in this period
+    // A task's revenue is recognized when its acceptance is approved in this period
+    let taskRevenues = new Map<string, { count: number, revenue: number }>();
+    
+    if (acceptances && acceptances.length > 0 && fulltimeWorkerIds.length > 0) {
+      const acceptanceIds = acceptances.map(a => a.id);
+      
+      // Get acceptance tasks
+      const { data: accTasks } = await supabase
+        .from('wf_project_acceptance_tasks')
+        .select('task_id, client_price')
+        .in('acceptance_id', acceptanceIds);
+        
+      if (accTasks && accTasks.length > 0) {
+        const taskIds = accTasks.map(at => at.task_id);
+        
+        // Get the workers for these tasks
+        const { data: tasksInfo } = await supabase
+          .from('wf_tasks')
+          .select('id, worker_id')
+          .in('id', taskIds)
+          .in('worker_id', fulltimeWorkerIds);
+          
+        if (tasksInfo) {
+          // Map task_id to worker_id
+          const taskToWorker = new Map<string, string>();
+          tasksInfo.forEach(t => taskToWorker.set(t.id, t.worker_id));
+          
+          // Aggregate revenue by worker
+          accTasks.forEach(at => {
+            const workerId = taskToWorker.get(at.task_id);
+            if (workerId) {
+              const current = taskRevenues.get(workerId) || { count: 0, revenue: 0 };
+              current.count += 1;
+              current.revenue += Number(at.client_price || 0);
+              taskRevenues.set(workerId, current);
+            }
+          });
+        }
+      }
+    }
+
+    hrEmployees.forEach(emp => {
+      const cost = fulltimeCostsMap.get(emp.id) || 0;
+      const workerId = emp.worker_id;
+      const taskData = workerId ? taskRevenues.get(workerId) : null;
+      
+      const revUSD = taskData?.revenue || 0;
+      const revVND = revUSD * exchangeRate;
+      const count = taskData?.count || 0;
+      
+      const pnl = revVND - cost;
+      const roi = cost > 0 ? (pnl / cost) * 100 : 0;
+      
+      let kpiScore: FulltimeKPI['kpiScore'] = 'N/A';
+      if (cost > 0 || revUSD > 0) {
+        if (roi >= 150) kpiScore = 'A';
+        else if (roi >= 100) kpiScore = 'B';
+        else if (roi >= 50) kpiScore = 'C';
+        else if (roi > 0) kpiScore = 'D';
+        else kpiScore = 'F';
+      }
+
+      fulltimeBreakdown.push({
+        employeeId: emp.id,
+        workerId: workerId || '',
+        fullName: emp.full_name,
+        period: periodStr,
+        totalCompanyCost: cost,
+        totalTaskRevenue: revUSD,
+        totalTaskCount: count,
+        profitLoss: pnl,
+        roiPercent: roi,
+        kpiScore
+      });
+    });
+  }
+  
+  // Sort fulltime breakdown by ROI descending
+  fulltimeBreakdown.sort((a, b) => b.roiPercent - a.roiPercent);
+
+  return {
+    period: { month, year },
+    totalRevenue: totalRevenueUSD,
+    revenueCurrency: 'USD',
+    revenueVND,
+    fulltimePayroll,
+    freelancerPayments,
+    operationalExpenses,
+    totalCost,
+    grossProfit,
+    profitMargin,
+    fulltimeBreakdown,
+    freelancerBreakdown
+  };
+}

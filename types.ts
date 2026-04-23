@@ -100,6 +100,9 @@ export interface ExpenseRecord {
   vendor: string;
   payment_method: string;
   status: 'pending' | 'approved' | 'paid';
+  type?: 'expense' | 'revenue';
+  source_type?: 'payroll' | 'settlement' | 'invoice' | 'manual' | null;
+  source_id?: string | null;
   notes: string;
   receipt_url: string;
   created_by: string;
@@ -429,6 +432,7 @@ export interface HrEmployee {
   // Meta
   notes: string;
   tags: string[];
+  worker_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -697,6 +701,7 @@ export interface PayPayrollRecord {
   base_salary: number;
   lunch_allowance: number;
   transport_allowance: number;
+  phone_allowance: number;
   clothing_allowance: number;
   kpi_allowance: number;
   default_ot: number;

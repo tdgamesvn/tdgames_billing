@@ -149,7 +149,8 @@ const PaySlip: React.FC<Props> = ({ sheet, record: rec, onClose }) => {
               <Tr label={`Ngày công (tỷ lệ: ${(ratio * 100).toFixed(2)}%)`} ref_val={`${STANDARD_DAYS}`} actual={`${rec.work_days}`} />
               <Tr label="Lương cơ bản" ref_val={fmt(rec.base_salary)} actual={fmt(Math.round(rec.base_salary * ratio))} />
               <Tr label="Phụ cấp ăn trưa" ref_val={fmt(rec.lunch_allowance)} actual={fmt(Math.round(rec.lunch_allowance * ratio))} />
-              <Tr label="PC xăng xe, ĐT" ref_val={fmt(rec.transport_allowance)} actual={fmt(Math.round(rec.transport_allowance * ratio))} />
+              <Tr label="PC xăng xe" ref_val={fmt(rec.transport_allowance)} actual={fmt(Math.round(rec.transport_allowance * ratio))} />
+              <Tr label="PC điện thoại" ref_val={fmt(rec.phone_allowance)} actual={fmt(Math.round(rec.phone_allowance * ratio))} />
               <Tr label="PC trang phục" ref_val={fmt(rec.clothing_allowance)} actual={fmt(Math.round(rec.clothing_allowance * ratio))} />
               <Tr label="Phụ cấp KPI" ref_val={fmt(rec.kpi_allowance)} actual={fmt(Math.round(rec.kpi_allowance * ratio))} />
               <Tr label="Tăng ca mặc định" ref_val={fmt(rec.default_ot)} actual={fmt(Math.round(rec.default_ot * ratio))} />

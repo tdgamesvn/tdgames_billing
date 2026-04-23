@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Worker, WorkforceTask } from '@/types';
 import * as clickup from '../services/clickupService';
-import { ClickUpConfig, ClickUpSpace, ClickUpList, ListContext } from '../services/clickupService';
+import { ClickUpConfig, ListContext } from '../services/clickupService';
 import * as wfSvc from '../services/workforceService';
 import { supabase } from '@/services/supabaseClient';
 
@@ -26,6 +26,10 @@ const STATUS_LABELS: Record<string, string> = {
   rejected: 'Từ chối',
 };
 
+const CLICKUP_STATUSES = [
+  'client_review', 'fix', 'lead_check', 'closed', 'approved', 'new request', 'in progress', 'canceled'
+];
+
 const TaskList: React.FC<TaskListProps> = ({
   tasks, workers, isLoading,
   filterStatus, setFilterStatus,
@@ -39,6 +43,9 @@ const TaskList: React.FC<TaskListProps> = ({
   const [filterSpace, setFilterSpace] = useState('');
   const [filterFolder, setFilterFolder] = useState('');
   const [filterList, setFilterList] = useState('');
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState('unpaid');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState('');
   const [editCurrency, setEditCurrency] = useState('VND');
@@ -51,17 +58,26 @@ const TaskList: React.FC<TaskListProps> = ({
     clickup.loadConfig().then(c => setConfig(c)).catch(() => {});
   }, []);
 
-  const totalPrice = tasks.reduce((s, t) => s + (t.price || 0), 0);
-  const closedCount = tasks.filter(t => !!t.closed_date).length;
-  const unpaidCount = tasks.filter(t => t.payment_status !== 'paid' && !!t.closed_date).length;
-
   // Apply local hierarchy filters
   const filteredDisplayTasks = tasks.filter(t => {
     if (filterSpace && t.clickup_space_name !== filterSpace) return false;
     if (filterFolder && t.clickup_folder_name !== filterFolder) return false;
     if (filterList && t.clickup_list_name !== filterList) return false;
+    if (filterPaymentStatus) {
+      if (filterPaymentStatus === 'unpaid' && t.payment_status === 'paid') return false;
+      if (filterPaymentStatus === 'paid' && t.payment_status !== 'paid') return false;
+    }
+    if (selectedStatuses.length > 0) {
+      if (!t.clickup_status || !selectedStatuses.includes(t.clickup_status.toLowerCase())) {
+        return false;
+      }
+    }
     return true;
   });
+
+  const totalPrice = filteredDisplayTasks.reduce((s, t) => s + (t.price || 0), 0);
+  const closedCount = filteredDisplayTasks.filter(t => !!t.closed_date).length;
+  const unpaidCount = filteredDisplayTasks.filter(t => t.payment_status !== 'paid' && !!t.closed_date).length;
 
   // ── Map ClickUp status → our status ──
   const mapStatus = (clickupStatus: string): WorkforceTask['status'] => {
@@ -81,29 +97,41 @@ const TaskList: React.FC<TaskListProps> = ({
       return;
     }
 
-    const selectedListIds = config.spaces
-      .flatMap((sp: ClickUpSpace) => sp.lists.filter((l: ClickUpList) => l.selected).map((l: ClickUpList) => l.id));
-
-    // Build listContexts with hierarchy info
-    const listContexts: ListContext[] = config.spaces.flatMap((sp: ClickUpSpace) =>
-      sp.lists.filter((l: ClickUpList) => l.selected).map((l: ClickUpList) => ({
-        list_id: l.id,
-        list_name: l.name,
-        folder_name: l.folder || null,
-        space_name: sp.name,
-      }))
-    );
-
-    if (selectedListIds.length === 0) {
-      onToast('Chưa chọn list nào — vào tab Cấu hình để chọn lists', 'error');
-      return;
-    }
-
     setSyncing(true);
     setSyncResult(null);
     try {
-      // 1. Fetch tasks from ClickUp with hierarchy context
-      const data = await clickup.syncTasks(config.api_token, config.team_id, selectedListIds, listContexts);
+      // 1. Dynamically fetch ALL spaces & lists from the team
+      onToast('🔍 Đang quét toàn bộ Workspace...', 'success');
+      const spacesData = await clickup.fetchSpaces(config.api_token, config.team_id);
+      const allSpaces = spacesData.spaces || [];
+      
+      const allListContexts: ListContext[] = [];
+      const allListIds: string[] = [];
+      
+      for (const sp of allSpaces) {
+        const listsData = await clickup.fetchLists(config.api_token, sp.id);
+        const lists = listsData.lists || [];
+        for (const l of lists) {
+          allListIds.push(l.id);
+          allListContexts.push({
+            list_id: l.id,
+            list_name: l.name,
+            folder_name: l.folder || null,
+            space_name: sp.name,
+          });
+        }
+      }
+
+      if (allListIds.length === 0) {
+        onToast('Không tìm thấy list nào trong workspace', 'error');
+        setSyncing(false);
+        return;
+      }
+
+      onToast(`📋 Tìm thấy ${allListIds.length} lists từ ${allSpaces.length} spaces. Đang sync tasks...`, 'success');
+
+      // 2. Fetch tasks from ClickUp with hierarchy context
+      const data = await clickup.syncTasks(config.api_token, config.team_id, allListIds, allListContexts);
       const clickupTasks = data.tasks;
 
       // 2. Build worker email → worker map
@@ -240,7 +268,7 @@ const TaskList: React.FC<TaskListProps> = ({
       <div className="grid grid-cols-4 gap-4">
         <div className="p-5 rounded-[20px] border border-primary/10 bg-surface">
           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Tổng task</p>
-          <p className="text-3xl font-black text-white">{tasks.length}</p>
+          <p className="text-3xl font-black text-white">{filteredDisplayTasks.length}</p>
         </div>
         <div className="p-5 rounded-[20px] border border-primary/10 bg-surface">
           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Đã đóng</p>
@@ -258,12 +286,61 @@ const TaskList: React.FC<TaskListProps> = ({
 
       {/* Filters */}
       <div className="flex gap-3 items-center flex-wrap">
-        <select className="bg-surface border border-primary/10 text-neutral-light rounded-xl px-4 h-[44px] text-sm focus:outline-none focus:border-primary/40 transition-all" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-          <option value="">Tất cả trạng thái</option>
-          <option value="in_progress">Đang làm</option>
-          <option value="completed">Hoàn thành</option>
-          <option value="approved">Đã duyệt</option>
-          <option value="rejected">Từ chối</option>
+        {/* Custom Multi-Select for Status */}
+        <div className="relative">
+          <button 
+            onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+            className="bg-surface border border-primary/10 text-neutral-light rounded-xl px-4 h-[44px] text-sm focus:outline-none hover:border-primary/40 transition-all flex items-center gap-2"
+          >
+            {selectedStatuses.length === 0 ? 'Tất cả trạng thái' : `Đã chọn ${selectedStatuses.length} trạng thái`}
+            <svg className="w-4 h-4 text-neutral-medium" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+          </button>
+          
+          {isStatusDropdownOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setIsStatusDropdownOpen(false)}></div>
+              <div className="absolute top-full left-0 mt-2 w-56 bg-surface border border-primary/20 rounded-xl shadow-xl z-20 overflow-hidden">
+                <div className="p-2 max-h-64 overflow-y-auto">
+                  {CLICKUP_STATUSES.map(s => {
+                    const isSelected = selectedStatuses.includes(s);
+                    return (
+                      <label key={s} className="flex items-center gap-2 px-3 py-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
+                        <input 
+                          type="checkbox" 
+                          checked={isSelected}
+                          onChange={() => {
+                            if (isSelected) {
+                              setSelectedStatuses(prev => prev.filter(x => x !== s));
+                            } else {
+                              setSelectedStatuses(prev => [...prev, s]);
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-primary/30 text-primary focus:ring-primary/30 bg-transparent"
+                        />
+                        <span className="text-sm text-neutral-light font-bold capitalize">{s.replace('_', ' ')}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {selectedStatuses.length > 0 && (
+                  <div className="p-2 border-t border-primary/10">
+                    <button 
+                      onClick={() => setSelectedStatuses([])}
+                      className="w-full text-center text-xs font-bold text-red-400 hover:text-red-300 py-1"
+                    >
+                      Bỏ chọn tất cả
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <select className="bg-surface border border-primary/10 text-neutral-light rounded-xl px-4 h-[44px] text-sm focus:outline-none focus:border-primary/40 transition-all" value={filterPaymentStatus} onChange={e => setFilterPaymentStatus(e.target.value)}>
+          <option value="">Tất cả thanh toán</option>
+          <option value="unpaid">Chưa thanh toán</option>
+          <option value="paid">Đã thanh toán</option>
         </select>
         <select className="bg-surface border border-primary/10 text-neutral-light rounded-xl px-4 h-[44px] text-sm focus:outline-none focus:border-primary/40 transition-all" value={filterWorker} onChange={e => setFilterWorker(e.target.value)}>
           <option value="">Tất cả nhân sự</option>

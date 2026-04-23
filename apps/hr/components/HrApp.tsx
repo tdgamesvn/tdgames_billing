@@ -97,6 +97,7 @@ const HrApp: React.FC<HrAppProps> = ({ currentUser, onBack, initialTab }) => {
             onDelete={state.handleDeleteEmployee}
             onAdd={() => { state.setEditingEmployee(null); state.setActiveTab('employeeForm'); }}
             onQuickAdd={() => state.setActiveTab('quickAdd')}
+            onSyncWorkforce={state.handleSyncAllToWorkforce}
             onRefresh={state.loadAll}
             onToast={(msg, type) => state.setToast({ message: msg, type })}
             pendingReminders={state.pendingReminders.length}

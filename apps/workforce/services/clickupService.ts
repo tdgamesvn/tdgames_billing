@@ -9,6 +9,8 @@ export interface ClickUpConfig {
   team_name: string;
   spaces: ClickUpSpace[];
   last_synced: string | null;
+  auto_sync_times?: string[];
+  auto_sync_enabled?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -144,20 +146,39 @@ export async function registerWebhook(token: string, teamId: string): Promise<Cl
   const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
   const endpoint = `${SUPABASE_URL}/functions/v1/clickup-webhook`;
 
-  const data = await clickupApi(`/team/${teamId}/webhook`, token, {
-    method: 'POST',
-    body: JSON.stringify({
-      endpoint,
-      events: [
-        'taskCreated',
-        'taskUpdated',
-        'taskDeleted',
-        'taskStatusUpdated',
-        'taskAssigneeUpdated',
-      ],
-    }),
-  });
-  return data.webhook || data;
+  // Check for existing webhooks first to avoid "already exists" error
+  try {
+    const existing = await listWebhooks(token, teamId);
+    const match = existing.find(w => w.endpoint === endpoint);
+    if (match) {
+      return match; // Reuse existing webhook
+    }
+  } catch { /* ignore list error, try to create */ }
+
+  try {
+    const data = await clickupApi(`/team/${teamId}/webhook`, token, {
+      method: 'POST',
+      body: JSON.stringify({
+        endpoint,
+        events: [
+          'taskCreated',
+          'taskUpdated',
+          'taskDeleted',
+          'taskStatusUpdated',
+          'taskAssigneeUpdated',
+        ],
+      }),
+    });
+    return data.webhook || data;
+  } catch (err: any) {
+    // If webhook already exists but we couldn't find it by endpoint match,
+    // try to get the first webhook and return it
+    if (err.message?.includes('already exists')) {
+      const all = await listWebhooks(token, teamId);
+      if (all.length > 0) return all[0];
+    }
+    throw err;
+  }
 }
 
 export async function deleteWebhook(token: string, webhookId: string): Promise<void> {
@@ -171,4 +192,14 @@ export async function saveWebhookId(webhookId: string | null): Promise<void> {
     .update({ webhook_id: webhookId, updated_at: new Date().toISOString() })
     .neq('id', '00000000-0000-0000-0000-000000000000');
   if (error) throw error;
+}
+
+// Update auto-sync schedule via Postgres RPC
+export async function updateAutoSyncSchedule(times: string[], enabled: boolean): Promise<any> {
+  const { data, error } = await supabase.rpc('update_clickup_sync_schedule', {
+    p_times: times,
+    p_enabled: enabled,
+  });
+  if (error) throw error;
+  return data;
 }

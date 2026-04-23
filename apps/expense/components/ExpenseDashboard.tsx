@@ -26,79 +26,74 @@ function getLast6Months(): { year: number; month: number; label: string }[] {
   return months;
 }
 
+const SOURCE_LABELS: Record<string, { label: string; color: string; icon: string }> = {
+  payroll: { label: 'Lương nhân viên', color: '#3B82F6', icon: '💼' },
+  settlement: { label: 'Freelancer', color: '#8B5CF6', icon: '🎨' },
+  invoice: { label: 'Doanh thu dự án', color: '#10B981', icon: '💰' },
+  manual: { label: 'Chi phí thủ công', color: '#F59E0B', icon: '📝' },
+};
+
 // ---- Component ----
 const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, onNavigateToList }) => {
   const months = useMemo(() => getLast6Months(), []);
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
-  const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-  const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
 
-  // ── Stats this month vs last month ──
-  const thisMonthExpenses = useMemo(() =>
-    expenses.filter(e => {
-      const d = new Date(e.expense_date);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    }), [expenses, currentMonth, currentYear]);
+  // ── Split revenue vs expense ──
+  const allExpenses = useMemo(() => expenses.filter(e => e.type !== 'revenue'), [expenses]);
+  const allRevenue = useMemo(() => expenses.filter(e => e.type === 'revenue'), [expenses]);
 
-  const prevMonthExpenses = useMemo(() =>
-    expenses.filter(e => {
-      const d = new Date(e.expense_date);
-      return d.getMonth() === prevMonth && d.getFullYear() === prevYear;
-    }), [expenses, prevMonth, prevYear]);
+  // ── This month data ──
+  const filterMonth = (items: ExpenseRecord[], month: number, year: number) =>
+    items.filter(e => { const d = new Date(e.expense_date); return d.getMonth() === month && d.getFullYear() === year; });
 
-  const thisVND = thisMonthExpenses.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
-  const thisUSD = thisMonthExpenses.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
-  const prevVND = prevMonthExpenses.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+  const thisExpenses = useMemo(() => filterMonth(allExpenses, currentMonth, currentYear), [allExpenses, currentMonth, currentYear]);
+  const thisRevenue = useMemo(() => filterMonth(allRevenue, currentMonth, currentYear), [allRevenue, currentMonth, currentYear]);
 
-  const changePercent = prevVND > 0 ? ((thisVND - prevVND) / prevVND * 100) : (thisVND > 0 ? 100 : 0);
+  const thisExpVND = thisExpenses.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+  const thisExpUSD = thisExpenses.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
+  const thisRevVND = thisRevenue.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+  const thisRevUSD = thisRevenue.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
 
-  // ── Monthly totals (VND) for bar chart ──
-  const monthlyData = useMemo(() => {
+  // ── Monthly P&L data for chart ──
+  const monthlyPL = useMemo(() => {
     return months.map(m => {
-      const total = expenses
-        .filter(e => {
-          const d = new Date(e.expense_date);
-          return d.getMonth() === m.month && d.getFullYear() === m.year && e.currency === 'VND';
-        })
-        .reduce((s, e) => s + e.amount, 0);
-      return { ...m, total };
+      const mExpenses = filterMonth(allExpenses, m.month, m.year);
+      const mRevenue = filterMonth(allRevenue, m.month, m.year);
+      const expVND = mExpenses.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+      const revVND = mRevenue.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+      const expUSD = mExpenses.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
+      const revUSD = mRevenue.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
+      return { ...m, expVND, revVND, expUSD, revUSD, profitVND: revVND - expVND };
     });
-  }, [expenses, months]);
+  }, [allExpenses, allRevenue, months]);
 
-  const maxMonthly = Math.max(...monthlyData.map(m => m.total), 1);
+  const maxBar = Math.max(...monthlyPL.map(m => Math.max(m.expVND, m.revVND)), 1);
 
-  // ── Category breakdown ──
-  const categoryData = useMemo(() => {
-    const map = new Map<string, { name: string; color: string; icon: string; total: number }>();
-    let uncategorized = 0;
-
-    expenses.filter(e => e.currency === 'VND').forEach(e => {
-      if (e.category_id && e.category) {
-        const cur = map.get(e.category_id) || { name: e.category.name, color: e.category.color, icon: e.category.icon, total: 0 };
-        cur.total += e.amount;
-        map.set(e.category_id, cur);
-      } else {
-        uncategorized += e.amount;
-      }
+  // ── Source breakdown (expense only) ──
+  const sourceData = useMemo(() => {
+    const map = new Map<string, number>();
+    allExpenses.filter(e => e.currency === 'VND').forEach(e => {
+      const key = e.source_type || 'manual';
+      map.set(key, (map.get(key) || 0) + e.amount);
     });
+    return [...map.entries()].map(([key, total]) => ({
+      key,
+      ...(SOURCE_LABELS[key] || { label: key, color: '#6B7280', icon: '📦' }),
+      total,
+    })).sort((a, b) => b.total - a.total);
+  }, [allExpenses]);
 
-    const sorted = [...map.values()].sort((a, b) => b.total - a.total);
-    if (uncategorized > 0) sorted.push({ name: 'Chưa phân loại', color: '#6B7280', icon: '❓', total: uncategorized });
-    return sorted;
-  }, [expenses]);
-
-  const totalCategoryVND = categoryData.reduce((s, c) => s + c.total, 0);
+  const totalSourceVND = sourceData.reduce((s, c) => s + c.total, 0);
 
   // ── Top 5 expenses ──
   const topExpenses = useMemo(() =>
-    [...expenses].sort((a, b) => b.amount - a.amount).slice(0, 5),
-    [expenses]);
+    [...allExpenses].sort((a, b) => b.amount - a.amount).slice(0, 5),
+    [allExpenses]);
 
-  // ── Receipt coverage ──
-  const withReceipt = expenses.filter(e => e.receipt_url).length;
-  const receiptPct = expenses.length > 0 ? Math.round(withReceipt / expenses.length * 100) : 0;
+  // ── Auto-synced count ──
+  const autoSyncedCount = expenses.filter(e => e.source_type && e.source_type !== 'manual').length;
 
   if (isLoading) {
     return (
@@ -116,89 +111,130 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
       {/* Page Header */}
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-4xl font-black text-primary uppercase tracking-tighter">Dashboard</h2>
-          <p className="text-neutral-medium text-sm mt-2">Tổng quan chi phí • {months[months.length - 1].label}</p>
+          <h2 className="text-4xl font-black text-primary uppercase tracking-tighter">Financial Hub</h2>
+          <p className="text-neutral-medium text-sm mt-2">Tổng quan tài chính • {months[months.length - 1].label}</p>
         </div>
-        <button onClick={onNavigateToList}
-          className="px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest border border-primary/20 text-primary hover:bg-primary/5 transition-all">
-          📋 Xem danh sách
-        </button>
+        <div className="flex items-center gap-3">
+          {autoSyncedCount > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[10px] font-bold text-emerald-400">{autoSyncedCount} auto-synced</span>
+            </div>
+          )}
+          <button onClick={onNavigateToList}
+            className="px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest border border-primary/20 text-primary hover:bg-primary/5 transition-all">
+            📋 Xem danh sách
+          </button>
+        </div>
       </div>
 
       {/* ── KPI Cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* VND this month */}
+        {/* Revenue VND */}
+        <div className="p-5 rounded-[20px] border bg-surface border-emerald-500/20 transition-all hover:border-emerald-500/40 group">
+          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400/80 mb-2">💰 Doanh thu tháng này</p>
+          {thisRevVND > 0 && <p className="text-2xl font-black text-emerald-400 tabular-nums">{fmt(thisRevVND)} ₫</p>}
+          {thisRevUSD > 0 && <p className={`${thisRevVND > 0 ? 'text-base mt-1' : 'text-2xl'} font-black text-emerald-400 tabular-nums`}>{fmtUSD(thisRevUSD)}</p>}
+          {thisRevVND === 0 && thisRevUSD === 0 && <p className="text-2xl font-black text-emerald-400/30 tabular-nums">—</p>}
+          <p className="text-[10px] text-neutral-medium mt-2">Tổng: {allRevenue.length} giao dịch</p>
+        </div>
+
+        {/* Expense VND */}
+        <div className="p-5 rounded-[20px] border bg-surface border-red-500/20 transition-all hover:border-red-500/40 group">
+          <p className="text-[10px] font-black uppercase tracking-widest text-red-400/80 mb-2">📤 Chi phí tháng này</p>
+          {thisExpVND > 0 && <p className="text-2xl font-black text-red-400 tabular-nums">{fmt(thisExpVND)} ₫</p>}
+          {thisExpUSD > 0 && <p className={`${thisExpVND > 0 ? 'text-base mt-1' : 'text-2xl'} font-black text-red-400 tabular-nums`}>{fmtUSD(thisExpUSD)}</p>}
+          {thisExpVND === 0 && thisExpUSD === 0 && <p className="text-2xl font-black text-red-400/30 tabular-nums">—</p>}
+          <p className="text-[10px] text-neutral-medium mt-2">Tổng: {allExpenses.length} giao dịch</p>
+        </div>
+
+        {/* Profit/Loss */}
         <div className="p-5 rounded-[20px] border bg-surface border-primary/10 transition-all hover:border-primary/25 group">
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Chi phí tháng này (VND)</p>
-          <p className="text-2xl font-black text-primary tabular-nums">{fmt(thisVND)} ₫</p>
-          <div className="flex items-center gap-1 mt-2">
-            {changePercent > 0 ? (
-              <span className="text-[10px] font-bold text-red-400">▲ +{changePercent.toFixed(1)}%</span>
-            ) : changePercent < 0 ? (
-              <span className="text-[10px] font-bold text-emerald-400">▼ {changePercent.toFixed(1)}%</span>
-            ) : (
-              <span className="text-[10px] font-bold text-neutral-medium">— so tháng trước</span>
-            )}
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">📊 Lợi nhuận VND</p>
+          {(() => {
+            const profit = thisRevVND - thisExpVND;
+            return (
+              <>
+                <p className={`text-2xl font-black tabular-nums ${profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {profit >= 0 ? '+' : ''}{fmt(profit)} ₫
+                </p>
+                <p className="text-[10px] text-neutral-medium mt-2">
+                  {profit >= 0 ? '▲ Có lãi' : '▼ Lỗ'} tháng này
+                </p>
+              </>
+            );
+          })()}
+        </div>
+
+        {/* Sources */}
+        <div className="p-5 rounded-[20px] border bg-surface border-primary/10 transition-all hover:border-primary/25 group">
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">🔗 Nguồn dữ liệu</p>
+          <div className="space-y-1.5 mt-1">
+            {[
+              { label: 'Payroll', count: expenses.filter(e => e.source_type === 'payroll').length, color: '#3B82F6' },
+              { label: 'Freelancer', count: expenses.filter(e => e.source_type === 'settlement').length, color: '#8B5CF6' },
+              { label: 'Invoice', count: expenses.filter(e => e.source_type === 'invoice').length, color: '#10B981' },
+              { label: 'Manual', count: expenses.filter(e => !e.source_type).length, color: '#F59E0B' },
+            ].map(s => (
+              <div key={s.label} className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                  <span className="text-[10px] font-bold text-white/70">{s.label}</span>
+                </div>
+                <span className="text-[10px] font-bold text-white/50 tabular-nums">{s.count}</span>
+              </div>
+            ))}
           </div>
-        </div>
-
-        {/* USD this month */}
-        <div className="p-5 rounded-[20px] border bg-surface border-primary/10 transition-all hover:border-primary/25 group">
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Chi phí tháng này (USD)</p>
-          <p className="text-2xl font-black text-primary tabular-nums">{fmtUSD(thisUSD)}</p>
-        </div>
-
-        {/* Transaction count */}
-        <div className="p-5 rounded-[20px] border bg-surface border-primary/10 transition-all hover:border-primary/25 group">
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Giao dịch tháng này</p>
-          <p className="text-2xl font-black text-white tabular-nums">{thisMonthExpenses.length}</p>
-          <p className="text-[10px] text-neutral-medium mt-2">Tổng: {expenses.length} giao dịch</p>
-        </div>
-
-        {/* Receipt coverage */}
-        <div className="p-5 rounded-[20px] border bg-surface border-primary/10 transition-all hover:border-primary/25 group">
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Có biên lai</p>
-          <p className="text-2xl font-black text-white tabular-nums">{receiptPct}%</p>
-          <p className="text-[10px] text-neutral-medium mt-2">{withReceipt}/{expenses.length} giao dịch đính kèm</p>
         </div>
       </div>
 
-      {/* ── Monthly Bar Chart + Category Breakdown ── */}
+      {/* ── Monthly Revenue vs Expense Chart + Source Breakdown ── */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Bar Chart — 3 cols */}
+        {/* P&L Bar Chart — 3 cols */}
         <div className="lg:col-span-3 rounded-[20px] border bg-surface border-primary/10 p-6">
-          <h3 className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-6">Chi phí 6 tháng gần nhất (VND)</h3>
-          {monthlyData.every(m => m.total === 0) ? (
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-neutral-medium">Doanh thu vs Chi phí 6 tháng (VND)</h3>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5"><div className="w-3 h-1.5 rounded-full bg-emerald-400" /><span className="text-[9px] text-neutral-medium">Doanh thu</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-3 h-1.5 rounded-full bg-red-400" /><span className="text-[9px] text-neutral-medium">Chi phí</span></div>
+            </div>
+          </div>
+          {monthlyPL.every(m => m.expVND === 0 && m.revVND === 0) ? (
             <div className="py-10 text-center">
-              <p className="text-neutral-medium text-sm">Chưa có dữ liệu chi phí</p>
+              <p className="text-neutral-medium text-sm">Chưa có dữ liệu VND</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {monthlyData.map((m, i) => {
-                const pct = maxMonthly > 0 ? (m.total / maxMonthly * 100) : 0;
+            <div className="space-y-4">
+              {monthlyPL.map((m, i) => {
                 const isCurrentMonth = m.month === currentMonth && m.year === currentYear;
+                const revPct = maxBar > 0 ? (m.revVND / maxBar * 100) : 0;
+                const expPct = maxBar > 0 ? (m.expVND / maxBar * 100) : 0;
                 return (
-                  <div key={i} className="flex items-center gap-3 group/bar">
-                    <span className={`text-[11px] font-bold tabular-nums w-16 flex-shrink-0 ${isCurrentMonth ? 'text-primary' : 'text-neutral-medium'}`}>
-                      {m.label}
-                    </span>
-                    <div className="flex-1 h-8 bg-white/[0.03] rounded-lg overflow-hidden relative">
-                      <div
-                        className={`h-full rounded-lg transition-all duration-700 ease-out ${isCurrentMonth ? 'bg-gradient-to-r from-primary/80 to-primary' : 'bg-gradient-to-r from-white/10 to-white/20'}`}
-                        style={{
-                          width: `${Math.max(pct, 1)}%`,
-                          animation: `barGrow 0.8s ease-out ${i * 0.1}s both`,
-                        }}
-                      />
-                      {m.total > 0 && (
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-white/60 tabular-nums opacity-0 group-hover/bar:opacity-100 transition-opacity">
-                          {fmt(m.total)} ₫
-                        </span>
-                      )}
+                  <div key={i} className="group/bar">
+                    <div className="flex items-center gap-3">
+                      <span className={`text-[11px] font-bold tabular-nums w-16 flex-shrink-0 ${isCurrentMonth ? 'text-primary' : 'text-neutral-medium'}`}>
+                        {m.label}
+                      </span>
+                      <div className="flex-1 space-y-1">
+                        {/* Revenue bar */}
+                        <div className="h-3.5 bg-white/[0.02] rounded-md overflow-hidden relative">
+                          <div className="h-full rounded-md bg-gradient-to-r from-emerald-500/60 to-emerald-400/80 transition-all duration-700"
+                            style={{ width: `${Math.max(revPct, revPct > 0 ? 2 : 0)}%`, animation: `barGrow 0.8s ease-out ${i * 0.1}s both` }} />
+                          {m.revVND > 0 && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-emerald-300/60 tabular-nums opacity-0 group-hover/bar:opacity-100 transition-opacity">+{fmt(m.revVND)}</span>}
+                        </div>
+                        {/* Expense bar */}
+                        <div className="h-3.5 bg-white/[0.02] rounded-md overflow-hidden relative">
+                          <div className="h-full rounded-md bg-gradient-to-r from-red-500/60 to-red-400/80 transition-all duration-700"
+                            style={{ width: `${Math.max(expPct, expPct > 0 ? 2 : 0)}%`, animation: `barGrow 0.8s ease-out ${i * 0.1 + 0.05}s both` }} />
+                          {m.expVND > 0 && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-red-300/60 tabular-nums opacity-0 group-hover/bar:opacity-100 transition-opacity">-{fmt(m.expVND)}</span>}
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-bold tabular-nums w-24 text-right flex-shrink-0 ${
+                        m.profitVND > 0 ? 'text-emerald-400' : m.profitVND < 0 ? 'text-red-400' : 'text-white/40'
+                      }`}>
+                        {m.profitVND !== 0 ? (m.profitVND > 0 ? '+' : '') + fmt(m.profitVND) : '—'}
+                      </span>
                     </div>
-                    <span className={`text-[11px] font-bold tabular-nums w-28 text-right flex-shrink-0 ${isCurrentMonth ? 'text-primary' : 'text-white/60'}`}>
-                      {m.total > 0 ? fmt(m.total) + ' ₫' : '—'}
-                    </span>
                   </div>
                 );
               })}
@@ -206,10 +242,10 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
           )}
         </div>
 
-        {/* Category Breakdown — 2 cols */}
+        {/* Source Breakdown — 2 cols */}
         <div className="lg:col-span-2 rounded-[20px] border bg-surface border-primary/10 p-6">
-          <h3 className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-6">Phân bổ theo danh mục</h3>
-          {categoryData.length === 0 ? (
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-6">Phân bổ chi phí theo nguồn</h3>
+          {sourceData.length === 0 ? (
             <div className="py-10 text-center">
               <p className="text-neutral-medium text-sm">Chưa có dữ liệu</p>
             </div>
@@ -217,33 +253,25 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
             <>
               {/* Stacked Bar */}
               <div className="h-4 rounded-full overflow-hidden flex mb-6">
-                {categoryData.map((c, i) => {
-                  const pct = totalCategoryVND > 0 ? (c.total / totalCategoryVND * 100) : 0;
+                {sourceData.map((c, i) => {
+                  const pct = totalSourceVND > 0 ? (c.total / totalSourceVND * 100) : 0;
                   return (
-                    <div
-                      key={i}
-                      className="h-full transition-all duration-500 first:rounded-l-full last:rounded-r-full"
-                      style={{
-                        width: `${Math.max(pct, 1)}%`,
-                        backgroundColor: c.color,
-                        opacity: 0.8,
-                        animation: `barGrow 0.6s ease-out ${i * 0.1}s both`,
-                      }}
-                      title={`${c.icon} ${c.name}: ${fmt(c.total)} ₫ (${pct.toFixed(1)}%)`}
-                    />
+                    <div key={i} className="h-full transition-all duration-500 first:rounded-l-full last:rounded-r-full"
+                      style={{ width: `${Math.max(pct, 1)}%`, backgroundColor: c.color, opacity: 0.8, animation: `barGrow 0.6s ease-out ${i * 0.1}s both` }}
+                      title={`${c.icon} ${c.label}: ${fmt(c.total)} ₫ (${pct.toFixed(1)}%)`} />
                   );
                 })}
               </div>
 
               {/* Legend */}
               <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
-                {categoryData.map((c, i) => {
-                  const pct = totalCategoryVND > 0 ? (c.total / totalCategoryVND * 100) : 0;
+                {sourceData.map((c, i) => {
+                  const pct = totalSourceVND > 0 ? (c.total / totalSourceVND * 100) : 0;
                   return (
                     <div key={i} className="flex items-center justify-between gap-3 py-1">
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="w-3 h-3 rounded flex-shrink-0" style={{ backgroundColor: c.color }} />
-                        <span className="text-xs font-bold text-white truncate">{c.icon} {c.name}</span>
+                        <span className="text-xs font-bold text-white truncate">{c.icon} {c.label}</span>
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <span className="text-[10px] font-bold text-neutral-medium tabular-nums">{pct.toFixed(1)}%</span>
@@ -257,6 +285,154 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
           )}
         </div>
       </div>
+
+      {/* ── P&L Monthly Report Table ── */}
+      <div className="rounded-[20px] border bg-surface border-primary/10 p-6 overflow-x-auto">
+        <h3 className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-6">📋 Báo cáo P&L theo tháng</h3>
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-white/10">
+              <th className="text-left py-3 px-2 font-black text-white/60 uppercase tracking-wider text-[10px]">Kỳ</th>
+              <th className="text-right py-3 px-2 font-black text-emerald-400/60 uppercase tracking-wider text-[10px]">Doanh thu</th>
+              <th className="text-right py-3 px-2 font-black text-blue-400/60 uppercase tracking-wider text-[10px]">Lương</th>
+              <th className="text-right py-3 px-2 font-black text-purple-400/60 uppercase tracking-wider text-[10px]">Freelancer</th>
+              <th className="text-right py-3 px-2 font-black text-amber-400/60 uppercase tracking-wider text-[10px]">Khác</th>
+              <th className="text-right py-3 px-2 font-black text-white/60 uppercase tracking-wider text-[10px]">Lợi nhuận</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(() => {
+              // Build monthly P&L data with source breakdown
+              return months.map((m, i) => {
+                const mItems = expenses.filter(e => {
+                  const d = new Date(e.expense_date);
+                  return d.getMonth() === m.month && d.getFullYear() === m.year;
+                });
+                const revUSD = mItems.filter(e => e.type === 'revenue' && e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
+                const revVND = mItems.filter(e => e.type === 'revenue' && e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+                const payVND = mItems.filter(e => e.source_type === 'payroll').reduce((s, e) => s + e.amount, 0);
+                const freeVND = mItems.filter(e => e.source_type === 'settlement' && e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+                const freeUSD = mItems.filter(e => e.source_type === 'settlement' && e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
+                const manualVND = mItems.filter(e => e.type !== 'revenue' && !e.source_type && e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+                const totalCostVND = payVND + freeVND + manualVND;
+                const profitVND = revVND - totalCostVND;
+                const profitUSD = revUSD - freeUSD;
+                const isCurrentMonth = m.month === currentMonth && m.year === currentYear;
+                const hasData = mItems.length > 0;
+
+                return (
+                  <tr key={i} className={`border-b border-white/5 transition-colors ${isCurrentMonth ? 'bg-white/[0.03]' : ''} ${hasData ? '' : 'opacity-30'}`}>
+                    <td className={`py-3 px-2 font-bold tabular-nums ${isCurrentMonth ? 'text-primary' : 'text-white/70'}`}>{m.label}</td>
+                    <td className="py-3 px-2 text-right tabular-nums text-emerald-400 font-bold">
+                      {revUSD > 0 && <span>{fmtUSD(revUSD)}</span>}
+                      {revVND > 0 && <span className="block text-[10px] text-emerald-400/60">{fmt(revVND)} ₫</span>}
+                      {revUSD === 0 && revVND === 0 && '—'}
+                    </td>
+                    <td className="py-3 px-2 text-right tabular-nums text-blue-400 font-bold">
+                      {payVND > 0 ? fmt(payVND) + ' ₫' : '—'}
+                    </td>
+                    <td className="py-3 px-2 text-right tabular-nums text-purple-400 font-bold">
+                      {freeUSD > 0 && <span>{fmtUSD(freeUSD)}</span>}
+                      {freeVND > 0 && <span className="block text-[10px] text-purple-400/60">{fmt(freeVND)} ₫</span>}
+                      {freeUSD === 0 && freeVND === 0 && '—'}
+                    </td>
+                    <td className="py-3 px-2 text-right tabular-nums text-amber-400 font-bold">
+                      {manualVND > 0 ? fmt(manualVND) + ' ₫' : '—'}
+                    </td>
+                    <td className="py-3 px-2 text-right font-black tabular-nums">
+                      {profitUSD !== 0 && (
+                        <span className={profitUSD >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                          {profitUSD >= 0 ? '+' : ''}{fmtUSD(profitUSD)}
+                        </span>
+                      )}
+                      {profitVND !== 0 && (
+                        <span className={`block text-[10px] ${profitVND >= 0 ? 'text-emerald-400/60' : 'text-red-400/60'}`}>
+                          {profitVND >= 0 ? '+' : ''}{fmt(profitVND)} ₫
+                        </span>
+                      )}
+                      {profitUSD === 0 && profitVND === 0 && <span className="text-white/30">—</span>}
+                    </td>
+                  </tr>
+                );
+              });
+            })()}
+            {/* Totals Row */}
+            <tr className="border-t-2 border-white/20 font-black">
+              <td className="py-3 px-2 text-primary uppercase text-[10px] tracking-widest">Tổng cộng</td>
+              <td className="py-3 px-2 text-right tabular-nums text-emerald-400">
+                {(() => {
+                  const totRevUSD = allRevenue.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
+                  const totRevVND = allRevenue.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+                  return <>
+                    {totRevUSD > 0 && <span>{fmtUSD(totRevUSD)}</span>}
+                    {totRevVND > 0 && <span className="block text-[10px] text-emerald-400/60">{fmt(totRevVND)} ₫</span>}
+                  </>;
+                })()}
+              </td>
+              <td className="py-3 px-2 text-right tabular-nums text-blue-400">
+                {fmt(allExpenses.filter(e => e.source_type === 'payroll').reduce((s, e) => s + e.amount, 0))} ₫
+              </td>
+              <td className="py-3 px-2 text-right tabular-nums text-purple-400">
+                {(() => {
+                  const fu = allExpenses.filter(e => e.source_type === 'settlement' && e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
+                  const fv = allExpenses.filter(e => e.source_type === 'settlement' && e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+                  return <>
+                    {fu > 0 && <span>{fmtUSD(fu)}</span>}
+                    {fv > 0 && <span className="block text-[10px] text-purple-400/60">{fmt(fv)} ₫</span>}
+                  </>;
+                })()}
+              </td>
+              <td className="py-3 px-2 text-right tabular-nums text-amber-400">
+                {fmt(allExpenses.filter(e => !e.source_type && e.currency === 'VND').reduce((s, e) => s + e.amount, 0))} ₫
+              </td>
+              <td className="py-3 px-2 text-right tabular-nums">
+                {(() => {
+                  const totRevUSD = allRevenue.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
+                  const totExpUSD = allExpenses.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
+                  const totRevVND = allRevenue.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+                  const totExpVND = allExpenses.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+                  const pUSD = totRevUSD - totExpUSD;
+                  const pVND = totRevVND - totExpVND;
+                  return <>
+                    {pUSD !== 0 && <span className={pUSD >= 0 ? 'text-emerald-400' : 'text-red-400'}>{pUSD >= 0 ? '+' : ''}{fmtUSD(pUSD)}</span>}
+                    {pVND !== 0 && <span className={`block text-[10px] ${pVND >= 0 ? 'text-emerald-400/60' : 'text-red-400/60'}`}>{pVND >= 0 ? '+' : ''}{fmt(pVND)} ₫</span>}
+                  </>;
+                })()}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* ── Revenue USD Breakdown ── */}
+      {allRevenue.filter(e => e.currency === 'USD').length > 0 && (
+        <div className="rounded-[20px] border bg-surface border-emerald-500/10 p-6">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-emerald-400/80 mb-6">💵 Revenue Breakdown (USD)</h3>
+          <div className="space-y-3">
+            {(() => {
+              const clientMap = new Map<string, number>();
+              allRevenue.filter(e => e.currency === 'USD').forEach(e => {
+                const key = e.client_name || e.vendor || 'Unknown';
+                clientMap.set(key, (clientMap.get(key) || 0) + e.amount);
+              });
+              const clientData = [...clientMap.entries()].sort((a, b) => b[1] - a[1]);
+              const maxClient = Math.max(...clientData.map(c => c[1]), 1);
+              return clientData.map(([client, amount], i) => (
+                <div key={i} className="group/item">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-white/80 truncate">{client}</span>
+                    <span className="text-xs font-black text-emerald-400 tabular-nums">{fmtUSD(amount)}</span>
+                  </div>
+                  <div className="h-2 bg-white/[0.03] rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-500/50 to-emerald-400/70 transition-all duration-700"
+                      style={{ width: `${(amount / maxClient * 100)}%`, animation: `barGrow 0.6s ease-out ${i * 0.1}s both` }} />
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* ── Top 5 Expenses ── */}
       <div className="rounded-[20px] border bg-surface border-primary/10 p-6">
@@ -274,19 +450,23 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
                   <p className="text-sm font-bold text-white truncate">{exp.title}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[10px] text-neutral-medium tabular-nums">{exp.expense_date}</span>
-                    {exp.category && (
+                    {exp.source_type && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{
+                        backgroundColor: (SOURCE_LABELS[exp.source_type]?.color || '#6B7280') + '15',
+                        color: SOURCE_LABELS[exp.source_type]?.color || '#6B7280'
+                      }}>
+                        {SOURCE_LABELS[exp.source_type]?.icon} {SOURCE_LABELS[exp.source_type]?.label || exp.source_type}
+                      </span>
+                    )}
+                    {exp.category && !exp.source_type && (
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: exp.category.color + '15', color: exp.category.color }}>
                         {exp.category.icon} {exp.category.name}
                       </span>
                     )}
-                    {exp.receipt_url && (
-                      <a href={exp.receipt_url} target="_blank" rel="noopener noreferrer"
-                        className="text-[10px] text-primary/60 hover:text-primary transition-colors">📎 Biên lai</a>
-                    )}
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-black text-primary tabular-nums">
+                  <p className="text-sm font-black text-red-400 tabular-nums">
                     {exp.currency === 'VND' ? fmt(exp.amount) + ' ₫' : fmtUSD(exp.amount)}
                   </p>
                   <p className="text-[9px] font-bold text-neutral-medium">{exp.vendor || exp.client_name || '—'}</p>
@@ -303,7 +483,8 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
           from { width: 0%; opacity: 0; }
           to { opacity: 1; }
         }
-      `}</style>
+      `}
+      </style>
     </div>
   );
 };

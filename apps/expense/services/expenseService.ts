@@ -95,3 +95,66 @@ export async function deleteRecurringExpense(id: string): Promise<void> {
   const { error } = await supabase.from('expense_recurring').delete().eq('id', id);
   if (error) throw error;
 }
+
+// ── Budgets ───────────────────────────────────────────────────
+export interface BudgetRecord {
+  id?: string;
+  month: number;
+  year: number;
+  category_id: string | null;
+  label: string;
+  amount: number;
+  currency: 'VND' | 'USD';
+  notes: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function fetchBudgets(year?: number): Promise<BudgetRecord[]> {
+  let q = supabase.from('expense_budgets').select('*').order('year', { ascending: false }).order('month', { ascending: false });
+  if (year) q = q.eq('year', year);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveBudget(budget: Omit<BudgetRecord, 'id' | 'created_at' | 'updated_at'>): Promise<BudgetRecord> {
+  const { data, error } = await supabase
+    .from('expense_budgets')
+    .upsert(budget, { onConflict: 'month,year,category_id,currency' })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteBudget(id: string): Promise<void> {
+  const { error } = await supabase.from('expense_budgets').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ── Export ─────────────────────────────────────────────────────
+export function exportToCSV(expenses: ExpenseRecord[], filename: string) {
+  const headers = ['Date', 'Type', 'Source', 'Title', 'Amount', 'Currency', 'Category', 'Vendor', 'Status', 'Notes'];
+  const rows = expenses.map(e => [
+    e.expense_date,
+    e.type || 'expense',
+    e.source_type || 'manual',
+    `"${(e.title || '').replace(/"/g, '""')}"`,
+    e.amount,
+    e.currency,
+    `"${(e.category?.name || '').replace(/"/g, '""')}"`,
+    `"${(e.vendor || '').replace(/"/g, '""')}"`,
+    e.status,
+    `"${(e.notes || '').replace(/"/g, '""')}"`,
+  ]);
+
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}

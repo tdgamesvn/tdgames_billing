@@ -10,6 +10,7 @@ import ExpenseForm from './ExpenseForm';
 import ExpenseRecurring from './ExpenseRecurring';
 import ExpenseCategoryManager from './ExpenseCategoryManager';
 import ExpenseDashboard from './ExpenseDashboard';
+import ExpenseReports from './ExpenseReports';
 
 interface ExpenseAppProps {
   currentUser: AccountUser;
@@ -23,6 +24,7 @@ const TAB_MAP: Record<ExpenseTab, string> = {
   add: 'history',
   recurring: 'recurring',
   categories: 'activity',
+  reports: 'reports',
 };
 
 const TAB_LABELS: Record<string, string> = {
@@ -30,6 +32,7 @@ const TAB_LABELS: Record<string, string> = {
   history: 'Danh sách',
   recurring: 'Định kỳ',
   activity: 'Danh mục',
+  reports: 'Báo cáo',
 };
 
 const REVERSE_TAB: Record<string, ExpenseTab> = {
@@ -37,6 +40,7 @@ const REVERSE_TAB: Record<string, ExpenseTab> = {
   history: 'list',
   recurring: 'recurring',
   activity: 'categories',
+  reports: 'reports',
 };
 
 const ExpenseApp: React.FC<ExpenseAppProps> = ({ currentUser, onBack, initialTab }) => {
@@ -65,7 +69,7 @@ const ExpenseApp: React.FC<ExpenseAppProps> = ({ currentUser, onBack, initialTab
   }, []);
 
   const navbarTab = TAB_MAP[state.activeTab];
-  const accessibleTabs = (['overview', 'history', 'recurring', 'activity'] as const).map(t => t);
+  const accessibleTabs = (['overview', 'history', 'recurring', 'activity', 'reports'] as const).map(t => t);
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden transition-colors duration-500" style={{ backgroundColor: '#0F0F0F' }}>
@@ -129,7 +133,11 @@ const ExpenseApp: React.FC<ExpenseAppProps> = ({ currentUser, onBack, initialTab
                 filterDateFrom={state.filterDateFrom} setFilterDateFrom={state.setFilterDateFrom}
                 filterDateTo={state.filterDateTo} setFilterDateTo={state.setFilterDateTo}
                 filterStatus={state.filterStatus} setFilterStatus={state.setFilterStatus}
+                filterType={state.filterType} setFilterType={state.setFilterType}
+                filterSource={state.filterSource} setFilterSource={state.setFilterSource}
                 totalVND={state.totalVND} totalUSD={state.totalUSD}
+                revenueVND={state.revenueVND} revenueUSD={state.revenueUSD}
+                expenseVND={state.expenseVND} expenseUSD={state.expenseUSD}
                 onEdit={(exp) => { state.setEditingExpense(exp); }}
                 onDelete={state.handleDeleteExpense}
                 onToggleStatus={state.handleToggleStatus}
@@ -154,6 +162,12 @@ const ExpenseApp: React.FC<ExpenseAppProps> = ({ currentUser, onBack, initialTab
             onSave={state.handleSaveCategory}
             onUpdate={state.handleUpdateCategory}
             onDelete={state.handleDeleteCategory}
+          />
+        )}
+        {state.activeTab === 'reports' && (
+          <ExpenseReports
+            expenses={state.expenses}
+            categories={state.categories}
           />
         )}
       </main>

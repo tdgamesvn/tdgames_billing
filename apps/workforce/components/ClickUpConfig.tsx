@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as clickup from '../services/clickupService';
-import { ClickUpConfig as ConfigType, ClickUpSpace, ClickUpList } from '../services/clickupService';
+import { ClickUpConfig as ConfigType } from '../services/clickupService';
 
 interface ClickUpConfigProps {
   onToast: (msg: string, type: 'success' | 'error') => void;
@@ -11,7 +11,7 @@ const labelCls = "text-[10px] font-black uppercase tracking-widest text-neutral-
 const btnPrimary = "py-3 px-6 rounded-xl font-black text-xs uppercase tracking-widest bg-gradient-primary text-white shadow-btn-glow hover:shadow-btn-glow-hover transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed";
 const btnSecondary = "py-3 px-6 rounded-xl font-black text-xs uppercase tracking-widest border border-primary/10 text-neutral-medium hover:text-white hover:border-primary/30 transition-all";
 
-type Step = 'token' | 'team' | 'spaces' | 'done';
+type Step = 'token' | 'team' | 'done';
 
 const ClickUpConfigComponent: React.FC<ClickUpConfigProps> = ({ onToast }) => {
   const [config, setConfig] = useState<ConfigType | null>(null);
@@ -24,10 +24,12 @@ const ClickUpConfigComponent: React.FC<ClickUpConfigProps> = ({ onToast }) => {
   const [teams, setTeams] = useState<{ id: string; name: string }[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [selectedTeamName, setSelectedTeamName] = useState('');
-  const [spaces, setSpaces] = useState<{ id: string; name: string }[]>([]);
-  const [configSpaces, setConfigSpaces] = useState<ClickUpSpace[]>([]);
   const [loadingStep, setLoadingStep] = useState(false);
-  const [loadingSpaceId, setLoadingSpaceId] = useState<string | null>(null);
+
+  // Auto-sync state
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
+  const [autoSyncTimes, setAutoSyncTimes] = useState<string[]>(['07:00', '19:00']);
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   // Load existing config
   useEffect(() => {
@@ -39,7 +41,8 @@ const ClickUpConfigComponent: React.FC<ClickUpConfigProps> = ({ onToast }) => {
           setToken(c.api_token);
           setSelectedTeamId(c.team_id);
           setSelectedTeamName(c.team_name);
-          setConfigSpaces(c.spaces || []);
+          setAutoSyncEnabled(c.auto_sync_enabled ?? true);
+          setAutoSyncTimes(c.auto_sync_times ?? ['07:00', '19:00']);
           setStep('done');
         }
       } catch (e: any) {
@@ -70,108 +73,27 @@ const ClickUpConfigComponent: React.FC<ClickUpConfigProps> = ({ onToast }) => {
     }
   };
 
-  // ── Step 2: Select team → auto-load ALL spaces + lists ──
-  const handleTeamSelect = async () => {
+  // ── Step 2: Select team → save immediately ──
+  const handleSaveTeam = async () => {
     if (!selectedTeamId) return;
-    setLoadingStep(true);
-    try {
-      // 1. Fetch all spaces
-      const data = await clickup.fetchSpaces(token, selectedTeamId);
-      const allSpaces = data.spaces || [];
-      setSpaces(allSpaces);
-
-      // 2. Auto-load lists for ALL spaces
-      const loadedSpaces: ClickUpSpace[] = [];
-      for (const sp of allSpaces) {
-        try {
-          const listData = await clickup.fetchLists(token, sp.id);
-          const lists: ClickUpList[] = (listData.lists || []).map((l: any) => ({
-            id: l.id, name: l.name, folder: l.folder, selected: true, // Auto-select all
-          }));
-          loadedSpaces.push({ id: sp.id, name: sp.name, lists });
-        } catch {
-          loadedSpaces.push({ id: sp.id, name: sp.name, lists: [] });
-        }
-      }
-      setConfigSpaces(loadedSpaces);
-      setStep('spaces');
-      onToast(`Đã load ${allSpaces.length} spaces với tất cả lists`, 'success');
-    } catch (e: any) {
-      onToast(`Lỗi: ${e.message}`, 'error');
-    } finally {
-      setLoadingStep(false);
-    }
-  };
-
-  // ── Refresh lists for a single space ──
-  const handleRefreshSpace = async (spaceId: string, spaceName: string) => {
-    setLoadingSpaceId(spaceId);
-    try {
-      const data = await clickup.fetchLists(token, spaceId);
-      const lists: ClickUpList[] = (data.lists || []).map((l: any) => ({
-        id: l.id, name: l.name, folder: l.folder, selected: true,
-      }));
-      setConfigSpaces(prev => {
-        const existing = prev.find(s => s.id === spaceId);
-        if (existing) {
-          return prev.map(s => s.id === spaceId ? { ...s, lists } : s);
-        }
-        return [...prev, { id: spaceId, name: spaceName, lists }];
-      });
-    } catch (e: any) {
-      onToast(`Lỗi: ${e.message}`, 'error');
-    } finally {
-      setLoadingSpaceId(null);
-    }
-  };
-
-  // ── Toggle helpers ──
-  const toggleList = (spaceId: string, listId: string) => {
-    setConfigSpaces(prev => prev.map(s =>
-      s.id === spaceId
-        ? { ...s, lists: s.lists.map(l => l.id === listId ? { ...l, selected: !l.selected } : l) }
-        : s
-    ));
-  };
-
-  const toggleAllListsInSpace = (spaceId: string) => {
-    setConfigSpaces(prev => prev.map(s => {
-      if (s.id !== spaceId) return s;
-      const allSelected = s.lists.every(l => l.selected);
-      return { ...s, lists: s.lists.map(l => ({ ...l, selected: !allSelected })) };
-    }));
-  };
-
-  const toggleAllSpaces = () => {
-    const allSelected = configSpaces.every(s => s.lists.every(l => l.selected));
-    setConfigSpaces(prev => prev.map(s => ({
-      ...s, lists: s.lists.map(l => ({ ...l, selected: !allSelected }))
-    })));
-  };
-
-  // ── Save config ──
-  const handleSave = async () => {
     setSaving(true);
     try {
       const saved = await clickup.saveConfig({
         api_token: token,
         team_id: selectedTeamId,
         team_name: selectedTeamName,
-        spaces: configSpaces,
+        spaces: config?.spaces || [], // Keep old spaces data for reference
         last_synced: config?.last_synced || null,
       });
       setConfig(saved);
       setStep('done');
-      onToast('Đã lưu cấu hình ClickUp!', 'success');
+      onToast('Đã lưu cấu hình ClickUp! Khi Sync, hệ thống sẽ tự động lấy tất cả Spaces & Lists.', 'success');
     } catch (e: any) {
       onToast(`Lỗi: ${e.message}`, 'error');
     } finally {
       setSaving(false);
     }
   };
-
-  const selectedListCount = configSpaces.reduce((s, sp) => s + sp.lists.filter(l => l.selected).length, 0);
-  const totalListCount = configSpaces.reduce((s, sp) => s + sp.lists.length, 0);
 
   if (isLoading) {
     return (
@@ -201,18 +123,15 @@ const ClickUpConfigComponent: React.FC<ClickUpConfigProps> = ({ onToast }) => {
               ⚙️ Cấu hình lại
             </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 rounded-xl border border-primary/10">
               <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">Team</p>
               <p className="text-white font-bold">{config.team_name}</p>
             </div>
             <div className="p-4 rounded-xl border border-primary/10">
-              <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">Spaces</p>
-              <p className="text-white font-bold">{config.spaces?.length || 0}</p>
-            </div>
-            <div className="p-4 rounded-xl border border-primary/10">
-              <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">Lists đã chọn</p>
-              <p className="text-white font-bold">{config.spaces?.reduce((s: number, sp: ClickUpSpace) => s + sp.lists.filter((l: ClickUpList) => l.selected).length, 0) || 0}</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">Chế độ Sync</p>
+              <p className="text-white font-bold">🔄 Toàn bộ Workspace</p>
+              <p className="text-neutral-medium/60 text-[10px] mt-0.5">Tự động lấy tất cả Spaces & Lists khi Sync</p>
             </div>
           </div>
           {config.last_synced && (
@@ -221,21 +140,18 @@ const ClickUpConfigComponent: React.FC<ClickUpConfigProps> = ({ onToast }) => {
             </p>
           )}
 
-          {/* Selected Lists Detail */}
-          <div className="space-y-2">
-            <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium">Lists được sync:</p>
-            {config.spaces?.map((sp: ClickUpSpace) => {
-              const selected = sp.lists.filter((l: ClickUpList) => l.selected);
-              if (selected.length === 0) return null;
-              return (
-                <div key={sp.id} className="flex flex-wrap gap-2 items-center">
-                  <span className="text-xs text-neutral-medium/60">{sp.name}:</span>
-                  {selected.map((l: ClickUpList) => (
-                    <span key={l.id} className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-primary/10 text-primary">{l.name}</span>
-                  ))}
-                </div>
-              );
-            })}
+          {/* Info Box */}
+          <div className="rounded-xl bg-blue-500/5 border border-blue-500/20 p-4">
+            <div className="flex items-start gap-3">
+              <span className="text-blue-400 text-lg">💡</span>
+              <div>
+                <p className="text-blue-400 font-bold text-sm">Không cần chọn từng Space/List</p>
+                <p className="text-neutral-medium text-xs mt-1">
+                  Khi bạn nhấn <strong className="text-white">Sync ClickUp</strong> ở tab Task, hệ thống sẽ tự động quét toàn bộ Spaces và Lists trong workspace.
+                  Nếu bạn thêm Space hoặc List mới trên ClickUp, chỉ cần Sync lại là xong — không cần cấu hình lại.
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Realtime Sync Toggle */}
@@ -281,6 +197,87 @@ const ClickUpConfigComponent: React.FC<ClickUpConfigProps> = ({ onToast }) => {
               </div>
             )}
           </div>
+
+          {/* Auto Sync Schedule */}
+          <div className="border-t border-primary/10 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">🕐 Auto Sync Schedule</p>
+                <p className="text-neutral-medium/60 text-[11px]">Tự động đồng bộ toàn bộ task theo lịch đã đặt (giờ Việt Nam)</p>
+              </div>
+              <button
+                onClick={async () => {
+                  const newEnabled = !autoSyncEnabled;
+                  setSavingSchedule(true);
+                  try {
+                    await clickup.updateAutoSyncSchedule(autoSyncTimes, newEnabled);
+                    setAutoSyncEnabled(newEnabled);
+                    onToast(newEnabled ? 'Đã bật Auto Sync!' : 'Đã tắt Auto Sync', 'success');
+                  } catch (e: any) {
+                    onToast(`Lỗi: ${e.message}`, 'error');
+                  } finally {
+                    setSavingSchedule(false);
+                  }
+                }}
+                disabled={savingSchedule}
+                className={`relative w-14 h-7 rounded-full transition-all ${autoSyncEnabled ? 'bg-emerald-500' : 'bg-neutral-dark/50'}`}
+              >
+                <div className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${autoSyncEnabled ? 'left-7' : 'left-0.5'}`} />
+              </button>
+            </div>
+
+            {autoSyncEnabled && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2 items-center">
+                  {autoSyncTimes.map((time, idx) => (
+                    <div key={idx} className="flex items-center gap-1">
+                      <input
+                        type="time"
+                        value={time}
+                        onChange={e => {
+                          setAutoSyncTimes(prev => prev.map((t, i) => i === idx ? e.target.value : t));
+                        }}
+                        className="bg-transparent border border-primary/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary/40 transition-all"
+                      />
+                      {autoSyncTimes.length > 1 && (
+                        <button
+                          onClick={() => setAutoSyncTimes(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-red-400/60 hover:text-red-400 text-lg font-bold transition-colors px-1"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {autoSyncTimes.length < 4 && (
+                    <button
+                      onClick={() => setAutoSyncTimes(prev => [...prev, '12:00'])}
+                      className="text-primary/60 hover:text-primary text-xs font-bold border border-primary/20 hover:border-primary/40 rounded-lg px-3 py-2 transition-all"
+                    >
+                      + Thêm giờ
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={async () => {
+                    setSavingSchedule(true);
+                    try {
+                      await clickup.updateAutoSyncSchedule(autoSyncTimes, true);
+                      onToast(`Đã cập nhật lịch: ${autoSyncTimes.join(', ')}`, 'success');
+                    } catch (e: any) {
+                      onToast(`Lỗi: ${e.message}`, 'error');
+                    } finally {
+                      setSavingSchedule(false);
+                    }
+                  }}
+                  disabled={savingSchedule}
+                  className="text-xs font-bold text-primary hover:text-primary-dark transition-colors disabled:opacity-30"
+                >
+                  {savingSchedule ? '⏳ Đang lưu...' : '💾 Lưu lịch sync'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -310,8 +307,8 @@ const ClickUpConfigComponent: React.FC<ClickUpConfigProps> = ({ onToast }) => {
         </div>
       )}
 
-      {/* Step 2: Select Team */}
-      {(step === 'team' || step === 'spaces') && teams.length > 0 && (
+      {/* Step 2: Select Team → Save immediately */}
+      {step === 'team' && teams.length > 0 && (
         <div className="rounded-[20px] border border-primary/10 bg-surface p-6 space-y-4">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-black text-sm">2</div>
@@ -328,95 +325,18 @@ const ClickUpConfigComponent: React.FC<ClickUpConfigProps> = ({ onToast }) => {
               </label>
             ))}
           </div>
-          {step === 'team' && (
-            <button onClick={handleTeamSelect} disabled={loadingStep || !selectedTeamId} className={btnPrimary}>
-              {loadingStep ? '⏳ Đang load tất cả Spaces & Lists...' : 'Load Workspace →'}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Step 3: Select Spaces & Lists — auto-loaded, multi-select */}
-      {step === 'spaces' && configSpaces.length > 0 && (
-        <div className="rounded-[20px] border border-primary/10 bg-surface p-6 space-y-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-black text-sm">3</div>
-              <h3 className="text-white font-bold">Chọn Spaces & Lists để sync</h3>
-            </div>
-            <button onClick={toggleAllSpaces} className="text-xs text-primary hover:text-primary-dark font-bold transition-colors">
-              {configSpaces.every(s => s.lists.every(l => l.selected))
-                ? '☐ Bỏ chọn tất cả'
-                : '☑ Chọn toàn bộ Workspace'}
-            </button>
+          
+          {/* Info */}
+          <div className="rounded-xl bg-amber-500/5 border border-amber-500/20 p-3">
+            <p className="text-amber-400/80 text-xs">
+              💡 Chỉ cần chọn Team. Hệ thống sẽ tự động lấy <strong>tất cả Spaces & Lists</strong> khi bạn Sync task.
+              Khi bạn thêm Space/List mới trên ClickUp, không cần cấu hình lại — chỉ cần Sync lại.
+            </p>
           </div>
 
-          <p className="text-neutral-medium text-xs">
-            Đã load <span className="text-white font-bold">{configSpaces.length}</span> spaces, <span className="text-white font-bold">{totalListCount}</span> lists — đã chọn <span className="text-primary font-bold">{selectedListCount}</span>
-          </p>
-
-          {configSpaces.map(sp => {
-            const allSelected = sp.lists.length > 0 && sp.lists.every(l => l.selected);
-            const someSelected = sp.lists.some(l => l.selected);
-            return (
-              <div key={sp.id} className={`rounded-xl border p-4 space-y-3 transition-all ${
-                someSelected ? 'border-primary/30 bg-primary/3' : 'border-primary/10'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => toggleAllListsInSpace(sp.id)}
-                      className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold transition-all ${
-                        allSelected ? 'bg-primary text-black' : someSelected ? 'bg-primary/30 text-primary' : 'border border-primary/20 text-neutral-medium'
-                      }`}
-                    >
-                      {allSelected ? '✓' : someSelected ? '−' : ''}
-                    </button>
-                    <span className="text-white font-bold">{sp.name}</span>
-                    <span className="text-neutral-medium text-[10px]">
-                      {sp.lists.filter(l => l.selected).length}/{sp.lists.length} lists
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleRefreshSpace(sp.id, sp.name)}
-                    disabled={loadingSpaceId === sp.id}
-                    className="text-[10px] text-neutral-medium hover:text-primary font-bold transition-colors"
-                  >
-                    {loadingSpaceId === sp.id ? '⏳' : '🔄'}
-                  </button>
-                </div>
-
-                {sp.lists.length > 0 && (
-                  <div className="space-y-1 ml-8">
-                    {sp.lists.map(l => (
-                      <label key={l.id} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
-                        l.selected ? 'bg-primary/8' : 'hover:bg-white/3'
-                      }`}>
-                        <input
-                          type="checkbox"
-                          checked={l.selected}
-                          onChange={() => toggleList(sp.id, l.id)}
-                          className="accent-primary w-4 h-4"
-                        />
-                        <span className={`text-sm ${l.selected ? 'text-white font-medium' : 'text-neutral-medium'}`}>{l.name}</span>
-                        {l.folder && <span className="text-[10px] text-neutral-medium/40 ml-auto">📁 {l.folder}</span>}
-                      </label>
-                    ))}
-                  </div>
-                )}
-                {sp.lists.length === 0 && (
-                  <p className="text-neutral-medium/50 text-xs ml-8">Không có list nào</p>
-                )}
-              </div>
-            );
-          })}
-
-          <div className="flex items-center justify-between pt-3 border-t border-primary/10">
-            <p className="text-neutral-medium text-xs">{selectedListCount}/{totalListCount} lists đã chọn</p>
-            <button onClick={handleSave} disabled={saving || selectedListCount === 0} className={btnPrimary}>
-              {saving ? '⏳ Đang lưu...' : '💾 Lưu cấu hình'}
-            </button>
-          </div>
+          <button onClick={handleSaveTeam} disabled={saving || !selectedTeamId} className={btnPrimary}>
+            {saving ? '⏳ Đang lưu...' : '💾 Lưu & Hoàn tất'}
+          </button>
         </div>
       )}
     </div>

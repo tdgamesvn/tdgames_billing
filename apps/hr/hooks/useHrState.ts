@@ -217,6 +217,21 @@ export function useHrState(initialTab?: string | null) {
     }
   };
 
+  // ── Workforce Sync ──
+  const handleSyncAllToWorkforce = async () => {
+    try {
+      const count = await svc.syncAllEmployeesToWorkforce();
+      if (count > 0) {
+        await loadAll();
+        setToast({ message: `Đã đồng bộ ${count} nhân sự sang Workforce`, type: 'success' });
+      } else {
+        setToast({ message: 'Tất cả nhân sự đã được đồng bộ', type: 'success' });
+      }
+    } catch (e: any) {
+      setToast({ message: `Lỗi đồng bộ: ${e.message}`, type: 'error' });
+    }
+  };
+
   // ── Filtered employees ──
   const filteredEmployees = employees.filter(e => {
     if (filterType && e.type !== filterType) return false;
@@ -253,6 +268,7 @@ export function useHrState(initialTab?: string | null) {
     loadContracts,
     handleSaveContract, handleUpdateContract, handleDeleteContract,
     handleGenerateReminders, handleDismissReminder,
+    handleSyncAllToWorkforce,
     loadAll,
   };
 }

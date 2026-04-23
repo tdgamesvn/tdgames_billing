@@ -221,7 +221,8 @@ const PayrollSheet: React.FC<Props> = ({
                           <Row label="Ngày công" value={`${rec.work_days} / ${STANDARD_DAYS}`} sub={`Tỷ lệ: ${(ratio).toFixed(6)}`} />
                           <Row label="Lương CB" value={fmt(rec.base_salary)} sub={`Thực: ${fmt(Math.round(rec.base_salary * ratio))}`} />
                           <Row label="PC ăn trưa" value={fmt(rec.lunch_allowance)} sub={`Thực: ${fmt(Math.round(rec.lunch_allowance * ratio))}`} />
-                          <Row label="PC xăng xe, ĐT" value={fmt(rec.transport_allowance)} sub={`Thực: ${fmt(Math.round(rec.transport_allowance * ratio))}`} />
+                          <Row label="PC xăng xe" value={fmt(rec.transport_allowance)} sub={`Thực: ${fmt(Math.round(rec.transport_allowance * ratio))}`} />
+                          <Row label="PC điện thoại" value={fmt(rec.phone_allowance)} sub={`Thực: ${fmt(Math.round(rec.phone_allowance * ratio))}`} />
                           <Row label="PC trang phục" value={fmt(rec.clothing_allowance)} sub={`Thực: ${fmt(Math.round(rec.clothing_allowance * ratio))}`} />
                           <Row label="KPI" value={fmt(rec.kpi_allowance)} sub={`Thực: ${fmt(Math.round(rec.kpi_allowance * ratio))}`} />
                           <Row label="Tăng ca MĐ" value={fmt(rec.default_ot)} sub={`Thực: ${fmt(Math.round(rec.default_ot * ratio))}`} />

@@ -16,9 +16,9 @@ import {
 } from '../services/expenseService';
 import { setHashTab } from '@/App';
 
-export type ExpenseTab = 'dashboard' | 'list' | 'add' | 'recurring' | 'categories';
+export type ExpenseTab = 'dashboard' | 'list' | 'add' | 'recurring' | 'categories' | 'reports';
 
-const VALID_TABS: ExpenseTab[] = ['dashboard', 'list', 'add', 'recurring', 'categories'];
+const VALID_TABS: ExpenseTab[] = ['dashboard', 'list', 'add', 'recurring', 'categories', 'reports'];
 
 export function useExpenseState(currentUser: string, initialTab?: string | null) {
   const [activeTab, _setActiveTab] = useState<ExpenseTab>(() => {
@@ -40,6 +40,8 @@ export function useExpenseState(currentUser: string, initialTab?: string | null)
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'expense' | 'revenue'>('all');
+  const [filterSource, setFilterSource] = useState('');
 
   // ── Editing ──
   const [editingExpense, setEditingExpense] = useState<ExpenseRecord | null>(null);
@@ -160,12 +162,21 @@ export function useExpenseState(currentUser: string, initialTab?: string | null)
     if (filterStatus && exp.status !== filterStatus) return false;
     if (filterDateFrom && exp.expense_date < filterDateFrom) return false;
     if (filterDateTo && exp.expense_date > filterDateTo) return false;
+    if (filterType !== 'all' && (exp.type || 'expense') !== filterType) return false;
+    if (filterSource) {
+      const src = exp.source_type || 'manual';
+      if (src !== filterSource) return false;
+    }
     return true;
   });
 
   // ── Totals ──
   const totalVND = filteredExpenses.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
   const totalUSD = filteredExpenses.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
+  const revenueVND = filteredExpenses.filter(e => e.type === 'revenue' && e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+  const revenueUSD = filteredExpenses.filter(e => e.type === 'revenue' && e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
+  const expenseVND = filteredExpenses.filter(e => e.type !== 'revenue' && e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
+  const expenseUSD = filteredExpenses.filter(e => e.type !== 'revenue' && e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
 
   return {
     activeTab, setActiveTab,
@@ -175,8 +186,11 @@ export function useExpenseState(currentUser: string, initialTab?: string | null)
     filterDateFrom, setFilterDateFrom,
     filterDateTo, setFilterDateTo,
     filterStatus, setFilterStatus,
+    filterType, setFilterType,
+    filterSource, setFilterSource,
     editingExpense, setEditingExpense,
     totalVND, totalUSD,
+    revenueVND, revenueUSD, expenseVND, expenseUSD,
     handleSaveExpense, handleUpdateExpense, handleDeleteExpense, handleToggleStatus,
     handleSaveRecurring, handleUpdateRecurring, handleDeleteRecurring,
     handleSaveCategory, handleUpdateCategory, handleDeleteCategory,

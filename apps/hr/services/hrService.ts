@@ -196,6 +196,11 @@ export async function saveEmployee(
     }
   }
 
+  // Auto-sync to Workforce module (non-blocking)
+  syncEmployeeToWorkforce(data).catch(err =>
+    console.warn('[Workforce Sync] Auto-sync on create failed:', err)
+  );
+
   return data;
 }
 
@@ -206,6 +211,13 @@ export async function updateEmployee(id: string, updates: Partial<HrEmployee>): 
     .update({ ...clean, updated_at: new Date().toISOString() })
     .eq('id', id);
   if (error) throw error;
+
+  // Auto-sync to Workforce module (non-blocking)
+  supabase.from('hr_employees').select('*').eq('id', id).single().then(({ data }) => {
+    if (data) syncEmployeeToWorkforce(data as HrEmployee).catch(err =>
+      console.warn('[Workforce Sync] Auto-sync on update failed:', err)
+    );
+  });
 }
 
 /** Update the auth role for an existing employee via edge function */
@@ -819,4 +831,115 @@ export async function saveDependentDocument(doc: Omit<HrDependentDocument, 'id' 
 export async function deleteDependentDocument(id: string): Promise<void> {
   const { error } = await supabase.from('hr_dependent_documents').delete().eq('id', id);
   if (error) throw error;
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── Workforce Sync (HR → wf_workers) ─────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * Sync a single HR employee to the Workforce module (wf_workers).
+ * - If employee already has worker_id → update existing worker
+ * - If no worker_id → find by email or create new worker, then link back
+ * Returns the worker_id.
+ */
+export async function syncEmployeeToWorkforce(employee: HrEmployee): Promise<string | null> {
+  try {
+    const workerEmail = employee.type === 'freelancer'
+      ? (employee.email || '')
+      : (employee.work_email || employee.email || '');
+
+    const workerType = employee.type === 'fulltime' ? 'inhouse' : 'freelancer';
+    const isActive = employee.status === 'active';
+
+    const workerData = {
+      full_name: employee.full_name,
+      email: workerEmail,
+      phone: employee.phone || '',
+      bank_name: employee.bank_name || '',
+      bank_account: employee.bank_account || '',
+      tax_code: employee.tax_code || '',
+      type: workerType,
+      is_active: isActive,
+    };
+
+    // Case 1: Already linked → update existing worker
+    if (employee.worker_id) {
+      const { error } = await supabase
+        .from('wf_workers')
+        .update(workerData)
+        .eq('id', employee.worker_id);
+      if (error) {
+        console.warn('[Workforce Sync] Failed to update worker:', error);
+        return employee.worker_id;
+      }
+      console.log(`[Workforce Sync] Updated worker for ${employee.full_name}`);
+      return employee.worker_id;
+    }
+
+    // Case 2: Not linked → try to find existing worker by email
+    if (workerEmail) {
+      const { data: existing } = await supabase
+        .from('wf_workers')
+        .select('id')
+        .eq('email', workerEmail)
+        .limit(1)
+        .single();
+
+      if (existing) {
+        // Link existing worker and update its data
+        await supabase.from('wf_workers').update(workerData).eq('id', existing.id);
+        await supabase.from('hr_employees')
+          .update({ worker_id: existing.id })
+          .eq('id', employee.id);
+        console.log(`[Workforce Sync] Linked existing worker for ${employee.full_name}`);
+        return existing.id;
+      }
+    }
+
+    // Case 3: Create new worker
+    const { data: newWorker, error: insertErr } = await supabase
+      .from('wf_workers')
+      .insert({
+        ...workerData,
+        notes: `Auto-synced from HR - ${employee.employee_code || ''}`,
+      })
+      .select('id')
+      .single();
+    if (insertErr) {
+      console.warn('[Workforce Sync] Failed to create worker:', insertErr);
+      return null;
+    }
+
+    // Link new worker_id back to HR employee
+    await supabase.from('hr_employees')
+      .update({ worker_id: newWorker.id })
+      .eq('id', employee.id);
+
+    console.log(`[Workforce Sync] Created & linked new worker for ${employee.full_name}`);
+    return newWorker.id;
+  } catch (err) {
+    console.warn('[Workforce Sync] Error:', err);
+    return null;
+  }
+}
+
+/**
+ * Batch sync: sync all HR employees that don't have a worker_id yet.
+ * Returns the number of employees synced.
+ */
+export async function syncAllEmployeesToWorkforce(): Promise<number> {
+  const { data: unlinked, error } = await supabase
+    .from('hr_employees')
+    .select('*')
+    .is('worker_id', null);
+  if (error) throw error;
+  if (!unlinked?.length) return 0;
+
+  let synced = 0;
+  for (const emp of unlinked) {
+    const workerId = await syncEmployeeToWorkforce(emp as HrEmployee);
+    if (workerId) synced++;
+  }
+  return synced;
 }

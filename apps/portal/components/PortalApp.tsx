@@ -289,7 +289,8 @@ const PortalApp: React.FC<PortalAppProps> = ({ currentUser, onBack }) => {
                           {[
                             { label: 'Lương cơ bản', ref: ps.base_salary, actual: Math.round((ps.base_salary || 0) * ratio) },
                             { label: 'PC ăn trưa', ref: ps.lunch_allowance, actual: Math.round((ps.lunch_allowance || 0) * ratio) },
-                            { label: 'PC xăng xe, ĐT', ref: ps.transport_allowance, actual: Math.round((ps.transport_allowance || 0) * ratio) },
+                            { label: 'PC xăng xe', ref: ps.transport_allowance, actual: Math.round((ps.transport_allowance || 0) * ratio) },
+                            { label: 'PC điện thoại', ref: ps.phone_allowance, actual: Math.round((ps.phone_allowance || 0) * ratio) },
                             { label: 'PC trang phục', ref: ps.clothing_allowance, actual: Math.round((ps.clothing_allowance || 0) * ratio) },
                             { label: 'Phụ cấp KPI', ref: ps.kpi_allowance, actual: Math.round((ps.kpi_allowance || 0) * ratio) },
                             { label: 'Tăng ca mặc định', ref: ps.default_ot, actual: Math.round((ps.default_ot || 0) * ratio) },

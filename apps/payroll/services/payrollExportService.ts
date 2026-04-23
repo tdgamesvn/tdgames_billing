@@ -24,7 +24,8 @@ export function exportPayrollToExcel(sheet: PayPayrollSheet, records: PayPayroll
     'Ngày công',
     'Lương CB',
     'PC ăn trưa',
-    'PC xăng xe, ĐT',
+    'PC xăng xe',
+    'PC điện thoại',
     'PC trang phục',
     'KPI',
     'Tăng ca MĐ',
@@ -53,6 +54,7 @@ export function exportPayrollToExcel(sheet: PayPayrollSheet, records: PayPayroll
       rec.base_salary,
       rec.lunch_allowance,
       rec.transport_allowance,
+      rec.phone_allowance,
       rec.clothing_allowance,
       rec.kpi_allowance,
       rec.default_ot,
@@ -82,6 +84,7 @@ export function exportPayrollToExcel(sheet: PayPayrollSheet, records: PayPayroll
     sum('base_salary'),
     sum('lunch_allowance'),
     sum('transport_allowance'),
+    sum('phone_allowance'),
     sum('clothing_allowance'),
     sum('kpi_allowance'),
     sum('default_ot'),
@@ -112,6 +115,7 @@ export function exportPayrollToExcel(sheet: PayPayrollSheet, records: PayPayroll
     { wch: 14 },  // Lương CB
     { wch: 14 },  // PC ăn trưa
     { wch: 14 },  // PC xăng xe
+    { wch: 14 },  // PC điện thoại
     { wch: 14 },  // PC trang phục
     { wch: 14 },  // KPI
     { wch: 14 },  // TC MĐ
@@ -174,7 +178,8 @@ export function exportPaySlipToExcel(sheet: PayPayrollSheet, rec: PayPayrollReco
   rows.push(['— BƯỚC 1-2: LƯƠNG THỰC TẾ —']);
   rows.push(['Lương cơ bản', rec.base_salary, Math.round(rec.base_salary * ratio)]);
   rows.push(['Phụ cấp ăn trưa', rec.lunch_allowance, Math.round(rec.lunch_allowance * ratio)]);
-  rows.push(['Phụ cấp xăng xe, ĐT', rec.transport_allowance, Math.round(rec.transport_allowance * ratio)]);
+  rows.push(['Phụ cấp xăng xe', rec.transport_allowance, Math.round(rec.transport_allowance * ratio)]);
+  rows.push(['Phụ cấp điện thoại', rec.phone_allowance, Math.round(rec.phone_allowance * ratio)]);
   rows.push(['Phụ cấp trang phục', rec.clothing_allowance, Math.round(rec.clothing_allowance * ratio)]);
   rows.push(['Phụ cấp KPI', rec.kpi_allowance, Math.round(rec.kpi_allowance * ratio)]);
   rows.push(['Tăng ca mặc định', rec.default_ot, Math.round(rec.default_ot * ratio)]);

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { HrEmployee, HrDepartment, HrContract, HrEvaluation, HrProjectHistory, AccountUser } from '@/types';
+import { HrEmployee, HrDepartment, HrContract, HrEvaluation, HrProjectHistory, AccountUser, WorkforceTask } from '@/types';
 import * as svc from '../services/hrService';
 import { uploadFileToR2, toPublicUrl, updateContract, deleteContract, updateEmployeeRole, hardDeleteEmployee } from '../services/hrService';
+import { getDashboardData, FulltimeKPI } from '@/apps/workforce/services/dashboardService';
+import { supabase } from '@/services/supabaseClient';
 import DocumentManager from './DocumentManager';
 import ContractGenerator from './ContractGenerator';
 
@@ -14,7 +16,7 @@ interface Props {
   onEdit: (e: HrEmployee) => void;
 }
 
-type DetailTab = 'info' | 'contracts' | 'evaluations' | 'projects' | 'documents';
+type DetailTab = 'info' | 'tasks' | 'contracts' | 'evaluations' | 'projects' | 'documents';
 
 const EmployeeDetail: React.FC<Props> = ({ employee, departments, currentUser, onBack, onEdit }) => {
   const [activeTab, setActiveTab] = useState<DetailTab>('info');
@@ -27,6 +29,8 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, currentUser, o
   const [contracts, setContracts] = useState<HrContract[]>([]);
   const [evaluations, setEvaluations] = useState<HrEvaluation[]>([]);
   const [projectHistory, setProjectHistory] = useState<HrProjectHistory[]>([]);
+  const [wfTasks, setWfTasks] = useState<WorkforceTask[]>([]);
+  const [recentKPI, setRecentKPI] = useState<FulltimeKPI | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Role change state
@@ -97,7 +101,33 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, currentUser, o
         setContracts(c);
         setEvaluations(e);
         setProjectHistory(p);
-      } catch {}
+
+        if (employee.worker_id) {
+          // Fetch tasks for this worker
+          const { data: tasksData } = await supabase
+            .from('wf_tasks')
+            .select('*')
+            .eq('worker_id', employee.worker_id)
+            .order('created_at', { ascending: false });
+          if (tasksData) {
+            setWfTasks(tasksData as WorkforceTask[]);
+          }
+
+          // Fetch KPI for previous month (or current)
+          if (employee.type === 'fulltime') {
+            const now = new Date();
+            const lastMonth = now.getMonth() === 0 ? 12 : now.getMonth(); // 1-indexed
+            const year = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+            const dashData = await getDashboardData(lastMonth, year);
+            const myKpi = dashData.fulltimeBreakdown.find(b => b.workerId === employee.worker_id);
+            if (myKpi) {
+              setRecentKPI(myKpi);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error loading detail data:', err);
+      }
       finally { setLoading(false); }
     };
     load();
@@ -317,6 +347,18 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, currentUser, o
                   <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${employee.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>{employee.status}</span>
                   {employee.position && <span className="text-[11px] text-neutral-medium">• {employee.position}</span>}
                   {dept && <span className="text-[11px] text-neutral-medium">• {dept.name}</span>}
+                  {recentKPI && (
+                    <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ml-2 border ${
+                      recentKPI.kpiScore === 'A' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                      recentKPI.kpiScore === 'B' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                      recentKPI.kpiScore === 'C' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
+                      recentKPI.kpiScore === 'D' ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' :
+                      recentKPI.kpiScore === 'F' ? 'bg-red-500/20 text-red-400 border-red-500/30' :
+                      'bg-white/5 text-neutral-medium border-white/10'
+                    }`} title={`ROI: ${recentKPI.roiPercent.toFixed(1)}%`}>
+                      KPI: {recentKPI.kpiScore}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -411,6 +453,7 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, currentUser, o
       {/* Sub-tabs */}
       <div className="flex gap-2">
         <button className={tabCls('info')} onClick={() => setActiveTab('info')}>📋 Thông tin</button>
+        <button className={tabCls('tasks')} onClick={() => setActiveTab('tasks')}>🎯 Lịch sử Task ({wfTasks.length})</button>
         <button className={tabCls('contracts')} onClick={() => setActiveTab('contracts')}>📄 Hợp đồng ({contracts.length})</button>
         <button className={tabCls('evaluations')} onClick={() => setActiveTab('evaluations')}>⭐ Đánh giá ({evaluations.length})</button>
         <button className={tabCls('projects')} onClick={() => setActiveTab('projects')}>📁 Dự án ({projectHistory.length})</button>
@@ -555,6 +598,59 @@ const EmployeeDetail: React.FC<Props> = ({ employee, departments, currentUser, o
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Tasks Tab */}
+      {!loading && activeTab === 'tasks' && (
+        <div className="space-y-4">
+          {!employee.worker_id ? (
+            <div className="text-center py-12 rounded-[20px] border border-dashed border-primary/20 bg-primary/5">
+              <p className="text-primary font-bold">Chưa đồng bộ sang Workforce</p>
+              <p className="text-neutral-medium text-xs mt-1">Vui lòng bấm nút "Đồng bộ WF" ở danh sách nhân sự để theo dõi Task.</p>
+            </div>
+          ) : wfTasks.length === 0 ? (
+            <p className="text-neutral-medium text-sm text-center py-12">Chưa có task nào được ghi nhận</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {wfTasks.map(t => (
+                <div key={t.id} className="rounded-[16px] border border-primary/10 bg-surface p-5 hover:border-primary/30 transition-all">
+                  <div className="flex justify-between items-start mb-2">
+                    <h4 className="text-white font-bold text-sm leading-snug pr-4">{t.title}</h4>
+                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md flex-shrink-0 ${
+                      t.status === 'done' ? 'bg-emerald-500/20 text-emerald-400' :
+                      t.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                      t.status === 'cancelled' ? 'bg-red-500/20 text-red-400' :
+                      'bg-white/10 text-neutral-medium'
+                    }`}>{t.status.replace('_', ' ')}</span>
+                  </div>
+                  {t.project_name && <p className="text-xs text-neutral-medium font-bold mb-1">📁 {t.project_name}</p>}
+                  <p className="text-[11px] text-neutral-medium/60 line-clamp-2 mb-3">{t.description || 'Không có mô tả'}</p>
+                  
+                  <div className="flex justify-between items-end mt-auto pt-3 border-t border-white/5">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-neutral-medium font-black uppercase tracking-widest">Rate chi phí</span>
+                      <span className="text-sm font-bold text-white">
+                        {t.internal_price ? `${t.internal_price.toLocaleString()} ${t.internal_currency}` : '—'}
+                      </span>
+                    </div>
+                    {employee.type === 'fulltime' && (
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[10px] text-primary/70 font-black uppercase tracking-widest">Client Giá thu</span>
+                        <span className="text-sm font-bold text-primary">
+                          {t.client_price ? `${t.client_price.toLocaleString()} ${t.client_currency}` : '—'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 flex justify-between items-center text-[10px] text-neutral-medium/50 font-mono">
+                    <span>Giao: {t.start_date || '—'}</span>
+                    <span>Deadline: {t.deadline || '—'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

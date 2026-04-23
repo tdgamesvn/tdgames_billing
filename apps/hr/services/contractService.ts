@@ -287,6 +287,7 @@ export function generateHDLD(
   const baseSalary = getSalaryAmount(salaryComponents, 'base_salary') || employee.salary;
   const lunch = getSalaryAmount(salaryComponents, 'lunch');
   const transport = getSalaryAmount(salaryComponents, 'transport');
+  const phone = getSalaryAmount(salaryComponents, 'phone');
   const clothing = getSalaryAmount(salaryComponents, 'clothing');
   const kpi = getSalaryAmount(salaryComponents, 'kpi');
 
@@ -364,7 +365,7 @@ ${employeeInfo(employee)}
   <p><strong>5.1. Hỗ trợ:</strong></p>
   <table class="allowance-table">
     ${allowanceRow('Ăn trưa', lunch, 'Tính theo ngày công thực tế')}
-    ${allowanceRow('Điện thoại', transport, 'Tính theo ngày công thực tế')}
+    ${allowanceRow('Điện thoại', phone, 'Tính theo ngày công thực tế')}
     ${allowanceRow('Xăng xe', transport, 'Tính theo ngày công thực tế')}
     ${allowanceRow('Trang phục', clothing, 'Tính theo ngày công thực tế')}
     ${allowanceRow('KPI', kpi, 'Tính theo hiệu quả công việc')}
@@ -420,6 +421,7 @@ export function generateHDTV(
   const baseSalary = getSalaryAmount(salaryComponents, 'base_salary') || employee.salary;
   const lunch = getSalaryAmount(salaryComponents, 'lunch');
   const transport = getSalaryAmount(salaryComponents, 'transport');
+  const phone = getSalaryAmount(salaryComponents, 'phone');
   const clothing = getSalaryAmount(salaryComponents, 'clothing');
   const kpi = getSalaryAmount(salaryComponents, 'kpi');
 
@@ -480,7 +482,7 @@ ${employeeInfo(employee)}
   <p><strong>1.2. Hỗ trợ:</strong></p>
   <table class="allowance-table">
     ${allowanceRow('Ăn trưa', lunch, 'Tính theo ngày công thực tế')}
-    ${allowanceRow('Điện thoại', transport, 'Tính theo ngày công thực tế')}
+    ${allowanceRow('Điện thoại', phone, 'Tính theo ngày công thực tế')}
   </table>
 </div>
 <div class="article">

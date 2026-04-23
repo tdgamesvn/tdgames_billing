@@ -34,6 +34,7 @@ interface PayrollInput {
   baseSalary: number;
   lunchAllowance: number;
   transportAllowance: number;
+  phoneAllowance: number;
   clothingAllowance: number;
   kpiAllowance: number;
   defaultOt: number;
@@ -65,6 +66,7 @@ export function calculatePayroll(input: PayrollInput): PayrollOutput {
   const baseSalaryActual = r(input.baseSalary * ratio);
   const lunchActual = r(input.lunchAllowance * ratio);
   const transportActual = r(input.transportAllowance * ratio);
+  const phoneActual = r(input.phoneAllowance * ratio);
   const clothingActual = r(input.clothingAllowance * ratio);
   const kpiActual = r(input.kpiAllowance * ratio);
   const defaultOtActual = r(input.defaultOt * ratio);
@@ -74,16 +76,16 @@ export function calculatePayroll(input: PayrollInput): PayrollOutput {
   const extraOt = r(hourlyRate * OT_RATE_WEEKDAY * input.extraOtHours);
 
   const grossRef = r(input.baseSalary + input.lunchAllowance + input.transportAllowance
-    + input.clothingAllowance + input.kpiAllowance + input.defaultOt);
+    + input.phoneAllowance + input.clothingAllowance + input.kpiAllowance + input.defaultOt);
 
   const grossActual = baseSalaryActual + lunchActual + transportActual
-    + clothingActual + kpiActual + defaultOtActual + extraOt;
+    + phoneActual + clothingActual + kpiActual + defaultOtActual + extraOt;
 
   // ── PROBATION: Không đóng BH, thuế TNCN 10% trên thu nhập chịu thuế ──
   if (input.isProbation) {
     const employeeBhxh = 0;
-    // Thu nhập chịu thuế: CB + Xăng xe/ĐT + KPI (không gồm ăn trưa, trang phục, tăng ca)
-    const taxableIncome = baseSalaryActual + transportActual + kpiActual;
+    // Thu nhập chịu thuế: CB + Xăng xe + ĐT + KPI (không gồm ăn trưa, trang phục, tăng ca)
+    const taxableIncome = baseSalaryActual + transportActual + phoneActual + kpiActual;
     const assessableIncome = taxableIncome;
     const pit = r(taxableIncome * 0.10); // 10% cố định
     const netSalary = grossActual - pit;
@@ -101,8 +103,8 @@ export function calculatePayroll(input: PayrollInput): PayrollOutput {
   // [BƯỚC 3] Bảo hiểm nhân viên
   const employeeBhxh = r(baseSalaryActual * BH_EMPLOYEE_RATE);
 
-  // [BƯỚC 4] Thu nhập chịu thuế (CB + Xăng xe/ĐT + KPI — không gồm ăn trưa, trang phục, tăng ca)
-  const taxableIncome = baseSalaryActual + transportActual + kpiActual;
+  // [BƯỚC 4] Thu nhập chịu thuế (CB + Xăng xe + ĐT + KPI — không gồm ăn trưa, trang phục, tăng ca)
+  const taxableIncome = baseSalaryActual + transportActual + phoneActual + kpiActual;
 
   // [BƯỚC 5] Thu nhập tính thuế
   let assessableIncome = taxableIncome - employeeBhxh
@@ -187,7 +189,8 @@ export async function updatePayrollRecord(id: string, updates: Partial<PayPayrol
 const SALARY_NAME_MAP: Record<string, keyof PayPayrollRecord> = {
   'Lương cơ bản': 'base_salary',
   'Phụ cấp ăn trưa': 'lunch_allowance',
-  'Phụ cấp xăng xe, điện thoại': 'transport_allowance',
+  'Phụ cấp xăng xe': 'transport_allowance',
+  'Phụ cấp điện thoại': 'phone_allowance',
   'Phụ cấp trang phục': 'clothing_allowance',
   'Phụ cấp năng suất (KPI)': 'kpi_allowance',
   'Tăng ca': 'default_ot',
@@ -277,6 +280,7 @@ export async function createPayrollSheet(
       baseSalary: salaryMap.base_salary || 0,
       lunchAllowance: salaryMap.lunch_allowance || 0,
       transportAllowance: salaryMap.transport_allowance || 0,
+      phoneAllowance: salaryMap.phone_allowance || 0,
       clothingAllowance: salaryMap.clothing_allowance || 0,
       kpiAllowance: salaryMap.kpi_allowance || 0,
       defaultOt: salaryMap.default_ot || 0,
@@ -294,6 +298,7 @@ export async function createPayrollSheet(
       base_salary: input.baseSalary,
       lunch_allowance: input.lunchAllowance,
       transport_allowance: input.transportAllowance,
+      phone_allowance: input.phoneAllowance,
       clothing_allowance: input.clothingAllowance,
       kpi_allowance: input.kpiAllowance,
       default_ot: input.defaultOt,
@@ -332,6 +337,7 @@ export function recalculateRecord(rec: PayPayrollRecord): PayPayrollRecord {
     baseSalary: rec.base_salary,
     lunchAllowance: rec.lunch_allowance,
     transportAllowance: rec.transport_allowance,
+    phoneAllowance: rec.phone_allowance,
     clothingAllowance: rec.clothing_allowance,
     kpiAllowance: rec.kpi_allowance,
     defaultOt: rec.default_ot,

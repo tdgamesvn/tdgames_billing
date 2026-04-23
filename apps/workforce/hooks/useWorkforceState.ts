@@ -5,9 +5,9 @@ import * as paSvc from '../services/projectAcceptanceService';
 import { supabase } from '@/services/supabaseClient';
 import { setHashTab } from '@/App';
 
-export type WorkforceTab = 'workers' | 'workerForm' | 'tasks' | 'settlements' | 'projectAcceptance' | 'config';
+export type WorkforceTab = 'workers' | 'workerForm' | 'tasks' | 'settlements' | 'projectAcceptance' | 'financials' | 'config';
 
-const VALID_TABS: WorkforceTab[] = ['workers', 'workerForm', 'tasks', 'settlements', 'projectAcceptance', 'config'];
+const VALID_TABS: WorkforceTab[] = ['workers', 'workerForm', 'tasks', 'settlements', 'projectAcceptance', 'financials', 'config'];
 
 export function useWorkforceState(currentUsername: string, initialTab?: string | null) {
   const [activeTab, _setActiveTab] = useState<WorkforceTab>(() => {
