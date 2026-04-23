@@ -150,6 +150,52 @@ const EmailOutreach: React.FC<Props> = ({ clients }) => {
 // ══════════════════════════════════════════════════════════════
 
 const DashboardTab: React.FC<{ stats: PipelineStats }> = ({ stats }) => {
+  const [autoBatchConfig, setAutoBatchConfig] = useState<any>(null);
+  const [batchLogs, setBatchLogs] = useState<any[]>([]);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [triggeringBatch, setTriggeringBatch] = useState(false);
+
+  useEffect(() => {
+    // Load config
+    import('@/services/supabaseClient').then(({ supabase }) => {
+      supabase.from('crm_outreach_config').select('value').eq('key', 'auto_batch').single()
+        .then(({ data }) => { if (data) setAutoBatchConfig(data.value); });
+      supabase.from('crm_outreach_batch_log').select('*').order('created_at', { ascending: false }).limit(10)
+        .then(({ data }) => { if (data) setBatchLogs(data); });
+    });
+  }, []);
+
+  const handleToggleAutoBatch = async () => {
+    const { supabase } = await import('@/services/supabaseClient');
+    const newConfig = { ...autoBatchConfig, enabled: !autoBatchConfig.enabled };
+    await supabase.from('crm_outreach_config').update({ value: newConfig, updated_at: new Date().toISOString() }).eq('key', 'auto_batch');
+    setAutoBatchConfig(newConfig);
+  };
+
+  const handleSaveConfig = async () => {
+    setSavingConfig(true);
+    const { supabase } = await import('@/services/supabaseClient');
+    await supabase.from('crm_outreach_config').update({ value: autoBatchConfig, updated_at: new Date().toISOString() }).eq('key', 'auto_batch');
+    setSavingConfig(false);
+    alert('✅ Đã lưu cấu hình!');
+  };
+
+  const handleTriggerBatch = async () => {
+    if (!confirm('Chạy auto batch ngay bây giờ?')) return;
+    setTriggeringBatch(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/outreach-auto-batch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const data = await res.json();
+      alert(`Batch hoàn thành!\n\nĐã gửi: ${data.total_sent || 0}\nThất bại: ${data.total_failed || 0}`);
+      // Reload logs
+      const { supabase } = await import('@/services/supabaseClient');
+      const { data: logs } = await supabase.from('crm_outreach_batch_log').select('*').order('created_at', { ascending: false }).limit(10);
+      if (logs) setBatchLogs(logs);
+    } catch (err: any) { alert(`Lỗi: ${err.message}`); }
+    setTriggeringBatch(false);
+  };
+
   const pipelineSteps = [
     { label: 'Pending', count: stats.pending, color: '#888', pct: stats.total > 0 ? (stats.pending / stats.total) * 100 : 0 },
     { label: 'Initial Sent', count: stats.initial_sent, color: '#0A84FF', pct: stats.total > 0 ? (stats.initial_sent / stats.total) * 100 : 0 },
@@ -229,6 +275,79 @@ const DashboardTab: React.FC<{ stats: PipelineStats }> = ({ stats }) => {
           </div>
         ))}
       </div>
+
+      {/* ═══ AUTO BATCH CONFIG ═══ */}
+      {autoBatchConfig && (
+        <div style={{ background: '#161616', border: `1px solid ${autoBatchConfig.enabled ? '#34C75930' : '#33333380'}`, borderRadius: '12px', padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div>
+              <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#F5F5F5', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                🤖 Auto Daily Batch
+              </h3>
+              <p style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>Tự động gửi email hàng ngày theo lịch</p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button onClick={handleTriggerBatch} disabled={triggeringBatch} style={{
+                padding: '8px 14px', border: 'none', borderRadius: '8px',
+                background: triggeringBatch ? '#333' : '#FF950020', color: triggeringBatch ? '#888' : '#FF9500',
+                fontSize: '11px', fontWeight: 700, cursor: triggeringBatch ? 'wait' : 'pointer',
+              }}>{triggeringBatch ? '⏳ Đang gửi...' : '▶ Chạy ngay'}</button>
+              <button onClick={handleToggleAutoBatch} style={{
+                padding: '8px 20px', border: 'none', borderRadius: '20px',
+                background: autoBatchConfig.enabled ? '#34C759' : '#555',
+                color: '#fff', fontSize: '11px', fontWeight: 800, cursor: 'pointer',
+                transition: 'background 0.3s',
+              }}>{autoBatchConfig.enabled ? '✓ BẬT' : '✗ TẮT'}</button>
+            </div>
+          </div>
+
+          {/* Config fields */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}>
+            <div>
+              <label style={labelStyle}>Batch size (mỗi lần)</label>
+              <input type="number" style={inputStyle} value={autoBatchConfig.batch_size || 15}
+                onChange={e => setAutoBatchConfig({ ...autoBatchConfig, batch_size: +e.target.value })} />
+            </div>
+            <div>
+              <label style={labelStyle}>Daily limit</label>
+              <input type="number" style={inputStyle} value={autoBatchConfig.daily_limit || 30}
+                onChange={e => setAutoBatchConfig({ ...autoBatchConfig, daily_limit: +e.target.value })} />
+            </div>
+            <div>
+              <label style={labelStyle}>Min delay giữa follow-up (giờ)</label>
+              <input type="number" style={inputStyle} value={autoBatchConfig.min_delay_hours || 72}
+                onChange={e => setAutoBatchConfig({ ...autoBatchConfig, min_delay_hours: +e.target.value })} />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '16px' }}>
+            <span style={{ fontSize: '11px', color: '#888', fontWeight: 700 }}>⏰ Lịch gửi: 7:00 sáng & 14:00 chiều (VN)</span>
+            <button onClick={handleSaveConfig} disabled={savingConfig} style={{
+              padding: '6px 14px', border: 'none', borderRadius: '6px', marginLeft: 'auto',
+              background: '#0A84FF', color: '#fff', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+            }}>{savingConfig ? '⏳...' : '💾 Lưu cấu hình'}</button>
+          </div>
+
+          {/* Batch Log */}
+          {batchLogs.length > 0 && (
+            <div style={{ borderTop: '1px solid #222', paddingTop: '14px' }}>
+              <p style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#666', marginBottom: '8px' }}>Lịch sử batch gần đây</p>
+              <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                {batchLogs.map(log => (
+                  <div key={log.id} style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #1A1A1A', fontSize: '12px' }}>
+                    <span style={{ color: '#555', width: '130px', flexShrink: 0 }}>{new Date(log.created_at).toLocaleString('vi-VN')}</span>
+                    <span style={{ color: log.batch_type === 'auto' ? '#BF5AF2' : '#0A84FF', fontWeight: 700, width: '50px' }}>{log.batch_type === 'auto' ? '🤖 Auto' : '👤 Manual'}</span>
+                    <span style={{ color: log.status === 'completed' ? '#34C759' : log.status === 'running' ? '#FF9500' : '#FF453A', fontWeight: 700 }}>
+                      {log.status === 'completed' ? '✅' : log.status === 'running' ? '⏳' : '❌'} {log.status}
+                    </span>
+                    <span style={{ color: '#888' }}>Sent: {log.total_sent || 0} | Failed: {log.total_failed || 0}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -237,10 +356,19 @@ const DashboardTab: React.FC<{ stats: PipelineStats }> = ({ stats }) => {
 // ── LEADS TAB ─────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
 
+// ── Outreach API helper (uses Supabase proxy to bypass CORS) ──
+function getOutreachAPI(): string {
+  // Use Supabase Edge Function proxy to avoid CORS issues with VPS
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  if (supabaseUrl) return `${supabaseUrl}/functions/v1/outreach-proxy`;
+  // Fallback to direct VPS URL
+  return import.meta.env.VITE_OUTREACH_API_URL || '';
+}
+
 interface QuotaStatus { sent_today: number; daily_limit: number; remaining: number; }
 
 async function fetchQuota(): Promise<QuotaStatus> {
-  const API = import.meta.env.VITE_OUTREACH_API_URL;
+  const API = getOutreachAPI();
   if (!API) return { sent_today: 0, daily_limit: 30, remaining: 30 };
   try {
     const res = await fetch(`${API}/api/email/status`);
@@ -276,7 +404,7 @@ const LeadsTab: React.FC<LeadsProps> = ({ leads, clients, isLoading, templates, 
 
   // Send email to a single lead
   const handleSendEmail = async (leadId: string, templateName: string = 'initial_outreach') => {
-    const API = import.meta.env.VITE_OUTREACH_API_URL;
+    const API = getOutreachAPI();
     if (!API) { alert('VITE_OUTREACH_API_URL chưa cấu hình'); return; }
     setSendingId(leadId);
     try {
@@ -296,7 +424,7 @@ const LeadsTab: React.FC<LeadsProps> = ({ leads, clients, isLoading, templates, 
 
   // Bulk send via server-side batch (with 2-5 min delay between each email)
   const handleBulkSend = async () => {
-    const API = import.meta.env.VITE_OUTREACH_API_URL;
+    const API = getOutreachAPI();
     if (!API) { alert('VITE_OUTREACH_API_URL chưa cấu hình'); return; }
     const pendingCount = leads.filter(l => l.outreach_status === 'pending').length;
     const remaining = quota?.remaining || 30;
@@ -341,7 +469,7 @@ const LeadsTab: React.FC<LeadsProps> = ({ leads, clients, isLoading, templates, 
   // Verify pending emails before sending
   const handleVerifyEmails = async () => {
     console.log('[Verify] Button clicked');
-    const API = import.meta.env.VITE_OUTREACH_API_URL;
+    const API = getOutreachAPI();
     console.log('[Verify] API URL:', API);
     if (!API) { alert('VITE_OUTREACH_API_URL chưa cấu hình'); return; }
     const pendingCount = leads.filter(l => l.outreach_status === 'pending').length;
@@ -365,7 +493,7 @@ const LeadsTab: React.FC<LeadsProps> = ({ leads, clients, isLoading, templates, 
   // Check bounces from Gmail inbox
   const handleCheckBounces = async () => {
     console.log('[Bounce] Button clicked');
-    const API = import.meta.env.VITE_OUTREACH_API_URL;
+    const API = getOutreachAPI();
     console.log('[Bounce] API URL:', API);
     if (!API) { alert('VITE_OUTREACH_API_URL chưa cấu hình'); return; }
     if (!confirm('Quét Gmail inbox tìm email bị bounce?\n\nSẽ tự động đánh dấu leads bị bounce trong database.')) return;

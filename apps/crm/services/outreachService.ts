@@ -191,7 +191,8 @@ export function parseCsvLeads(csvText: string): Omit<CrmOutreachLead, 'id' | 'cr
 // ── FASTAPI INTEGRATION (Phase 2) ─────────────────────────────
 // ══════════════════════════════════════════════════════════════
 
-const API_BASE = import.meta.env.VITE_OUTREACH_API_URL || '';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const API_BASE = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/outreach-proxy` : (import.meta.env.VITE_OUTREACH_API_URL || '');
 
 export async function discoverContacts(company: string, domain: string): Promise<any[]> {
   if (!API_BASE) throw new Error('VITE_OUTREACH_API_URL chưa cấu hình (cần FastAPI trên VPS)');
