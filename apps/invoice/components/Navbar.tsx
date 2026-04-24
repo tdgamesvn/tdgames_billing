@@ -26,7 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({ theme, currentUser, activeTab, a
       )}
       <img src="https://pub-f0ef2ac3b67c4d4da2fe20c73ab57f83.r2.dev/logo_td.png" alt="Logo" className="w-10 h-10 object-contain" />
       <div className="flex flex-col">
-        <span className={`text-lg font-bold uppercase tracking-widest leading-none ${theme === 'dark' ? 'text-white' : 'text-black'}`}>TD Games {appName || 'Billing'}</span>
+        <span className={`text-lg font-bold uppercase tracking-widest leading-none ${theme === 'dark' ? 'text-white' : 'text-black'}`}>TD Games {appName || 'Platform'}</span>
       </div>
 
       {/* VCB USD/VND Exchange Rate — only render when props are passed */}

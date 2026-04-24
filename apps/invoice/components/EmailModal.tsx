@@ -68,7 +68,7 @@ export const EmailModal: React.FC<EmailModalProps> = ({ theme, invoice, onClose,
         </div>
       </div>
       <div style="text-align: center; padding: 16px; color: #404040; font-size: 10px; text-transform: uppercase; letter-spacing: 2px;">
-        TD Games • Enterprise Billing
+        TD Games • Enterprise Platform
       </div>
     </div>
   `;

@@ -95,7 +95,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                             className="text-2xl font-black uppercase tracking-[0.12em] font-montserrat"
                             style={{ color: '#FF9500' }}
                         >
-                            TD Games Billing
+                            TD Games Platform
                         </h1>
                         <p
                             className="text-[10px] font-bold uppercase tracking-[0.2em] mt-1"
