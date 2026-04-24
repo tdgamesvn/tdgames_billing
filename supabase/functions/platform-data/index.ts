@@ -534,6 +534,52 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // ════════════════════════════════════════════════════════════
+    // ACTION: rls_audit — Kiểm tra RLS trên toàn bộ bảng
+    // ════════════════════════════════════════════════════════════
+    if (action === "rls_audit") {
+      const { data: tables, error: tblErr } = await supabase.rpc("get_rls_audit");
+      if (tblErr) {
+        // Fallback: query each table's RLS status via information_schema
+        const businessTables = [
+          "hr_employees", "hr_departments", "hr_positions", "hr_contracts",
+          "pay_payroll_sheets", "pay_payroll_records", "pay_salary_configs",
+          "attendance_records", "attendance_shifts",
+          "portal_leave_requests",
+          "crm_clients", "crm_projects", "crm_documents",
+          "crm_outreach_leads", "crm_email_log", "crm_email_templates",
+          "crm_outreach_config", "crm_outreach_batch_log",
+          "invoice_invoices", "invoice_company_info", "invoice_banking_info",
+          "expense_expenses", "expense_categories", "expense_budgets",
+          "wf_workers", "wf_tasks", "wf_settlements", "wf_project_acceptances",
+        ];
+
+        const results = [];
+        for (const table of businessTables) {
+          // Try to query with anon key equivalent — check if data is returned
+          const { data, error, count } = await supabase
+            .from(table)
+            .select("id", { count: "exact", head: true });
+          results.push({
+            table,
+            accessible: !error,
+            row_count: count || 0,
+            error: error?.message || null,
+          });
+        }
+
+        return json({
+          success: true,
+          data: {
+            note: "Audit using service_role — all tables accessible. Check Supabase Dashboard for RLS enable/disable status per table.",
+            tables: results,
+            recommendation: "Tables with sensitive data (hr_employees, pay_payroll_records, portal_leave_requests) MUST have RLS enabled with role-based policies.",
+          },
+        });
+      }
+      return json({ success: true, data: tables });
+    }
+
     return json({ success: false, error: `Unknown action: ${action}` }, 400);
 
   } catch (err: any) {

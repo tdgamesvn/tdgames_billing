@@ -2,227 +2,192 @@ import React, { useState, useEffect } from 'react';
 import AppBackground from '@/components/AppBackground';
 import { AccountUser } from '@/types';
 import { Navbar } from '@/apps/invoice/components/Navbar';
-import { fetchDashboardMetrics, DashboardMetrics } from '../services/dashboardService';
+import { fetchCeoDashboard, CeoDashboardData, Alert } from '../services/dashboardService';
+import TrendChart from './TrendChart';
+import PlTable from './PlTable';
 
-interface Props {
-  currentUser: AccountUser;
-  onBack: () => void;
-  initialTab?: string | null;
-}
+interface Props { currentUser: AccountUser; onBack: () => void; initialTab?: string | null }
 
 const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN');
 const fmtM = (n: number) => {
-  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + ' tỷ';
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + ' tr';
-  if (n >= 1_000) return (n / 1_000).toFixed(0) + 'k';
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + ' tỷ';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'tr';
+  if (n >= 1e3) return (n / 1e3).toFixed(0) + 'k';
   return n.toString();
 };
+const pctChange = (cur: number, prev: number) => {
+  if (prev === 0) return cur > 0 ? 100 : 0;
+  return ((cur - prev) / prev) * 100;
+};
+
+const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
+const YEARS = [2024, 2025, 2026, 2027];
 
 const DashboardApp: React.FC<Props> = ({ currentUser, onBack }) => {
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [data, setData] = useState<CeoDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selMonth, setSelMonth] = useState(new Date().getMonth() + 1);
+  const [selYear, setSelYear] = useState(new Date().getFullYear());
 
-  useEffect(() => {
-    fetchDashboardMetrics()
-      .then(setMetrics)
+  const load = () => {
+    setLoading(true);
+    fetchCeoDashboard(selMonth, selYear)
+      .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(load, [selMonth, selYear]);
 
   return (
     <div className="min-h-screen bg-bg-dark relative overflow-hidden">
       <AppBackground />
-      <Navbar
-        theme="dark"
-        currentUser={currentUser}
-        activeTab="history"
-        accessibleTabs={['history']}
-        onTabChange={() => {}}
-        onLogout={onBack}
-        onBack={onBack}
-        appName="Dashboard"
-        tabLabels={{ history: 'Tổng quan' }}
-      />
+      <Navbar theme="dark" currentUser={currentUser} activeTab="history"
+        accessibleTabs={['history']} onTabChange={() => {}} onLogout={onBack} onBack={onBack}
+        appName="CEO Dashboard" tabLabels={{ history: 'Tổng quan' }} />
 
-      <main className="max-w-[1400px] mx-auto px-4 py-6 relative z-10">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-black text-white uppercase tracking-tight">📊 CEO Dashboard</h1>
-          <p className="text-neutral-medium text-sm mt-1">
-            Xin chào <span className="text-primary font-bold">{currentUser.username}</span> — tổng quan hệ thống TD Games
-          </p>
+      <main className="max-w-[1440px] mx-auto px-4 py-6 relative z-10">
+        {/* ── Header + Month Filter ── */}
+        <div className="flex items-end justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-black text-white uppercase tracking-tight">📊 CEO Dashboard</h1>
+            <p className="text-neutral-medium text-sm mt-1">
+              Xin chào <span className="text-primary font-bold">{currentUser.username}</span> — tổng quan TD Games
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={selMonth} onChange={e => setSelMonth(+e.target.value)}
+              style={{ backgroundColor: '#1a1a2e', color: '#fff' }}
+              className="border border-primary/20 text-xs rounded-lg px-3 py-2 font-bold focus:outline-none focus:border-primary appearance-none cursor-pointer">
+              {MONTHS.map(m => <option key={m} value={m} style={{ backgroundColor: '#1a1a2e', color: '#fff' }}>Tháng {m}</option>)}
+            </select>
+            <select value={selYear} onChange={e => setSelYear(+e.target.value)}
+              style={{ backgroundColor: '#1a1a2e', color: '#fff' }}
+              className="border border-primary/20 text-xs rounded-lg px-3 py-2 font-bold focus:outline-none focus:border-primary appearance-none cursor-pointer">
+              {YEARS.map(y => <option key={y} value={y} style={{ backgroundColor: '#1a1a2e', color: '#fff' }}>{y}</option>)}
+            </select>
+            <button onClick={load} className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition text-sm">🔄</button>
+          </div>
         </div>
 
         {loading ? (
           <div className="flex justify-center py-20">
             <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
           </div>
-        ) : metrics ? (
-          <>
-            {/* ── Row 1: Big KPI Cards ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <KpiCard
-                icon="📄" label="Doanh thu Invoice"
-                value={fmtM(metrics.totalRevenue)} suffix="đ"
-                sub={`${metrics.invoiceCount} hoá đơn`}
-                gradient="linear-gradient(135deg, #FF9500, #FF5E3A)"
-              />
-              <KpiCard
-                icon="💰" label="Tổng chi phí"
-                value={fmtM(metrics.totalExpense)} suffix="đ"
-                sub={`${metrics.expenseCount} khoản chi`}
-                gradient="linear-gradient(135deg, #34C759, #30D158)"
-              />
-              <KpiCard
-                icon="🧑‍💼" label="Nhân sự"
-                value={`${metrics.employeeCount}`} suffix="người"
-                sub={`${metrics.departmentCount} phòng ban`}
-                gradient="linear-gradient(135deg, #FF375F, #FF6B81)"
-              />
-              <KpiCard
-                icon="💵" label="Quỹ lương"
-                value={metrics.latestPayroll ? fmtM(metrics.latestPayroll.totalCompanyCost) : '—'} suffix="đ"
-                sub={metrics.latestPayroll ? metrics.latestPayroll.title : 'Chưa có bảng lương'}
-                gradient="linear-gradient(135deg, #10B981, #059669)"
-              />
+        ) : data ? (
+          <div className="space-y-5">
+            {/* ══════ Section 1: KPI Strip ══════ */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <KpiCard icon="💰" label="Doanh thu" value={fmtM(data.current.revenue)} suffix="đ"
+                change={pctChange(data.current.revenue, data.prev.revenue)} gradient="from-emerald-500 to-teal-600" />
+              <KpiCard icon="📉" label="Chi phí" value={fmtM(data.current.expense)} suffix="đ"
+                change={pctChange(data.current.expense, data.prev.expense)} invertColor gradient="from-red-500 to-orange-600" />
+              <KpiCard icon={data.current.profit >= 0 ? '📈' : '📉'} label="Lợi nhuận"
+                value={`${data.current.profit >= 0 ? '+' : ''}${fmtM(data.current.profit)}`} suffix="đ"
+                change={pctChange(data.current.profit, data.prev.profit)}
+                gradient={data.current.profit >= 0 ? 'from-emerald-400 to-green-600' : 'from-red-400 to-red-600'} />
+              <HealthCard score={data.healthScore} margin={data.current.marginPct} />
             </div>
 
-            {/* ── Row 2: Detail Panels ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-              {/* Invoice breakdown */}
-              <Panel title="Hoá đơn" icon="📄">
-                <div className="space-y-3">
-                  <ProgressBar
-                    label="Đã thanh toán" value={metrics.invoicePaid}
-                    total={metrics.invoiceCount} color="#34C759"
-                  />
-                  <ProgressBar
-                    label="Chờ thanh toán" value={metrics.invoicePending}
-                    total={metrics.invoiceCount} color="#FF9500"
-                  />
-                  <div className="pt-2 border-t border-white/5">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-neutral-medium">Tổng doanh thu</span>
-                      <span className="text-white font-bold">{fmt(metrics.totalRevenue)} đ</span>
-                    </div>
-                  </div>
-                </div>
-              </Panel>
-
-              {/* Workforce */}
-              <Panel title="Workforce" icon="👷">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-neutral-medium text-xs">Workers</span>
-                    <span className="text-white font-bold text-lg">{metrics.workerCount}</span>
-                  </div>
-                  <ProgressBar
-                    label="Tasks hoàn thành" value={metrics.taskCompleted}
-                    total={metrics.taskTotal} color="#5856D6"
-                  />
-                  <ProgressBar
-                    label="Tasks đang làm" value={metrics.taskPending}
-                    total={metrics.taskTotal} color="#FF9500"
-                  />
-                  <div className="pt-2 border-t border-white/5">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-neutral-medium">Tổng giá trị task</span>
-                      <span className="text-white font-bold">{fmt(metrics.workforcePayable)} đ</span>
-                    </div>
-                  </div>
-                </div>
-              </Panel>
-
-              {/* CRM overview */}
-              <Panel title="CRM" icon="👥">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-neutral-medium text-[10px] font-bold uppercase tracking-widest">Khách hàng</p>
-                      <p className="text-white font-black text-2xl">{metrics.clientCount}</p>
-                    </div>
-                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center text-2xl">
-                      👥
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-neutral-medium text-[10px] font-bold uppercase tracking-widest">Dự án</p>
-                      <p className="text-white font-black text-2xl">{metrics.projectCount}</p>
-                    </div>
-                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-2xl">
-                      📁
-                    </div>
-                  </div>
-                </div>
-              </Panel>
+            {/* ══════ Section 2: Chart + Alerts ══════ */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2">
+                <TrendChart data={data.trend} />
+              </div>
+              <AlertCenter alerts={data.alerts} />
             </div>
 
-            {/* ── Row 3: HR + Payroll ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* HR departments */}
-              <Panel title="Phòng ban & Nhân sự" icon="🧑‍💼">
-                <div className="space-y-2">
-                  {metrics.departments.length === 0 ? (
-                    <p className="text-neutral-medium text-sm text-center py-4">Chưa có dữ liệu</p>
-                  ) : (
-                    metrics.departments.map(d => (
-                      <div key={d.name} className="flex items-center justify-between py-1.5">
-                        <span className="text-white text-sm font-medium">{d.name}</span>
+            {/* ══════ Section 3: Business Modules ══════ */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Cash Flow */}
+              <Panel title="Dòng tiền" icon="💰">
+                <div className="space-y-3">
+                  <FlowRow label="Thu tháng này" value={fmt(data.current.revenue)} suffix="đ" color="text-emerald-400" />
+                  <FlowRow label="Chi tháng này" value={`-${fmt(data.current.expense)}`} suffix="đ" color="text-red-400" />
+                  <div className="border-t border-white/10 pt-2">
+                    <FlowRow label="Net cash flow" value={`${data.current.profit >= 0 ? '+' : ''}${fmt(data.current.profit)}`}
+                      suffix="đ" color={data.current.profit >= 0 ? 'text-emerald-400' : 'text-red-400'} bold />
+                  </div>
+                  <div className="border-t border-white/5 pt-2 space-y-2">
+                    <FlowRow label={`🔴 Công nợ phải thu (${data.cashFlow.receivableCount} HĐ)`}
+                      value={fmt(data.cashFlow.receivable)} suffix="đ" color="text-orange-400" />
+                    <FlowRow label="🟡 Workforce chưa TT" value={fmt(data.cashFlow.workforcePayable)} suffix="đ" color="text-yellow-400" />
+                    <FlowRow label="💵 Quỹ lương" value={fmt(data.cashFlow.payrollCost)} suffix="đ" color="text-indigo-400" />
+                  </div>
+                </div>
+              </Panel>
+
+              {/* Team */}
+              <Panel title="Nhân sự & Năng suất" icon="👥">
+                <div className="space-y-3">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-neutral-medium text-xs">Headcount</span>
+                    <span className="text-white font-black text-xl">{data.current.headcount} <span className="text-xs text-neutral-medium font-normal">người</span></span>
+                  </div>
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-neutral-medium text-xs">Revenue/người</span>
+                    <span className="text-emerald-400 font-bold text-sm">{fmtM(data.current.revenuePerHead)} đ</span>
+                  </div>
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-neutral-medium text-xs">Tasks tháng</span>
+                    <span className="text-white font-bold text-sm">{data.current.tasksCompleted}/{data.current.tasksTotal}
+                      <span className="text-emerald-400 ml-1">({data.current.tasksTotal > 0 ? Math.round(data.current.tasksCompleted / data.current.tasksTotal * 100) : 0}%)</span>
+                    </span>
+                  </div>
+                  <div className="border-t border-white/5 pt-2 space-y-1.5">
+                    {data.team.departments.map(d => (
+                      <div key={d.name} className="flex items-center justify-between">
+                        <span className="text-white text-xs">{d.name}</span>
                         <div className="flex items-center gap-2">
-                          <div className="w-24 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${(d.count / metrics.employeeCount) * 100}%`,
-                                background: 'linear-gradient(90deg, #FF375F, #FF6B81)',
-                              }}
-                            />
+                          <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full bg-gradient-to-r from-primary to-purple-500"
+                              style={{ width: `${(d.count / data.current.headcount) * 100}%` }} />
                           </div>
-                          <span className="text-white font-bold text-xs w-6 text-right">{d.count}</span>
+                          <span className="text-white font-bold text-[10px] w-4 text-right">{d.count}</span>
                         </div>
                       </div>
-                    ))
-                  )}
-                  <div className="pt-2 border-t border-white/5 flex justify-between text-xs">
-                    <span className="text-neutral-medium">Tổng nhân sự</span>
-                    <span className="text-white font-bold">{metrics.employeeCount} người</span>
+                    ))}
                   </div>
+                  {data.team.latestPayroll && (
+                    <div className="border-t border-white/5 pt-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-neutral-medium text-[10px]">{data.team.latestPayroll.title}</span>
+                        <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${
+                          data.team.latestPayroll.status === 'confirmed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-yellow-500/20 text-yellow-400'
+                        }`}>{data.team.latestPayroll.status === 'confirmed' ? 'Đã XN' : data.team.latestPayroll.status}</span>
+                      </div>
+                      <p className="text-white font-bold text-sm mt-1">{fmt(data.team.latestPayroll.totalCost)} đ</p>
+                    </div>
+                  )}
                 </div>
               </Panel>
 
-              {/* Payroll summary */}
-              <Panel title="Bảng lương gần nhất" icon="💵">
-                {metrics.latestPayroll ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-white font-bold text-sm">{metrics.latestPayroll.title}</span>
-                      <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${
-                        metrics.latestPayroll.status === 'draft' ? 'bg-yellow-500/20 text-yellow-400' :
-                        metrics.latestPayroll.status === 'confirmed' ? 'bg-emerald-500/20 text-emerald-400' :
-                        'bg-blue-500/20 text-blue-400'
-                      }`}>
-                        {metrics.latestPayroll.status === 'draft' ? 'Nháp' : metrics.latestPayroll.status === 'confirmed' ? 'Đã xác nhận' : 'Đã trả'}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <MiniStat label="Nhân viên" value={`${metrics.latestPayroll.employeeCount}`} />
-                      <MiniStat label="Net thực lĩnh" value={fmtM(metrics.latestPayroll.totalNet)} color="#34D399" />
-                      <MiniStat label="Chi phí CT" value={fmtM(metrics.latestPayroll.totalCompanyCost)} color="#0A84FF" />
-                    </div>
-                    <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/10">
-                      <div className="flex justify-between items-center">
-                        <span className="text-emerald-400 text-xs font-bold uppercase tracking-wider">Tổng chi phí công ty</span>
-                        <span className="text-white font-black text-lg">{fmt(metrics.latestPayroll.totalCompanyCost)} đ</span>
-                      </div>
+              {/* Pipeline */}
+              <Panel title="Pipeline & Tăng trưởng" icon="📈">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <MiniStat label="Clients" value={`${data.pipeline.activeClients}`} />
+                    <MiniStat label="Projects" value={`${data.pipeline.activeProjects}`} />
+                  </div>
+                  {data.pipeline.pipelineValue > 0 && (
+                    <FlowRow label="Pipeline value" value={fmtM(data.pipeline.pipelineValue)} suffix="đ" color="text-purple-400" />
+                  )}
+                  <div className="border-t border-white/5 pt-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-medium mb-2">OUTREACH</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <MiniStat label="Tổng leads" value={`${data.pipeline.outreachLeads}`} />
+                      <MiniStat label="Tier 1" value={`${data.pipeline.outreachTier1}`} color="#34C759" />
+                      <MiniStat label="Emails sent" value={`${data.pipeline.emailsSent}`} />
+                      <MiniStat label="New tháng này" value={`${data.pipeline.newLeadsThisMonth}`} color="#0A84FF" />
                     </div>
                   </div>
-                ) : (
-                  <p className="text-neutral-medium text-sm text-center py-8">Chưa có bảng lương nào</p>
-                )}
+                </div>
               </Panel>
             </div>
-          </>
+
+            {/* ══════ Section 4: P&L Table ══════ */}
+            <PlTable trend={data.trend} />
+          </div>
         ) : (
           <p className="text-red-400 text-center py-16">Không thể tải dữ liệu dashboard</p>
         )}
@@ -231,24 +196,86 @@ const DashboardApp: React.FC<Props> = ({ currentUser, onBack }) => {
   );
 };
 
-// ── Sub-components ──
+// ═══════════════════════════════════════════════════════════
+// Sub-components
+// ═══════════════════════════════════════════════════════════
 
 const KpiCard: React.FC<{
   icon: string; label: string; value: string; suffix: string;
-  sub: string; gradient: string;
-}> = ({ icon, label, value, suffix, sub, gradient }) => (
-  <div className="p-5 rounded-2xl bg-card-dark border border-primary/10 relative overflow-hidden group hover:border-primary/20 transition-all">
-    <div className="absolute top-0 right-0 w-20 h-20 rounded-full blur-3xl opacity-10 group-hover:opacity-20 transition-opacity"
-      style={{ background: gradient }} />
-    <div className="flex items-center gap-2 mb-3">
-      <span className="text-xl">{icon}</span>
-      <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-medium">{label}</span>
+  change?: number; gradient: string; invertColor?: boolean;
+}> = ({ icon, label, value, suffix, change, gradient, invertColor }) => {
+  const hasChange = change !== undefined && change !== 0;
+  const isPositive = invertColor ? change! < 0 : change! > 0;
+  return (
+    <div className="p-4 rounded-2xl bg-card-dark border border-primary/10 relative overflow-hidden group hover:border-primary/20 transition-all">
+      <div className={`absolute -top-4 -right-4 w-20 h-20 rounded-full blur-2xl opacity-10 bg-gradient-to-br ${gradient}`} />
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="text-base">{icon}</span>
+        <span className="text-[9px] font-bold uppercase tracking-widest text-neutral-medium">{label}</span>
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-xl font-black text-white">{value}</span>
+        {suffix && <span className="text-[10px] font-bold text-neutral-medium">{suffix}</span>}
+      </div>
+      {hasChange && (
+        <p className={`text-[10px] font-bold mt-1 ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+          {isPositive ? '▲' : '▼'} {Math.abs(change!).toFixed(0)}% vs tháng trước
+        </p>
+      )}
     </div>
-    <div className="flex items-baseline gap-1.5">
-      <span className="text-2xl font-black text-white">{value}</span>
-      <span className="text-xs font-bold text-neutral-medium">{suffix}</span>
+  );
+};
+
+const HealthCard: React.FC<{ score: number; margin: number }> = ({ score, margin }) => {
+  const color = score >= 75 ? '#34C759' : score >= 50 ? '#FFD60A' : '#FF3B30';
+  const label = score >= 75 ? 'Tốt' : score >= 50 ? 'Cần chú ý' : 'Cảnh báo';
+  const circumference = 2 * Math.PI * 32;
+  const offset = circumference - (score / 100) * circumference;
+  return (
+    <div className="p-4 rounded-2xl bg-card-dark border border-primary/10 flex items-center gap-3">
+      <div className="relative w-[72px] h-[72px] flex-shrink-0">
+        <svg viewBox="0 0 72 72" className="w-full h-full -rotate-90">
+          <circle cx="36" cy="36" r="32" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="5" />
+          <circle cx="36" cy="36" r="32" fill="none" stroke={color} strokeWidth="5"
+            strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
+            className="transition-all duration-1000" />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-lg font-black text-white">{score}</span>
+        </div>
+      </div>
+      <div>
+        <p className="text-[9px] font-bold uppercase tracking-widest text-neutral-medium">Health Score</p>
+        <p className="font-black text-sm" style={{ color }}>{label}</p>
+        <p className="text-[10px] text-neutral-medium mt-0.5">Biên LN: <span className="text-white font-bold">{margin.toFixed(0)}%</span></p>
+      </div>
     </div>
-    <p className="text-[11px] text-neutral-medium mt-1">{sub}</p>
+  );
+};
+
+const AlertCenter: React.FC<{ alerts: Alert[] }> = ({ alerts }) => (
+  <div className="p-5 rounded-2xl bg-card-dark border border-primary/10 h-full">
+    <h3 className="text-xs font-black uppercase tracking-widest text-white mb-3">⚠️ Cảnh báo & Hành động</h3>
+    {alerts.length === 0 ? (
+      <p className="text-neutral-medium text-sm text-center py-6">✅ Không có cảnh báo</p>
+    ) : (
+      <div className="space-y-2">
+        {alerts.map((a, i) => (
+          <div key={i} className={`flex items-start gap-2 p-2.5 rounded-xl text-xs ${
+            a.level === 'critical' ? 'bg-red-500/10 border border-red-500/20' :
+            a.level === 'warning' ? 'bg-yellow-500/10 border border-yellow-500/20' :
+            a.level === 'good' ? 'bg-emerald-500/10 border border-emerald-500/20' :
+            'bg-blue-500/10 border border-blue-500/20'
+          }`}>
+            <span className="text-sm flex-shrink-0">{a.icon}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-medium">{a.message}</p>
+              {a.value && <p className="text-neutral-medium font-bold mt-0.5">{a.value}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 );
 
@@ -262,23 +289,17 @@ const Panel: React.FC<{ title: string; icon: string; children: React.ReactNode }
   </div>
 );
 
-const ProgressBar: React.FC<{ label: string; value: number; total: number; color: string }> = ({ label, value, total, color }) => {
-  const pct = total > 0 ? (value / total) * 100 : 0;
-  return (
-    <div>
-      <div className="flex justify-between mb-1">
-        <span className="text-neutral-medium text-[11px] font-medium">{label}</span>
-        <span className="text-white text-[11px] font-bold">{value}/{total}</span>
-      </div>
-      <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color }} />
-      </div>
-    </div>
-  );
-};
+const FlowRow: React.FC<{ label: string; value: string; suffix: string; color: string; bold?: boolean; small?: boolean }> = ({ label, value, suffix, color, bold, small }) => (
+  <div className="flex justify-between items-baseline">
+    <span className={`text-neutral-medium ${small ? 'text-[10px]' : 'text-xs'}`}>{label}</span>
+    <span className={`${color} ${bold ? 'font-black text-base' : 'font-bold text-sm'} tabular-nums`}>
+      {value} {suffix && <span className="text-[10px] font-normal">{suffix}</span>}
+    </span>
+  </div>
+);
 
 const MiniStat: React.FC<{ label: string; value: string; color?: string }> = ({ label, value, color }) => (
-  <div className="text-center p-2 rounded-xl bg-white/[0.02]">
+  <div className="text-center p-2 rounded-xl bg-white/[0.03]">
     <p className="text-[9px] font-bold uppercase tracking-wider text-neutral-medium mb-1">{label}</p>
     <p className="text-sm font-black" style={{ color: color || 'white' }}>{value}</p>
   </div>
