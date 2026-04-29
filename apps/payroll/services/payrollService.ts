@@ -100,8 +100,8 @@ export function calculatePayroll(input: PayrollInput): PayrollOutput {
   }
 
   // ── CHÍNH THỨC: Đóng BH + Thuế lũy tiến ──
-  // [BƯỚC 3] Bảo hiểm nhân viên
-  const employeeBhxh = r(baseSalaryActual * BH_EMPLOYEE_RATE);
+  // [BƯỚC 3] Bảo hiểm nhân viên (Tính trên lương cơ bản cố định)
+  const employeeBhxh = r(input.baseSalary * BH_EMPLOYEE_RATE);
 
   // [BƯỚC 4] Thu nhập chịu thuế (CB + Xăng xe + ĐT + KPI — không gồm ăn trưa, trang phục, tăng ca)
   const taxableIncome = baseSalaryActual + transportActual + phoneActual + kpiActual;
@@ -126,8 +126,8 @@ export function calculatePayroll(input: PayrollInput): PayrollOutput {
   // [BƯỚC 7] Net thực lĩnh
   const netSalary = grossActual - employeeBhxh - pit;
 
-  // [BƯỚC 8] Chi phí công ty
-  const companyBhxh = r(baseSalaryActual * BH_COMPANY_RATE);
+  // [BƯỚC 8] Chi phí công ty (Tính trên lương cơ bản cố định)
+  const companyBhxh = r(input.baseSalary * BH_COMPANY_RATE);
   const totalCompanyCost = grossActual + companyBhxh;
 
   return {
