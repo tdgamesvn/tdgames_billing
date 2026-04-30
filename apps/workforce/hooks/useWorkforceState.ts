@@ -230,10 +230,11 @@ export function useWorkforceState(currentUsername: string, initialTab?: string |
     notes: string,
     bonusType: 'percent' | 'amount' = 'amount',
     bonusValue: number = 0,
-    taxRate: number = 10
+    taxRate: number = 10,
+    accountType: 'company' | 'personal' = 'company'
   ) => {
     try {
-      const saved = await svc.createSettlement(workerId, period, taskIds, totalAmount, currency, notes, bonusType, bonusValue, taxRate);
+      const saved = await svc.createSettlement(workerId, period, taskIds, totalAmount, currency, notes, bonusType, bonusValue, taxRate, accountType);
       setSettlements(prev => [saved, ...prev]);
       // Refresh tasks since they've been marked approved
       const updatedTasks = await svc.fetchTasks();
@@ -281,10 +282,11 @@ export function useWorkforceState(currentUsername: string, initialTab?: string |
     totalAmount: number,
     currency: string,
     notes: string,
-    clientPrices?: Record<string, number>
+    clientPrices?: Record<string, number>,
+    accountType: 'company' | 'personal' = 'company'
   ) => {
     try {
-      const saved = await paSvc.createProjectAcceptance(projectName, clientName, period, taskIds, totalAmount, currency, notes, clientPrices);
+      const saved = await paSvc.createProjectAcceptance(projectName, clientName, period, taskIds, totalAmount, currency, notes, clientPrices, accountType);
       setProjectAcceptances(prev => [saved, ...prev]);
       setToast({ message: 'Created project acceptance', type: 'success' });
     } catch (e: any) {

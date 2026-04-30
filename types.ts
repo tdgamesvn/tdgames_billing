@@ -106,6 +106,7 @@ export interface ExpenseRecord {
   notes: string;
   receipt_url: string;
   created_by: string;
+  account_type?: 'company' | 'personal';
   created_at?: string;
   updated_at?: string;
 }
@@ -180,6 +181,7 @@ export interface WorkforceTask {
   payment_status: 'unpaid' | 'paid';
   notes: string;
   synced_at: string | null;
+  exclude_from_acceptance?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -203,6 +205,7 @@ export interface Settlement {
   tax_amount: number;
   net_amount: number;
   notes: string;
+  account_type?: 'company' | 'personal';
   created_at?: string;
   tasks?: WorkforceTask[];
 }
@@ -226,6 +229,7 @@ export interface ProjectAcceptance {
   notes: string;
   discount_type: 'amount' | 'percent';
   discount_value: number;
+  account_type?: 'company' | 'personal';
   created_at?: string;
 }
 

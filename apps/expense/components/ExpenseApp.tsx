@@ -4,7 +4,7 @@ import { AccountUser } from '@/types';
 import { ToastNotification } from '@/components/ToastNotification';
 import { Navbar } from '@/apps/invoice/components/Navbar';
 import { useExpenseState, ExpenseTab } from '../hooks/useExpenseState';
-import { fetchExchangeRate, ExchangeRateData } from '@/apps/invoice/services/exchangeRateService';
+import { fetchExchangeRate, ExchangeRateData, avgRate } from '@/apps/invoice/services/exchangeRateService';
 import ExpenseList from './ExpenseList';
 import ExpenseForm from './ExpenseForm';
 import ExpenseRecurring from './ExpenseRecurring';
@@ -112,6 +112,7 @@ const ExpenseApp: React.FC<ExpenseAppProps> = ({ currentUser, onBack, initialTab
             categories={state.categories}
             isLoading={state.isLoading}
             onNavigateToList={() => state.setActiveTab('list')}
+            vcbAvgRate={vcbRate ? avgRate(vcbRate) : 25000}
           />
         )}
         {state.activeTab === 'list' && (
@@ -143,6 +144,7 @@ const ExpenseApp: React.FC<ExpenseAppProps> = ({ currentUser, onBack, initialTab
                 onToggleStatus={state.handleToggleStatus}
                 onRefresh={state.loadAll}
                 onAdd={() => { state.setEditingExpense(null); setShowForm(true); }}
+                vcbAvgRate={vcbRate ? avgRate(vcbRate) : 25000}
               />
             )}
           </>

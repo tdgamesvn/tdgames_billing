@@ -1,23 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { MonthlyFinancialSummary, getDashboardData, FulltimeKPI, FreelancerPaymentSummary } from '../services/dashboardService';
 
-export const FinancialDashboard: React.FC = () => {
+interface FinancialDashboardProps {
+  vcbAvgRate: number;
+}
+
+export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({ vcbAvgRate }) => {
   const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
   const [year, setYear] = useState<number>(new Date().getFullYear());
-  const [exchangeRate, setExchangeRate] = useState<number>(25000);
+  const exchangeRate = vcbAvgRate;
   const [data, setData] = useState<MonthlyFinancialSummary | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [accountFilter, setAccountFilter] = useState<'all' | 'company' | 'personal'>('all');
 
   useEffect(() => {
     loadData();
-  }, [month, year, exchangeRate]);
+  }, [month, year, vcbAvgRate, accountFilter]);
 
   const loadData = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await getDashboardData(month, year, exchangeRate);
+      const result = await getDashboardData(month, year, exchangeRate, accountFilter);
       setData(result);
     } catch (err: any) {
       setError(err.message || 'Failed to load dashboard data');
@@ -59,15 +64,9 @@ export const FinancialDashboard: React.FC = () => {
           <p className="text-neutral-medium text-sm mt-1">Báo cáo doanh thu, chi phí và hiệu suất nhân sự</p>
         </div>
         <div className="flex items-center gap-3 bg-surface border border-primary/10 rounded-xl p-2">
-          <div className="flex items-center bg-white/5 border border-primary/10 rounded-lg px-2 text-xs mr-2">
+          <div className="flex items-center bg-white/5 border border-primary/10 rounded-lg px-2 py-1 text-xs mr-2">
             <span className="text-neutral-medium mr-1 font-bold">1 USD =</span>
-            <input 
-              type="number" 
-              value={exchangeRate}
-              onChange={(e) => setExchangeRate(Number(e.target.value))}
-              className="bg-transparent text-white font-bold w-16 py-1 focus:outline-none text-right appearance-none"
-              step="100"
-            />
+            <span className="text-white font-bold">{exchangeRate.toLocaleString()}</span>
             <span className="text-neutral-medium ml-1">VND</span>
           </div>
 
@@ -96,6 +95,28 @@ export const FinancialDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Account Type Filter */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mr-2">Tài khoản:</span>
+        {[
+          { key: 'all' as const, label: '📊 Tất cả', color: 'border-primary/40 bg-primary/10 text-primary' },
+          { key: 'company' as const, label: '🏢 Công ty', color: 'border-amber-500/40 bg-amber-500/10 text-amber-400' },
+          { key: 'personal' as const, label: '👤 Cá nhân', color: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400' },
+        ].map(opt => (
+          <button
+            key={opt.key}
+            onClick={() => setAccountFilter(opt.key)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+              accountFilter === opt.key
+                ? opt.color
+                : 'border-primary/10 text-neutral-medium hover:border-primary/20'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
       {isLoading ? (
         <div className="flex justify-center py-20">
           <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -112,15 +133,14 @@ export const FinancialDashboard: React.FC = () => {
             <div className="p-5 rounded-2xl border border-primary/10 bg-surface relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               <p className="text-xs font-black uppercase tracking-widest text-neutral-medium mb-1">Doanh Thu</p>
-              <p className="text-3xl font-black text-emerald-400">{formatUSD(data.totalRevenue)}</p>
-              <p className="text-xs text-neutral-medium mt-1">≈ {formatVND(data.revenueVND)}</p>
+              <p className="text-3xl font-black text-emerald-400">{formatVND(data.revenueVND)}</p>
+              <p className="text-xs text-neutral-medium mt-1">≈ {formatUSD(data.totalRevenue)}</p>
             </div>
             
             <div className="p-5 rounded-2xl border border-primary/10 bg-surface relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               <p className="text-xs font-black uppercase tracking-widest text-neutral-medium mb-1">Chi Phí</p>
               <p className="text-3xl font-black text-red-400">{formatVND(data.totalCost)}</p>
-              <p className="text-xs text-neutral-medium mt-1">≈ {formatUSD(data.totalCost / exchangeRate)}</p>
             </div>
             
             <div className="p-5 rounded-2xl border border-primary/10 bg-surface relative overflow-hidden group">
@@ -129,7 +149,6 @@ export const FinancialDashboard: React.FC = () => {
               <p className={`text-3xl font-black ${data.grossProfit >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
                 {formatVND(data.grossProfit)}
               </p>
-              <p className="text-xs text-neutral-medium mt-1">≈ {formatUSD(data.grossProfit / exchangeRate)}</p>
             </div>
             
             <div className="p-5 rounded-2xl border border-primary/10 bg-surface relative overflow-hidden group">
@@ -218,7 +237,7 @@ export const FinancialDashboard: React.FC = () => {
                           <tr key={emp.employeeId} className="hover:bg-white/[0.02] transition-colors">
                             <td className="py-3 font-bold text-white">{emp.fullName}</td>
                             <td className="py-3 text-center">{emp.totalTaskCount}</td>
-                            <td className="py-3 text-right font-mono text-emerald-400">{formatUSD(emp.totalTaskRevenue)}</td>
+                            <td className="py-3 text-right font-mono text-emerald-400">{formatVND(emp.totalTaskRevenue * exchangeRate)}</td>
                             <td className="py-3 text-right font-mono text-red-400">{formatVND(emp.totalCompanyCost)}</td>
                             <td className="py-3 text-right font-mono">
                               <span className={emp.profitLoss >= 0 ? 'text-blue-400' : 'text-orange-400'}>
@@ -269,8 +288,8 @@ export const FinancialDashboard: React.FC = () => {
                         <tr key={i} className="hover:bg-white/[0.02] transition-colors">
                           <td className="py-3 font-bold text-white">{f.workerName}</td>
                           <td className="py-3 text-center">{f.taskCount}</td>
-                          <td className="py-3 text-right font-mono">{f.totalAmount.toLocaleString()} {f.currency}</td>
-                          <td className="py-3 text-right font-mono text-orange-400">{f.taxAmount.toLocaleString()} {f.currency}</td>
+                          <td className="py-3 text-right font-mono">{formatVND(f.currency === 'USD' ? f.totalAmount * exchangeRate : f.totalAmount)}</td>
+                          <td className="py-3 text-right font-mono text-orange-400">{formatVND(f.currency === 'USD' ? f.taxAmount * exchangeRate : f.taxAmount)}</td>
                           <td className="py-3 text-right font-mono font-bold text-blue-400">{formatVND(f.netAmount)}</td>
                           <td className="py-3 text-center">
                             <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${

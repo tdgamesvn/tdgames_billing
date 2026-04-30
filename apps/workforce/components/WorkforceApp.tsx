@@ -177,7 +177,7 @@ const WorkforceApp: React.FC<WorkforceAppProps> = ({ currentUser, onBack, initia
         )}
 
         {state.activeTab === 'financials' && (
-          <FinancialDashboard />
+          <FinancialDashboard vcbAvgRate={vcbRate ? avgRate(vcbRate) : 25000} />
         )}
 
         {state.activeTab === 'config' && (

@@ -6,11 +6,12 @@ interface Props {
   categories: ExpenseCategory[];
   isLoading: boolean;
   onNavigateToList: () => void;
+  vcbAvgRate: number;
 }
 
 // ── Helpers ─────────────────────────────────────────────────
 const fmt = (n: number) => n.toLocaleString('vi-VN');
-const fmtUSD = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2 });
+const fmtVND = (n: number) => fmt(Math.round(n)) + ' ₫';
 
 function getMonthLabel(y: number, m: number) {
   return `T${String(m + 1).padStart(2, '0')}/${y}`;
@@ -34,7 +35,8 @@ const SOURCE_LABELS: Record<string, { label: string; color: string; icon: string
 };
 
 // ---- Component ----
-const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, onNavigateToList }) => {
+const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, onNavigateToList, vcbAvgRate }) => {
+  const toVND = (amount: number, currency: string) => currency === 'USD' ? amount * vcbAvgRate : amount;
   const months = useMemo(() => getLast6Months(), []);
   const now = new Date();
   const currentMonth = now.getMonth();
@@ -51,39 +53,35 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
   const thisExpenses = useMemo(() => filterMonth(allExpenses, currentMonth, currentYear), [allExpenses, currentMonth, currentYear]);
   const thisRevenue = useMemo(() => filterMonth(allRevenue, currentMonth, currentYear), [allRevenue, currentMonth, currentYear]);
 
-  const thisExpVND = thisExpenses.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
-  const thisExpUSD = thisExpenses.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
-  const thisRevVND = thisRevenue.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
-  const thisRevUSD = thisRevenue.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
+  const thisExpTotal = thisExpenses.reduce((s, e) => s + toVND(e.amount, e.currency), 0);
+  const thisRevTotal = thisRevenue.reduce((s, e) => s + toVND(e.amount, e.currency), 0);
 
   // ── Monthly P&L data for chart ──
   const monthlyPL = useMemo(() => {
     return months.map(m => {
       const mExpenses = filterMonth(allExpenses, m.month, m.year);
       const mRevenue = filterMonth(allRevenue, m.month, m.year);
-      const expVND = mExpenses.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
-      const revVND = mRevenue.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
-      const expUSD = mExpenses.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
-      const revUSD = mRevenue.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
-      return { ...m, expVND, revVND, expUSD, revUSD, profitVND: revVND - expVND };
+      const expVND = mExpenses.reduce((s, e) => s + toVND(e.amount, e.currency), 0);
+      const revVND = mRevenue.reduce((s, e) => s + toVND(e.amount, e.currency), 0);
+      return { ...m, expVND, revVND, profitVND: revVND - expVND };
     });
-  }, [allExpenses, allRevenue, months]);
+  }, [allExpenses, allRevenue, months, vcbAvgRate]);
 
   const maxBar = Math.max(...monthlyPL.map(m => Math.max(m.expVND, m.revVND)), 1);
 
-  // ── Source breakdown (expense only) ──
+  // ── Source breakdown (expense only, all converted to VND) ──
   const sourceData = useMemo(() => {
     const map = new Map<string, number>();
-    allExpenses.filter(e => e.currency === 'VND').forEach(e => {
+    allExpenses.forEach(e => {
       const key = e.source_type || 'manual';
-      map.set(key, (map.get(key) || 0) + e.amount);
+      map.set(key, (map.get(key) || 0) + toVND(e.amount, e.currency));
     });
     return [...map.entries()].map(([key, total]) => ({
       key,
       ...(SOURCE_LABELS[key] || { label: key, color: '#6B7280', icon: '📦' }),
       total,
     })).sort((a, b) => b.total - a.total);
-  }, [allExpenses]);
+  }, [allExpenses, vcbAvgRate]);
 
   const totalSourceVND = sourceData.reduce((s, c) => s + c.total, 0);
 
@@ -133,30 +131,26 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
         {/* Revenue VND */}
         <div className="p-5 rounded-[20px] border bg-surface border-emerald-500/20 transition-all hover:border-emerald-500/40 group">
           <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400/80 mb-2">💰 Doanh thu tháng này</p>
-          {thisRevVND > 0 && <p className="text-2xl font-black text-emerald-400 tabular-nums">{fmt(thisRevVND)} ₫</p>}
-          {thisRevUSD > 0 && <p className={`${thisRevVND > 0 ? 'text-base mt-1' : 'text-2xl'} font-black text-emerald-400 tabular-nums`}>{fmtUSD(thisRevUSD)}</p>}
-          {thisRevVND === 0 && thisRevUSD === 0 && <p className="text-2xl font-black text-emerald-400/30 tabular-nums">—</p>}
+          <p className="text-2xl font-black text-emerald-400 tabular-nums">{thisRevTotal > 0 ? fmtVND(thisRevTotal) : '—'}</p>
           <p className="text-[10px] text-neutral-medium mt-2">Tổng: {allRevenue.length} giao dịch</p>
         </div>
 
         {/* Expense VND */}
         <div className="p-5 rounded-[20px] border bg-surface border-red-500/20 transition-all hover:border-red-500/40 group">
           <p className="text-[10px] font-black uppercase tracking-widest text-red-400/80 mb-2">📤 Chi phí tháng này</p>
-          {thisExpVND > 0 && <p className="text-2xl font-black text-red-400 tabular-nums">{fmt(thisExpVND)} ₫</p>}
-          {thisExpUSD > 0 && <p className={`${thisExpVND > 0 ? 'text-base mt-1' : 'text-2xl'} font-black text-red-400 tabular-nums`}>{fmtUSD(thisExpUSD)}</p>}
-          {thisExpVND === 0 && thisExpUSD === 0 && <p className="text-2xl font-black text-red-400/30 tabular-nums">—</p>}
+          <p className="text-2xl font-black text-red-400 tabular-nums">{thisExpTotal > 0 ? fmtVND(thisExpTotal) : '—'}</p>
           <p className="text-[10px] text-neutral-medium mt-2">Tổng: {allExpenses.length} giao dịch</p>
         </div>
 
         {/* Profit/Loss */}
         <div className="p-5 rounded-[20px] border bg-surface border-primary/10 transition-all hover:border-primary/25 group">
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">📊 Lợi nhuận VND</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">📊 Lợi nhuận tháng này</p>
           {(() => {
-            const profit = thisRevVND - thisExpVND;
+            const profit = thisRevTotal - thisExpTotal;
             return (
               <>
                 <p className={`text-2xl font-black tabular-nums ${profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {profit >= 0 ? '+' : ''}{fmt(profit)} ₫
+                  {profit >= 0 ? '+' : ''}{fmtVND(profit)}
                 </p>
                 <p className="text-[10px] text-neutral-medium mt-2">
                   {profit >= 0 ? '▲ Có lãi' : '▼ Lỗ'} tháng này
@@ -308,15 +302,12 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
                   const d = new Date(e.expense_date);
                   return d.getMonth() === m.month && d.getFullYear() === m.year;
                 });
-                const revUSD = mItems.filter(e => e.type === 'revenue' && e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
-                const revVND = mItems.filter(e => e.type === 'revenue' && e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
-                const payVND = mItems.filter(e => e.source_type === 'payroll').reduce((s, e) => s + e.amount, 0);
-                const freeVND = mItems.filter(e => e.source_type === 'settlement' && e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
-                const freeUSD = mItems.filter(e => e.source_type === 'settlement' && e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
-                const manualVND = mItems.filter(e => e.type !== 'revenue' && !e.source_type && e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
-                const totalCostVND = payVND + freeVND + manualVND;
-                const profitVND = revVND - totalCostVND;
-                const profitUSD = revUSD - freeUSD;
+                const revTotal = mItems.filter(e => e.type === 'revenue').reduce((s, e) => s + toVND(e.amount, e.currency), 0);
+                const payTotal = mItems.filter(e => e.source_type === 'payroll').reduce((s, e) => s + toVND(e.amount, e.currency), 0);
+                const freeTotal = mItems.filter(e => e.source_type === 'settlement').reduce((s, e) => s + toVND(e.amount, e.currency), 0);
+                const manualTotal = mItems.filter(e => e.type !== 'revenue' && !e.source_type).reduce((s, e) => s + toVND(e.amount, e.currency), 0);
+                const totalCost = payTotal + freeTotal + manualTotal;
+                const profit = revTotal - totalCost;
                 const isCurrentMonth = m.month === currentMonth && m.year === currentYear;
                 const hasData = mItems.length > 0;
 
@@ -324,33 +315,23 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
                   <tr key={i} className={`border-b border-white/5 transition-colors ${isCurrentMonth ? 'bg-white/[0.03]' : ''} ${hasData ? '' : 'opacity-30'}`}>
                     <td className={`py-3 px-2 font-bold tabular-nums ${isCurrentMonth ? 'text-primary' : 'text-white/70'}`}>{m.label}</td>
                     <td className="py-3 px-2 text-right tabular-nums text-emerald-400 font-bold">
-                      {revUSD > 0 && <span>{fmtUSD(revUSD)}</span>}
-                      {revVND > 0 && <span className="block text-[10px] text-emerald-400/60">{fmt(revVND)} ₫</span>}
-                      {revUSD === 0 && revVND === 0 && '—'}
+                      {revTotal > 0 ? fmtVND(revTotal) : '—'}
                     </td>
                     <td className="py-3 px-2 text-right tabular-nums text-blue-400 font-bold">
-                      {payVND > 0 ? fmt(payVND) + ' ₫' : '—'}
+                      {payTotal > 0 ? fmtVND(payTotal) : '—'}
                     </td>
                     <td className="py-3 px-2 text-right tabular-nums text-purple-400 font-bold">
-                      {freeUSD > 0 && <span>{fmtUSD(freeUSD)}</span>}
-                      {freeVND > 0 && <span className="block text-[10px] text-purple-400/60">{fmt(freeVND)} ₫</span>}
-                      {freeUSD === 0 && freeVND === 0 && '—'}
+                      {freeTotal > 0 ? fmtVND(freeTotal) : '—'}
                     </td>
                     <td className="py-3 px-2 text-right tabular-nums text-amber-400 font-bold">
-                      {manualVND > 0 ? fmt(manualVND) + ' ₫' : '—'}
+                      {manualTotal > 0 ? fmtVND(manualTotal) : '—'}
                     </td>
                     <td className="py-3 px-2 text-right font-black tabular-nums">
-                      {profitUSD !== 0 && (
-                        <span className={profitUSD >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                          {profitUSD >= 0 ? '+' : ''}{fmtUSD(profitUSD)}
+                      {profit !== 0 ? (
+                        <span className={profit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                          {profit >= 0 ? '+' : ''}{fmtVND(profit)}
                         </span>
-                      )}
-                      {profitVND !== 0 && (
-                        <span className={`block text-[10px] ${profitVND >= 0 ? 'text-emerald-400/60' : 'text-red-400/60'}`}>
-                          {profitVND >= 0 ? '+' : ''}{fmt(profitVND)} ₫
-                        </span>
-                      )}
-                      {profitUSD === 0 && profitVND === 0 && <span className="text-white/30">—</span>}
+                      ) : <span className="text-white/30">—</span>}
                     </td>
                   </tr>
                 );
@@ -360,43 +341,23 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
             <tr className="border-t-2 border-white/20 font-black">
               <td className="py-3 px-2 text-primary uppercase text-[10px] tracking-widest">Tổng cộng</td>
               <td className="py-3 px-2 text-right tabular-nums text-emerald-400">
-                {(() => {
-                  const totRevUSD = allRevenue.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
-                  const totRevVND = allRevenue.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
-                  return <>
-                    {totRevUSD > 0 && <span>{fmtUSD(totRevUSD)}</span>}
-                    {totRevVND > 0 && <span className="block text-[10px] text-emerald-400/60">{fmt(totRevVND)} ₫</span>}
-                  </>;
-                })()}
+                {fmtVND(allRevenue.reduce((s, e) => s + toVND(e.amount, e.currency), 0))}
               </td>
               <td className="py-3 px-2 text-right tabular-nums text-blue-400">
-                {fmt(allExpenses.filter(e => e.source_type === 'payroll').reduce((s, e) => s + e.amount, 0))} ₫
+                {fmtVND(allExpenses.filter(e => e.source_type === 'payroll').reduce((s, e) => s + toVND(e.amount, e.currency), 0))}
               </td>
               <td className="py-3 px-2 text-right tabular-nums text-purple-400">
-                {(() => {
-                  const fu = allExpenses.filter(e => e.source_type === 'settlement' && e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
-                  const fv = allExpenses.filter(e => e.source_type === 'settlement' && e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
-                  return <>
-                    {fu > 0 && <span>{fmtUSD(fu)}</span>}
-                    {fv > 0 && <span className="block text-[10px] text-purple-400/60">{fmt(fv)} ₫</span>}
-                  </>;
-                })()}
+                {fmtVND(allExpenses.filter(e => e.source_type === 'settlement').reduce((s, e) => s + toVND(e.amount, e.currency), 0))}
               </td>
               <td className="py-3 px-2 text-right tabular-nums text-amber-400">
-                {fmt(allExpenses.filter(e => !e.source_type && e.currency === 'VND').reduce((s, e) => s + e.amount, 0))} ₫
+                {fmtVND(allExpenses.filter(e => !e.source_type).reduce((s, e) => s + toVND(e.amount, e.currency), 0))}
               </td>
               <td className="py-3 px-2 text-right tabular-nums">
                 {(() => {
-                  const totRevUSD = allRevenue.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
-                  const totExpUSD = allExpenses.filter(e => e.currency === 'USD').reduce((s, e) => s + e.amount, 0);
-                  const totRevVND = allRevenue.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
-                  const totExpVND = allExpenses.filter(e => e.currency === 'VND').reduce((s, e) => s + e.amount, 0);
-                  const pUSD = totRevUSD - totExpUSD;
-                  const pVND = totRevVND - totExpVND;
-                  return <>
-                    {pUSD !== 0 && <span className={pUSD >= 0 ? 'text-emerald-400' : 'text-red-400'}>{pUSD >= 0 ? '+' : ''}{fmtUSD(pUSD)}</span>}
-                    {pVND !== 0 && <span className={`block text-[10px] ${pVND >= 0 ? 'text-emerald-400/60' : 'text-red-400/60'}`}>{pVND >= 0 ? '+' : ''}{fmt(pVND)} ₫</span>}
-                  </>;
+                  const totRev = allRevenue.reduce((s, e) => s + toVND(e.amount, e.currency), 0);
+                  const totExp = allExpenses.reduce((s, e) => s + toVND(e.amount, e.currency), 0);
+                  const p = totRev - totExp;
+                  return <span className={p >= 0 ? 'text-emerald-400' : 'text-red-400'}>{p >= 0 ? '+' : ''}{fmtVND(p)}</span>;
                 })()}
               </td>
             </tr>
@@ -404,16 +365,16 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
         </table>
       </div>
 
-      {/* ── Revenue USD Breakdown ── */}
-      {allRevenue.filter(e => e.currency === 'USD').length > 0 && (
+      {/* ── Revenue Breakdown (all in VND) ── */}
+      {allRevenue.length > 0 && (
         <div className="rounded-[20px] border bg-surface border-emerald-500/10 p-6">
-          <h3 className="text-[10px] font-black uppercase tracking-widest text-emerald-400/80 mb-6">💵 Revenue Breakdown (USD)</h3>
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-emerald-400/80 mb-6">💵 Revenue Breakdown</h3>
           <div className="space-y-3">
             {(() => {
               const clientMap = new Map<string, number>();
-              allRevenue.filter(e => e.currency === 'USD').forEach(e => {
+              allRevenue.forEach(e => {
                 const key = e.client_name || e.vendor || 'Unknown';
-                clientMap.set(key, (clientMap.get(key) || 0) + e.amount);
+                clientMap.set(key, (clientMap.get(key) || 0) + toVND(e.amount, e.currency));
               });
               const clientData = [...clientMap.entries()].sort((a, b) => b[1] - a[1]);
               const maxClient = Math.max(...clientData.map(c => c[1]), 1);
@@ -421,7 +382,7 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
                 <div key={i} className="group/item">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-bold text-white/80 truncate">{client}</span>
-                    <span className="text-xs font-black text-emerald-400 tabular-nums">{fmtUSD(amount)}</span>
+                    <span className="text-xs font-black text-emerald-400 tabular-nums">{fmtVND(amount)}</span>
                   </div>
                   <div className="h-2 bg-white/[0.03] rounded-full overflow-hidden">
                     <div className="h-full rounded-full bg-gradient-to-r from-emerald-500/50 to-emerald-400/70 transition-all duration-700"
@@ -467,7 +428,7 @@ const ExpenseDashboard: React.FC<Props> = ({ expenses, categories, isLoading, on
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-sm font-black text-red-400 tabular-nums">
-                    {exp.currency === 'VND' ? fmt(exp.amount) + ' ₫' : fmtUSD(exp.amount)}
+                    {fmtVND(toVND(exp.amount, exp.currency))}
                   </p>
                   <p className="text-[9px] font-bold text-neutral-medium">{exp.vendor || exp.client_name || '—'}</p>
                 </div>

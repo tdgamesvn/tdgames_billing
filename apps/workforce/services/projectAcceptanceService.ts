@@ -20,7 +20,8 @@ export async function createProjectAcceptance(
   totalAmount: number,
   currency: string,
   notes: string,
-  clientPrices?: Record<string, number>
+  clientPrices?: Record<string, number>,
+  accountType: 'company' | 'personal' = 'company'
 ): Promise<ProjectAcceptance> {
   const { data, error } = await supabase
     .from('wf_project_acceptances')
@@ -32,6 +33,7 @@ export async function createProjectAcceptance(
       total_amount: totalAmount,
       currency,
       notes,
+      account_type: accountType,
     })
     .select()
     .single();
@@ -115,6 +117,15 @@ export async function updateAcceptanceTaskNote(
     .eq('acceptance_id', acceptanceId)
     .eq('task_id', taskId);
   if (error) throw error;
+}
+
+// ── Fetch task IDs already in any acceptance ──────────────────
+export async function fetchAcceptedTaskIds(): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('wf_project_acceptance_tasks')
+    .select('task_id');
+  if (error) throw error;
+  return new Set((data || []).map((r: any) => r.task_id));
 }
 
 // ── Update total_amount on the acceptance header ──────────────

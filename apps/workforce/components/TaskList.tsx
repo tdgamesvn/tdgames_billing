@@ -222,7 +222,30 @@ const TaskList: React.FC<TaskListProps> = ({
         synced++;
       }
 
-      // 4. Update last sync time
+      // 4. Batch-update folder/space/list names for ALL tasks in DB
+      //    This handles renamed folders on ClickUp: old tasks (possibly archived)
+      //    still have stale names. We propagate the latest name from ClickUp.
+      const listNameMap = new Map<string, { space: string | null; folder: string | null; list: string | null }>();
+      for (const ctx of allListContexts) {
+        listNameMap.set(ctx.list_id, {
+          space: ctx.space_name || null,
+          folder: ctx.folder_name || null,
+          list: ctx.list_name || null,
+        });
+      }
+      for (const [listId, names] of listNameMap) {
+        await supabase
+          .from('wf_tasks')
+          .update({
+            clickup_space_name: names.space,
+            clickup_folder_name: names.folder,
+            clickup_list_name: names.list,
+            project: names.folder || names.list || '',
+          })
+          .eq('clickup_list_id', listId);
+      }
+
+      // 5. Update last sync time
       await clickup.updateConfigSyncTime();
       setSyncResult({ synced, skipped, total: clickupTasks.length });
       onToast(`Đồng bộ xong: ${synced} tasks synced, ${skipped} bỏ qua (không match email)`, 'success');

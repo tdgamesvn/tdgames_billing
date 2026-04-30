@@ -34,6 +34,7 @@ const EMPTY: Omit<ExpenseRecord, 'id' | 'created_at' | 'updated_at' | 'category'
   notes: '',
   receipt_url: '',
   created_by: '',
+  account_type: 'company',
 };
 
 const ACCEPTED_TYPES = '.pdf,.jpg,.jpeg,.png,.webp';
@@ -199,6 +200,31 @@ const ExpenseForm: React.FC<Props> = ({ categories, editingExpense, onSave, onUp
                 <option value="approved">Đã duyệt</option>
                 <option value="paid">Đã trả</option>
               </select>
+            </div>
+
+            {/* Account Type */}
+            <div>
+              <label className={labelClass}>Tài khoản</label>
+              <div className="flex gap-2">
+                <button type="button"
+                  onClick={() => update('account_type', 'company')}
+                  className={`flex-1 px-3 py-2.5 rounded-xl text-xs font-bold transition-all border ${
+                    (form as any).account_type !== 'personal'
+                      ? 'border-primary/40 bg-primary/10 text-primary'
+                      : 'border-primary/10 text-neutral-medium hover:border-primary/20'
+                  }`}>
+                  🏢 Công ty
+                </button>
+                <button type="button"
+                  onClick={() => update('account_type', 'personal')}
+                  className={`flex-1 px-3 py-2.5 rounded-xl text-xs font-bold transition-all border ${
+                    (form as any).account_type === 'personal'
+                      ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400'
+                      : 'border-primary/10 text-neutral-medium hover:border-primary/20'
+                  }`}>
+                  👤 Cá nhân
+                </button>
+              </div>
             </div>
 
             {/* Receipt Upload */}

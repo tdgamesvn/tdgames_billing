@@ -20,6 +20,7 @@ interface Props {
   onToggleStatus: (exp: ExpenseRecord) => void;
   onRefresh: () => void;
   onAdd: () => void;
+  vcbAvgRate: number;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -65,8 +66,11 @@ const ExpenseList: React.FC<Props> = ({
   totalVND, totalUSD,
   revenueVND, revenueUSD, expenseVND, expenseUSD,
   onEdit, onDelete, onToggleStatus, onRefresh, onAdd,
+  vcbAvgRate,
 }) => {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const toVND = (amount: number, currency: string) => currency === 'USD' ? amount * vcbAvgRate : amount;
+  const fmtVND = (n: number) => Math.round(n).toLocaleString('vi-VN') + ' ₫';
 
   const formatCurrency = (amount: number, currency: string) => {
     if (currency === 'VND') return amount.toLocaleString('vi-VN') + ' ₫';
@@ -101,34 +105,27 @@ const ExpenseList: React.FC<Props> = ({
         <div className="p-5 rounded-[20px] border bg-surface border-emerald-500/20 hover:border-emerald-500/40 transition-all cursor-pointer"
           onClick={() => setFilterType(filterType === 'revenue' ? 'all' : 'revenue')}>
           <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400/80 mb-1">💰 Doanh thu</p>
-          {revenueUSD > 0 && <p className="text-lg font-black text-emerald-400 tabular-nums">${revenueUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>}
-          {revenueVND > 0 && <p className={`${revenueUSD > 0 ? 'text-sm' : 'text-lg'} font-black text-emerald-400 tabular-nums`}>{revenueVND.toLocaleString('vi-VN')} ₫</p>}
-          {revenueVND === 0 && revenueUSD === 0 && <p className="text-lg font-black text-emerald-400/30">—</p>}
+          <p className="text-lg font-black text-emerald-400 tabular-nums">{fmtVND(revenueVND + revenueUSD * vcbAvgRate)}</p>
         </div>
 
         {/* Expense */}
         <div className="p-5 rounded-[20px] border bg-surface border-red-500/20 hover:border-red-500/40 transition-all cursor-pointer"
           onClick={() => setFilterType(filterType === 'expense' ? 'all' : 'expense')}>
           <p className="text-[10px] font-black uppercase tracking-widest text-red-400/80 mb-1">📤 Chi phí</p>
-          {expenseUSD > 0 && <p className="text-lg font-black text-red-400 tabular-nums">${expenseUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>}
-          {expenseVND > 0 && <p className={`${expenseUSD > 0 ? 'text-sm' : 'text-lg'} font-black text-red-400 tabular-nums`}>{expenseVND.toLocaleString('vi-VN')} ₫</p>}
-          {expenseVND === 0 && expenseUSD === 0 && <p className="text-lg font-black text-red-400/30">—</p>}
+          <p className="text-lg font-black text-red-400 tabular-nums">{fmtVND(expenseVND + expenseUSD * vcbAvgRate)}</p>
         </div>
 
-        {/* Profit VND */}
-        <div className="p-5 rounded-[20px] border bg-surface border-primary/10 hover:border-primary/25 transition-all">
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">📊 P&L (VND)</p>
-          <p className={`text-lg font-black tabular-nums ${profitVND >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            {profitVND >= 0 ? '+' : ''}{profitVND.toLocaleString('vi-VN')} ₫
-          </p>
-        </div>
-
-        {/* Profit USD */}
-        <div className="p-5 rounded-[20px] border bg-surface border-primary/10 hover:border-primary/25 transition-all">
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">📊 P&L (USD)</p>
-          <p className={`text-lg font-black tabular-nums ${profitUSD >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            {profitUSD >= 0 ? '+' : ''}${Math.abs(profitUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-          </p>
+        {/* Profit */}
+        <div className="p-5 rounded-[20px] border bg-surface border-primary/10 hover:border-primary/25 transition-all md:col-span-2">
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-1">📊 Lợi nhuận</p>
+          {(() => {
+            const totalRev = revenueVND + revenueUSD * vcbAvgRate;
+            const totalExp = expenseVND + expenseUSD * vcbAvgRate;
+            const profit = totalRev - totalExp;
+            return <p className={`text-lg font-black tabular-nums ${profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {profit >= 0 ? '+' : ''}{fmtVND(profit)}
+            </p>;
+          })()}
         </div>
       </div>
 
@@ -256,12 +253,19 @@ const ExpenseList: React.FC<Props> = ({
                         {exp.category.icon} {exp.category.name}
                       </span>
                     )}
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                      exp.account_type === 'personal'
+                        ? 'bg-emerald-500/15 text-emerald-400'
+                        : 'bg-amber-500/15 text-amber-400'
+                    }`}>
+                      {exp.account_type === 'personal' ? '👤' : '🏢'}
+                    </span>
                   </div>
 
                   {/* Row 4: Amount */}
                   <div className="mt-4 pt-3 border-t border-primary/5">
                     <p className={`text-xl font-black tabular-nums ${isRevenue ? 'text-emerald-400' : 'text-primary'}`}>
-                      {isRevenue ? '+' : ''}{formatCurrency(exp.amount, exp.currency)}
+                      {isRevenue ? '+' : ''}{fmtVND(toVND(exp.amount, exp.currency))}
                     </p>
                   </div>
 

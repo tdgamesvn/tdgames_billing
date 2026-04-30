@@ -48,15 +48,17 @@ export interface MonthlyFinancialSummary {
   freelancerBreakdown: FreelancerPaymentSummary[];
 }
 
-export async function getDashboardData(month: number, year: number, exchangeRate: number = 25000): Promise<MonthlyFinancialSummary> {
+export async function getDashboardData(month: number, year: number, exchangeRate: number = 25000, accountTypeFilter: 'all' | 'company' | 'personal' = 'all'): Promise<MonthlyFinancialSummary> {
   const periodStr = `${year}-${month.toString().padStart(2, '0')}`;
   
   // 1. Get Revenue (Project Acceptances in this period)
-  const { data: acceptances } = await supabase
+  let acceptanceQuery = supabase
     .from('wf_project_acceptances')
     .select('id, total_amount, currency, status')
     .eq('period', periodStr)
-    .eq('status', 'approved');
+    .eq('status', 'accepted');
+  if (accountTypeFilter !== 'all') acceptanceQuery = acceptanceQuery.eq('account_type', accountTypeFilter);
+  const { data: acceptances } = await acceptanceQuery;
     
   let totalRevenueUSD = 0;
   if (acceptances) {
@@ -74,7 +76,7 @@ export async function getDashboardData(month: number, year: number, exchangeRate
     .select('id')
     .eq('month', month)
     .eq('year', year)
-    .in('status', ['approved', 'paid']); // Consider costs only if approved/paid
+    .in('status', ['confirmed', 'paid']); // Consider costs only if confirmed/paid
 
   let fulltimePayroll = 0;
   const fulltimeCostsMap = new Map<string, number>(); // employee_id -> cost
@@ -96,10 +98,12 @@ export async function getDashboardData(month: number, year: number, exchangeRate
   }
 
   // 3. Get Freelancer Payments (Settlements)
-  const { data: settlements } = await supabase
+  let settlementQuery = supabase
     .from('wf_settlements')
-    .select('worker_id, total_tasks, total_amount, currency, tax_amount, net_amount, status, worker:wf_workers(full_name)')
+    .select('worker_id, total_tasks, total_amount, currency, tax_amount, net_amount, status, account_type, worker:wf_workers(full_name)')
     .eq('period', periodStr);
+  if (accountTypeFilter !== 'all') settlementQuery = settlementQuery.eq('account_type', accountTypeFilter);
+  const { data: settlements } = await settlementQuery;
 
   let freelancerPayments = 0;
   const freelancerBreakdown: FreelancerPaymentSummary[] = [];
@@ -122,17 +126,21 @@ export async function getDashboardData(month: number, year: number, exchangeRate
     });
   }
 
-  // 4. Get Operational Expenses
+  // 4. Get Operational Expenses (manual + invoice only, exclude auto-synced payroll/settlement to avoid double-counting)
   // Assuming expense_date is like "YYYY-MM-DD"
   const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
   const endOfMonth = new Date(year, month, 0).toISOString().split('T')[0]; // Last day of month
   
-  const { data: expenses } = await supabase
+  let expenseQuery = supabase
     .from('expense_expenses')
-    .select('amount, currency')
+    .select('amount, currency, source_type, type')
     .gte('expense_date', startOfMonth)
     .lte('expense_date', endOfMonth)
-    .eq('status', 'approved');
+    .eq('status', 'approved')
+    .eq('type', 'expense') // Only expenses, not revenue
+    .not('source_type', 'in', '("payroll","settlement")'); // Exclude auto-synced (already counted above)
+  if (accountTypeFilter !== 'all') expenseQuery = expenseQuery.eq('account_type', accountTypeFilter);
+  const { data: expenses } = await expenseQuery;
 
   let operationalExpenses = 0;
   if (expenses) {

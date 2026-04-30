@@ -179,7 +179,8 @@ export async function createSettlement(
   notes: string,
   bonusType: 'percent' | 'amount' = 'amount',
   bonusValue: number = 0,
-  taxRate: number = 10
+  taxRate: number = 10,
+  accountType: 'company' | 'personal' = 'company'
 ): Promise<Settlement> {
   const { bonusAmount, taxAmount, netAmount } = computeSettlementTotals(totalAmount, bonusType, bonusValue, taxRate);
 
@@ -199,6 +200,7 @@ export async function createSettlement(
       tax_rate: taxRate,
       tax_amount: taxAmount,
       net_amount: netAmount,
+      account_type: accountType,
     })
     .select('*, worker:wf_workers(*)')
     .single();
