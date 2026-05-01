@@ -181,6 +181,8 @@ export interface WorkforceTask {
   payment_status: 'unpaid' | 'paid';
   notes: string;
   synced_at: string | null;
+  client_price: number;
+  client_currency: string;
   exclude_from_acceptance?: boolean;
   created_at?: string;
   updated_at?: string;

@@ -102,8 +102,31 @@ const AcceptanceCreateView: React.FC<AcceptanceCreateViewProps> = ({ tasks, onBa
   const selectedTasksData = eligibleTasks.filter(t => selTaskIds.includes(t.id!));
   const selectedTotal = selectedTasksData.reduce((s, t) => s + (customPrices[t.id!] ?? 0), 0);
 
-  const toggleTask = (tid: string) => setSelTaskIds(prev => prev.includes(tid) ? prev.filter(i => i !== tid) : [...prev, tid]);
-  const selectAll = () => setSelTaskIds(selTaskIds.length === eligibleTasks.length ? [] : eligibleTasks.map(t => t.id!));
+  const toggleTask = (tid: string) => {
+    setSelTaskIds(prev => {
+      if (prev.includes(tid)) return prev.filter(i => i !== tid);
+      // Auto-fill client_price from task when selecting
+      const task = eligibleTasks.find(t => t.id === tid);
+      if (task && task.client_price > 0 && !(tid in customPrices)) {
+        setCustomPrices(p => ({ ...p, [tid]: task.client_price }));
+      }
+      return [...prev, tid];
+    });
+  };
+  const selectAll = () => {
+    if (selTaskIds.length === eligibleTasks.length) {
+      setSelTaskIds([]);
+    } else {
+      const allIds = eligibleTasks.map(t => t.id!);
+      // Auto-fill all client prices from tasks
+      const prices = { ...customPrices };
+      eligibleTasks.forEach(t => {
+        if (t.client_price > 0 && !(t.id! in prices)) prices[t.id!] = t.client_price;
+      });
+      setCustomPrices(prices);
+      setSelTaskIds(allIds);
+    }
+  };
   const setCustomPrice = (taskId: string, price: number) => setCustomPrices(prev => ({ ...prev, [taskId]: price }));
 
   const handleCreate = () => {

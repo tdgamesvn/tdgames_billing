@@ -53,6 +53,8 @@ const TaskList: React.FC<TaskListProps> = ({
   const [editBonus, setEditBonus] = useState('');
   const [editBonusNote, setEditBonusNote] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editClientPrice, setEditClientPrice] = useState('');
+  const [editClientCurrency, setEditClientCurrency] = useState('USD');
 
   useEffect(() => {
     clickup.loadConfig().then(c => setConfig(c)).catch(() => {});
@@ -76,6 +78,8 @@ const TaskList: React.FC<TaskListProps> = ({
   });
 
   const totalPrice = filteredDisplayTasks.reduce((s, t) => s + (t.price || 0), 0);
+  const totalClientUSD = filteredDisplayTasks.filter(t => (t.client_currency || 'USD') === 'USD').reduce((s, t) => s + (t.client_price || 0), 0);
+  const totalClientVND = filteredDisplayTasks.filter(t => t.client_currency === 'VND').reduce((s, t) => s + (t.client_price || 0), 0);
   const closedCount = filteredDisplayTasks.filter(t => !!t.closed_date).length;
   const unpaidCount = filteredDisplayTasks.filter(t => t.payment_status !== 'paid' && !!t.closed_date).length;
 
@@ -217,6 +221,8 @@ const TaskList: React.FC<TaskListProps> = ({
             payment_status: 'unpaid',
             notes: '',
             synced_at: new Date().toISOString(),
+            client_price: 0,
+            client_currency: 'USD',
           });
         }
         synced++;
@@ -303,7 +309,8 @@ const TaskList: React.FC<TaskListProps> = ({
         </div>
         <div className="p-5 rounded-[20px] border border-primary/10 bg-surface">
           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-medium mb-2">Tổng giá trị</p>
-          <p className="text-2xl font-black text-primary">{totalPrice.toLocaleString()}</p>
+          <p className="text-lg font-black text-primary">🟠 {totalPrice.toLocaleString()} <span className="text-xs text-neutral-medium font-medium">Trả NL</span></p>
+          <p className="text-base font-black text-blue-400">🔵 {totalClientUSD > 0 ? `$${totalClientUSD.toLocaleString()}` : ''}{totalClientUSD > 0 && totalClientVND > 0 ? ' + ' : ''}{totalClientVND > 0 ? `${totalClientVND.toLocaleString()} ₫` : ''}{totalClientUSD === 0 && totalClientVND === 0 ? '—' : ''} <span className="text-xs text-neutral-medium font-medium">Thu KH</span></p>
         </div>
       </div>
 
@@ -506,7 +513,8 @@ const TaskList: React.FC<TaskListProps> = ({
                   {/* Price Editor */}
                   {editingPriceId === t.id ? (
                     <div className="mt-3 space-y-2 p-3 rounded-xl bg-black/30 border border-primary/20">
-                      {/* Price + Currency */}
+                      {/* Worker Price + Currency */}
+                      <p className="text-[9px] font-black uppercase tracking-widest text-amber-500/70">🟠 Giá trả người làm</p>
                       <div className="flex items-center gap-2">
                         <input
                           type="number"
@@ -576,6 +584,23 @@ const TaskList: React.FC<TaskListProps> = ({
                         placeholder="Ghi chú"
                         className="w-full bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50"
                       />
+                      {/* Client Price */}
+                      <div className="border-t border-primary/10 pt-2 mt-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-blue-400/70 mb-1">🔵 Giá thu khách hàng</p>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={editClientPrice}
+                            onChange={e => setEditClientPrice(e.target.value)}
+                            placeholder="0"
+                            className="flex-1 bg-surface border border-blue-500/20 text-blue-400 rounded-lg px-3 py-1.5 text-sm font-bold focus:outline-none focus:border-blue-500/50"
+                          />
+                          <button
+                            onClick={() => setEditClientCurrency(prev => prev === 'USD' ? 'VND' : 'USD')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest border transition-all ${editClientCurrency === 'USD' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-blue-500/20 text-blue-400 border-blue-500/30'}`}
+                          >{editClientCurrency}</button>
+                        </div>
+                      </div>
                       {/* Actions */}
                       <div className="flex gap-2">
                         <button
@@ -583,7 +608,8 @@ const TaskList: React.FC<TaskListProps> = ({
                             const p = parseFloat(editPrice) || 0;
                             const r = parseFloat(editRate) || 0;
                             const b = parseFloat(editBonus) || 0;
-                            onUpdate(t.id!, { price: p, currency: editCurrency, exchange_rate: r, bonus: b, bonus_note: editBonusNote, notes: editNotes });
+                            const cp = parseFloat(editClientPrice) || 0;
+                            onUpdate(t.id!, { price: p, currency: editCurrency, exchange_rate: r, bonus: b, bonus_note: editBonusNote, notes: editNotes, client_price: cp, client_currency: editClientCurrency });
                             setEditingPriceId(null);
                           }}
                           className="flex-1 py-1.5 rounded-lg bg-primary text-black font-black text-[10px] uppercase tracking-widest hover:bg-primary/90 transition-all"
@@ -596,7 +622,7 @@ const TaskList: React.FC<TaskListProps> = ({
                     </div>
                   ) : (
                     <div
-                      className="mt-3 cursor-pointer group/price hover:bg-white/5 rounded-lg px-2 py-1 -mx-2 transition-all"
+                      className="mt-3 cursor-pointer group/price hover:bg-white/5 rounded-lg px-2 py-1.5 -mx-2 transition-all"
                       onClick={() => {
                         setEditingPriceId(t.id!);
                         setEditPrice(t.price > 0 ? String(t.price) : '');
@@ -609,30 +635,48 @@ const TaskList: React.FC<TaskListProps> = ({
                         setEditBonus(t.bonus > 0 ? String(t.bonus) : '');
                         setEditBonusNote(t.bonus_note || '');
                         setEditNotes(t.notes || '');
+                        setEditClientPrice(t.client_price > 0 ? String(t.client_price) : '');
+                        setEditClientCurrency(t.client_currency || 'USD');
                       }}
                     >
-                      <p className="text-primary font-black text-lg">
-                        {t.price > 0 ? `${t.price.toLocaleString()} ` : '— '}
-                        <span className="text-xs text-neutral-medium">{t.currency}</span>
-                        <span className="text-[10px] text-neutral-medium/40 ml-2 opacity-0 group-hover/price:opacity-100 transition-opacity">✏️ sửa</span>
-                      </p>
+                      {/* Worker cost — orange */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-bold text-amber-500/60 w-[46px] shrink-0">Trả NL</span>
+                        <p className="text-primary font-black text-base">
+                          {t.price > 0 ? t.price.toLocaleString() : '—'}
+                          <span className="text-[10px] text-neutral-medium ml-1">{t.currency}</span>
+                        </p>
+                        <span className="text-[10px] text-neutral-medium/40 ml-auto opacity-0 group-hover/price:opacity-100 transition-opacity">✏️</span>
+                      </div>
                       {t.currency === 'USD' && t.price > 0 && (() => {
                         const isPaid = t.payment_status === 'paid';
                         const rate = isPaid && t.exchange_rate > 0 ? t.exchange_rate : vcbSellRate;
                         if (rate <= 0) return null;
                         return (
-                          <p className="text-emerald-400/80 text-[10px] font-bold">
+                          <p className="text-emerald-400/80 text-[10px] font-bold ml-[52px]">
                             = {(t.price * rate).toLocaleString()} VNĐ (tỉ giá: {rate.toLocaleString()}{!isPaid ? ' ⚡ live' : ' 🔒'})
                           </p>
                         );
                       })()}
+                      {/* Client revenue — blue */}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[9px] font-bold text-blue-400/60 w-[46px] shrink-0">Thu KH</span>
+                        {t.client_price > 0 ? (
+                          <p className="text-blue-400 font-bold text-base">
+                            {(t.client_currency || 'USD') === 'USD' ? '$' : ''}{t.client_price.toLocaleString()}
+                            <span className="text-[10px] text-neutral-medium ml-1">{t.client_currency || 'USD'}</span>
+                          </p>
+                        ) : (
+                          <p className="text-neutral-medium/30 text-xs italic">chưa có</p>
+                        )}
+                      </div>
                       {t.bonus > 0 && (
-                        <p className="text-yellow-400/80 text-[10px] font-bold">
+                        <p className="text-yellow-400/80 text-[10px] font-bold ml-[52px]">
                           + Bonus: {t.bonus.toLocaleString()} {t.currency}{t.bonus_note ? ` — ${t.bonus_note}` : ''}
                         </p>
                       )}
                       {t.notes && (
-                        <p className="text-neutral-medium/50 text-[10px] mt-0.5 italic">📝 {t.notes}</p>
+                        <p className="text-neutral-medium/50 text-[10px] mt-0.5 italic ml-[52px]">📝 {t.notes}</p>
                       )}
                     </div>
                   )}
@@ -657,7 +701,8 @@ const TaskList: React.FC<TaskListProps> = ({
                   <th className="text-left px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">Nhân sự</th>
                   <th className="text-left px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">Trạng thái</th>
                   <th className="text-left px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">Thanh toán</th>
-                  <th className="text-right px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">Giá</th>
+                  <th className="text-right px-5 py-4 text-[10px] font-black uppercase tracking-widest text-amber-500/70">Trả NL</th>
+                  <th className="text-right px-5 py-4 text-[10px] font-black uppercase tracking-widest text-blue-400/70">Thu KH</th>
                   <th className="text-left px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">Ngày tạo</th>
                   <th className="text-left px-5 py-4 text-[10px] font-black uppercase tracking-widest text-neutral-medium">Ngày đóng</th>
                 </tr>
@@ -684,6 +729,8 @@ const TaskList: React.FC<TaskListProps> = ({
                         setEditBonus(t.bonus > 0 ? String(t.bonus) : '');
                         setEditBonusNote(t.bonus_note || '');
                         setEditNotes(t.notes || '');
+                        setEditClientPrice(t.client_price > 0 ? String(t.client_price) : '');
+                        setEditClientCurrency(t.client_currency || 'USD');
                       }}
                     >
                       <td className="px-5 py-3 text-neutral-medium/50 text-xs">{idx + 1}</td>
@@ -736,6 +783,16 @@ const TaskList: React.FC<TaskListProps> = ({
                           <p className="text-yellow-400/70 text-[10px] font-bold">+{t.bonus.toLocaleString()}</p>
                         )}
                       </td>
+                      <td className="px-5 py-3 text-right">
+                        {t.client_price > 0 ? (
+                          <>
+                            <span className="text-blue-400 font-bold text-sm">{(t.client_currency || 'USD') === 'USD' ? '$' : ''}{t.client_price.toLocaleString()}</span>
+                            <span className="text-neutral-medium/50 text-[10px] ml-1">{t.client_currency || 'USD'}</span>
+                          </>
+                        ) : (
+                          <span className="text-neutral-medium/30 text-xs">—</span>
+                        )}
+                      </td>
                       <td className="px-5 py-3 text-neutral-medium/50 text-xs whitespace-nowrap">{t.start_date || '—'}</td>
                       <td className="px-5 py-3 text-neutral-medium/50 text-xs whitespace-nowrap">{t.closed_date || '—'}</td>
                     </tr>
@@ -752,6 +809,7 @@ const TaskList: React.FC<TaskListProps> = ({
                 <p className="text-white font-bold text-sm mb-2">
                   ✏️ {filteredDisplayTasks.find(t => t.id === editingPriceId)?.title}
                 </p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-amber-500/70 mb-1">🟠 Giá trả người làm</p>
                 <div className="flex items-center gap-2">
                   <input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} placeholder="Giá tiền"
                     className="flex-1 bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50" autoFocus />
@@ -775,8 +833,18 @@ const TaskList: React.FC<TaskListProps> = ({
                 </div>
                 <input type="text" value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="Ghi chú"
                   className="w-full bg-surface border border-primary/20 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary/50" />
+                {/* Client Price */}
+                <div className="border-t border-primary/10 pt-2 mt-1">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-blue-400/70 mb-1">🔵 Giá thu khách hàng</p>
+                  <div className="flex items-center gap-2">
+                    <input type="number" value={editClientPrice} onChange={e => setEditClientPrice(e.target.value)} placeholder="0"
+                      className="w-40 bg-surface border border-blue-500/20 text-blue-400 rounded-lg px-3 py-1.5 text-sm font-bold focus:outline-none focus:border-blue-500/50" />
+                    <button onClick={() => setEditClientCurrency(prev => prev === 'USD' ? 'VND' : 'USD')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest border transition-all ${editClientCurrency === 'USD' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-blue-500/20 text-blue-400 border-blue-500/30'}`}>{editClientCurrency}</button>
+                  </div>
+                </div>
                 <div className="flex gap-2">
-                  <button onClick={() => { const p = parseFloat(editPrice) || 0; const r = parseFloat(editRate) || 0; const b = parseFloat(editBonus) || 0; onUpdate(editingPriceId!, { price: p, currency: editCurrency, exchange_rate: r, bonus: b, bonus_note: editBonusNote, notes: editNotes }); setEditingPriceId(null); }}
+                  <button onClick={() => { const p = parseFloat(editPrice) || 0; const r = parseFloat(editRate) || 0; const b = parseFloat(editBonus) || 0; const cp = parseFloat(editClientPrice) || 0; onUpdate(editingPriceId!, { price: p, currency: editCurrency, exchange_rate: r, bonus: b, bonus_note: editBonusNote, notes: editNotes, client_price: cp, client_currency: editClientCurrency }); setEditingPriceId(null); }}
                     className="py-1.5 px-6 rounded-lg bg-primary text-black font-black text-[10px] uppercase tracking-widest hover:bg-primary/90 transition-all">Lưu</button>
                   <button onClick={() => setEditingPriceId(null)}
                     className="py-1.5 px-6 rounded-lg border border-primary/20 text-neutral-medium font-black text-[10px] uppercase tracking-widest hover:text-white transition-all">Hủy</button>
